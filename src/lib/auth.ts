@@ -69,7 +69,7 @@ export const authOptions: NextAuthOptions = {
           await query(
             `
             INSERT INTO users (email, name, image, role) 
-            VALUES ($1, $2, $3, 'user')
+            VALUES ($1, $2, $3, 'caregiver')
             ON CONFLICT (email) 
             DO UPDATE SET name = EXCLUDED.name, image = EXCLUDED.image, updated_at = CURRENT_TIMESTAMP
             `,

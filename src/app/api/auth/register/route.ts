@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     const newUser = await queryOne<{ id: string; email: string; name: string }>(
       `
       INSERT INTO users (name, email, password_hash, role)
-      VALUES ($1, $2, $3, 'user')
+      VALUES ($1, $2, $3, 'caregiver')
       RETURNING id, email, name
       `,
       [name, email, hashedPassword]

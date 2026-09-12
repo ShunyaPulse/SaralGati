@@ -83,6 +83,9 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
       return NextResponse.json({ success: false, error: 'Elder profile not found' }, { status: 404 });
     }
 
+    // Map sos_trigger from Android to emergency to satisfy DB constraint
+    const mappedEventType = event_type === 'sos_trigger' ? 'emergency' : (event_type || 'emergency');
+
     // Insert alert log
     const newAlert = await queryOne<AssistanceLog>(
       `INSERT INTO assistance_logs (
@@ -90,7 +93,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
       ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [
         elder_id,
-        event_type || 'emergency',
+        mappedEventType,
         'SOS / Companion App',
         'com.saralgati.app',
         0,

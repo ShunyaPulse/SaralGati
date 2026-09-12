@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
-import { query } from '@/lib/db';
-import { cacheGet, cacheSet } from '@/lib/redis';
+import { query, queryOne } from '@/lib/db';
+import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog[]>>> {

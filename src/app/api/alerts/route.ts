@@ -67,7 +67,7 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
 export async function POST(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog>>> {
   try {
     const body = await request.json();
-    const { elder_id, event_type, description, severity, screenshot_url } = body;
+    const { elder_id, event_type, description, severity, screenshot_url, screen_name, app_package } = body;
 
     if (!elder_id) {
       return NextResponse.json({ success: false, error: 'elder_id is required' }, { status: 400 });
@@ -94,8 +94,8 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
       [
         elder_id,
         mappedEventType,
-        'SOS / Companion App',
-        'com.saralgati.app',
+        screen_name || 'SOS / Companion App',
+        app_package || 'com.saralgati.app',
         0,
         JSON.stringify({ description: description || 'Mobile alert', severity: severity || 'critical', screenshot_url })
       ]

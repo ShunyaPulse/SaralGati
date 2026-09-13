@@ -147,11 +147,18 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     private fun extractAndExplainScreen() {
-        val rootNode = rootInActiveWindow ?: return
+        val rootNode = rootInActiveWindow
+        if (rootNode == null) {
+            Log.e(TAG, "extractAndExplainScreen: rootInActiveWindow is null")
+            broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ, कृपया ऐप को दोबारा खोलें।")
+            return
+        }
+        
         val elements = mutableListOf<String>()
         traverseNode(rootNode, elements)
         
         val appPackage = rootNode.packageName?.toString() ?: "unknown"
+        Log.i(TAG, "Extracted ${elements.size} elements from $appPackage")
         
         serviceScope.launch {
             try {
@@ -161,11 +168,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     val explanation = response.body()?.data?.explanation ?: "मुझे समझ नहीं आया कि यह स्क्रीन क्या है।"
                     broadcastExplanation(explanation)
                 } else {
-                    broadcastExplanation("सर्वर से संपर्क नहीं हो पाया। कृपया बाद में प्रयास करें।")
+                    broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to explain screen: ${e.message}")
-                broadcastExplanation("नेटवर्क त्रुटि के कारण स्क्रीन समझ नहीं पाया।")
+                broadcastExplanation("नेटवर्क में दिक्कत है।")
             } finally {
                 rootNode.recycle()
             }
@@ -195,6 +202,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private fun broadcastExplanation(text: String) {
         val intent = Intent(ACTION_SPEAK_EXPLANATION).apply {
             putExtra(EXTRA_EXPLANATION_TEXT, text)
+            setPackage(packageName)
         }
         sendBroadcast(intent)
     }

@@ -80,6 +80,42 @@ Instructions:
       cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
     }
 
+    // Smart Fallback: If AI model forgot TARGET tag, match intent from question and screen elements
+    if (highlightIndex === null || highlightIndex < 0 || highlightIndex >= ui_elements.length) {
+      const qLower = question.toLowerCase();
+      
+      const intentKeywords: Record<string, string[]> = {
+        search: ['search', 'khoj', 'dhoondh', 'खोज', 'ढूंढ'],
+        chat: ['chat', 'message', 'msg', 'naye chat', 'new chat', 'चैट', 'संदेश', 'मैसेज'],
+        camera: ['camera', 'photo', 'tasveer', 'कैमरा', 'फोटो'],
+        call: ['call', 'phone', 'कॉल', 'फोन'],
+        status: ['status', 'update', 'story', 'अपडेट', 'स्टेटस'],
+        settings: ['setting', 'option', 'more', 'dots', 'सेटिंग', 'विकल्प']
+      };
+
+      for (let i = 0; i < ui_elements.length; i++) {
+        const elText = ui_elements[i].toLowerCase();
+
+        // 1. Direct containment
+        if (elText.length > 2 && (qLower.includes(elText) || elText.includes(qLower))) {
+          highlightIndex = i;
+          break;
+        }
+
+        // 2. Intent-based synonym matching
+        for (const keywords of Object.values(intentKeywords)) {
+          const qHas = keywords.some(k => qLower.includes(k));
+          const elHas = keywords.some(k => elText.includes(k));
+          if (qHas && elHas) {
+            highlightIndex = i;
+            break;
+          }
+        }
+
+        if (highlightIndex !== null) break;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {

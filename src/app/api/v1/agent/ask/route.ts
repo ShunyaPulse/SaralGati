@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { app_package, ui_elements, question } = await req.json();
+    const { app_package, ui_elements, question, conversation_history = [] } = await req.json();
 
     if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
@@ -24,21 +24,25 @@ export async function POST(req: NextRequest) {
     // Cloudflare Workers AI Endpoint for Llama 3.2 3B Instruct
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-3b-instruct`;
 
-    const prompt = `You are SaralGati, a patient companion for Indian elders.
+    const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
 The user is looking at an app with package name: ${app_package}.
 Here are the text elements visible on their screen:
 ${ui_elements.join(' | ')}
 
-The user asked you this question (in Hindi via voice): "${question}"
+Answer the user's question in 1 or 2 very simple, conversational Hindi sentences based on the screen. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
-Based on the screen contents, answer their question in 1 or 2 very simple, conversational Hindi sentences. 
-Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
+    const messages = [
+      { role: 'system', content: systemPrompt }
+    ];
+
+    if (conversation_history && conversation_history.length > 0) {
+      messages.push(...conversation_history);
+    }
+
+    messages.push({ role: 'user', content: question });
 
     const payload: any = {
-      messages: [
-        { role: 'system', content: 'You are a helpful elder companion assistant. Output only Hindi.' },
-        { role: 'user', content: prompt }
-      ]
+      messages: messages
     };
 
     if (process.env.CLOUDFLARE_LORA_NAME) {

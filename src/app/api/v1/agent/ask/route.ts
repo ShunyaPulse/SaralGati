@@ -24,12 +24,18 @@ export async function POST(req: NextRequest) {
     // Cloudflare Workers AI Endpoint for Llama 3.2 3B Instruct
     const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-3b-instruct`;
 
-    const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
-The user is looking at an app with package name: ${app_package}.
-Here are the text elements visible on their screen:
-${ui_elements.join(' | ')}
+    const formattedElements = ui_elements.map((el: string, idx: number) => `[${idx}] ${el}`).join('\n');
 
-Answer the user's question in 1 or 2 very simple, conversational Hindi sentences based on the screen. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
+    const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
+The user is looking at an Android app: ${app_package}.
+Here are the numbered interactive elements on their screen:
+${formattedElements}
+
+Instructions:
+1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
+2. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
+3. If no specific element needs to be tapped, do NOT output any TARGET tag.
+4. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
     const messages = [
       { role: 'system', content: systemPrompt }
@@ -63,12 +69,22 @@ Answer the user's question in 1 or 2 very simple, conversational Hindi sentences
     }
 
     const result = await response.json();
-    const explanation = result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे समझने में परेशानी हुई।";
+    const rawExplanation = (result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे समझने में परेशानी हुई।").trim();
+
+    const targetMatch = rawExplanation.match(/TARGET:\s*(\d+)/i);
+    let highlightIndex: number | null = null;
+    let cleanExplanation = rawExplanation;
+
+    if (targetMatch) {
+      highlightIndex = parseInt(targetMatch[1], 10);
+      cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
+    }
 
     return NextResponse.json({
       success: true,
       data: {
-        explanation: explanation.trim()
+        explanation: cleanExplanation,
+        highlight_index: highlightIndex
       }
     });
 

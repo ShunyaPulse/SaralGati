@@ -162,62 +162,83 @@ SCENARIOS = [
     }
 ]
 
-def generate_dataset(num_samples=500):
+def generate_dataset(num_samples=600):
     dataset = []
+    
+    follow_up_templates = [
+        ("Kahan par hai?", "Screen par theek dhyan se dekhiye, wahan nishan bana hua hai."),
+        ("Samajh nahi aaya", "Koi baat nahi babuji, wahan tap karein jahan highlight kiya hai."),
+        ("Nahi dikh raha", "Screen ko thoda aaram se dekhiye, wahan gol button bana hai.")
+    ]
     
     for _ in range(num_samples):
         base = random.choice(SCENARIOS)
         
-        # Shuffle elements slightly to simulate different screen states
         elements = base["elements"].copy()
-        
-        # Add random noise elements to make model robust
         noise = random.choice([
             [],
-            ['बैटरी 45% (Battery 45%)'],
-            ['समय 10:30 (Time 10:30)'],
-            ['सिग्नल (Signal)'],
-            ['नेटवर्क (Network)']
+            ['Battery 45%'],
+            ['10:30 AM'],
+            ['Signal 4G']
         ])
-        
         elements.extend(noise)
         random.shuffle(elements)
-            
-        elements_str = " | ".join(elements)
         
-        prompt = f"You are SaralGati, a patient companion for Indian elders.\n"
-        prompt += f"The user is currently looking at an app with package name: {base['app']}.\n"
-        prompt += f"Here are the text elements visible on their screen:\n{elements_str}\n\n"
+        formatted_elements = "\n".join([f"[{i}] {el}" for i, el in enumerate(elements)])
         
-        if base["query"] == "explain":
-            prompt += "Explain this screen to the elder in 1 or 2 very simple Hindi sentences. Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence."
-        else:
-            prompt += "The elder wants to know what to tap next. Based on the screen context, guide them on exactly which button or element to press in 1 simple Hindi sentence. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence."
+        system_prompt = f"You are SaralGati, a patient, warm companion for Indian elders.\n"
+        system_prompt += f"The user is looking at an Android app: {base['app']}.\n"
+        system_prompt += f"Here are the numbered interactive elements on their screen:\n{formatted_elements}\n\n"
+        system_prompt += "Instructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n"
+        system_prompt += "2. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).\n"
+        system_prompt += "3. If no specific element needs to be tapped, do NOT output any TARGET tag.\n"
+        system_prompt += "4. Do not mention that you are an AI. Only output the Hindi sentence."
 
-        # Select a random paraphrase output so the model learns diverse responses
         output = random.choice(base["outputs"])
+        
+        # Determine target index if an element is mentioned in the output
+        target_idx = None
+        for idx, el in enumerate(elements):
+            clean_el = el.split('(')[0].strip()
+            if clean_el and clean_el in output:
+                target_idx = idx
+                break
+        
+        if target_idx is not None and base["query"] != "explain":
+            output_with_target = f"{output} TARGET:{target_idx}"
+        else:
+            output_with_target = output
 
-        sample = {
-            "instruction": prompt,
-            "input": "",
-            "output": output
-        }
-        dataset.append(sample)
+        user_query = "Yeh screen samjhaiye" if base["query"] == "explain" else "Aage kya karein / kaunsa button dabayein?"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query},
+            {"role": "assistant", "content": output_with_target}
+        ]
+        
+        # 50% chance of adding a follow-up turn
+        if random.random() < 0.5 and target_idx is not None:
+            fu_q, fu_a = random.choice(follow_up_templates)
+            messages.append({"role": "user", "content": fu_q})
+            messages.append({"role": "assistant", "content": f"{fu_a} TARGET:{target_idx}"})
+
+        dataset.append({"messages": messages})
         
     return dataset
 
 def main():
     output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "saralgati_train.jsonl")
+    output_file = os.path.join(output_dir, "saralgati_multiturn_train.jsonl")
     
-    dataset = generate_dataset(500)
+    dataset = generate_dataset(600)
     
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in dataset:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
             
-    print(f"Successfully generated {len(dataset)} highly diverse elder training samples at: {output_file}")
+    print(f"Successfully generated {len(dataset)} multi-turn grounded samples at: {output_file}")
 
 if __name__ == "__main__":
     main()

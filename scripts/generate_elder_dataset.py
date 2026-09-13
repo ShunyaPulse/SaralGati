@@ -130,26 +130,99 @@ SCENARIOS = [
         ]
     },
     
-    # --- UBER / OLA ---
+    # --- FACEBOOK ---
     {
-        'app': 'com.ubercab',
-        'elements': ['राइड (Ride)', 'पैकेज (Package)', 'कहाँ जाना है? (Where to?)'],
-        'query': 'explain',
+        'app': 'com.facebook.katana',
+        'elements': ['लाइक (Like)', 'कमेंट (Comment)', 'शेयर (Share)', 'वीडियो देखें (Watch)'],
+        'query': 'what_to_tap',
         'outputs': [
-            'यह उबर ऐप है। यहाँ से आप कहीं जाने के लिए कैब या ऑटो बुला सकते हैं।',
-            'आप उबर पर हैं। गाड़ी बुक करने के लिए आपको बताना होगा कि आपको कहाँ जाना है।'
+            'यह फोटो पसंद आई हो तो लाइक (Like) वाले अंगूठे के निशान पर दबाएं।',
+            'अगर आप वीडियो देखना चाहते हैं, तो वीडियो देखें (Watch) वाले टीवी के निशान पर टैप करें।'
         ]
     },
     {
-        'app': 'com.ubercab',
-        'elements': ['कहाँ जाना है? (Where to?)'],
-        'query': 'what_to_tap',
+        'app': 'com.facebook.katana',
+        'elements': ['फ्रेंड रिक्वेस्ट (Friend Requests)', 'नोटिफिकेशन्स (Notifications)', 'सर्च (Search)'],
+        'query': 'explain',
         'outputs': [
-            'कैब बुलाने के लिए कहाँ जाना है? (Where to?) वाले बॉक्स पर टैप करें और जगह का नाम लिखें।',
-            'अपनी मंजिल डालने के लिए कहाँ जाना है वाले डब्बे को दबाएं।'
+            'यह फेसबुक ऐप है। यहाँ आप अपने दोस्तों और रिश्तेदारों की तस्वीरें और पोस्ट देख सकते हैं।',
+            'आप फेसबुक पर हैं। ऊपर दिए गए फ्रेंड रिक्वेस्ट बटन से आप देख सकते हैं कि किसने आपको जोड़ा है।'
         ]
     },
     
+    # --- GALLERY & PHOTOS ---
+    {
+        'app': 'com.google.android.apps.photos',
+        'elements': ['तस्वीरें (Photos)', 'एल्बम (Albums)', 'शेयर करें (Share)', 'डिलीट करें (Delete)'],
+        'query': 'explain',
+        'outputs': [
+            'यह आपकी फोटो गैलरी है। यहाँ आपकी खींची हुई और वॉट्सऐप पर आई सारी तस्वीरें सुरक्षित हैं।',
+            'आप फोटो गैलरी में हैं। यहाँ से आप पुरानी पारिवारिक तस्वीरें देख सकते हैं।'
+        ]
+    },
+    {
+        'app': 'com.google.android.apps.photos',
+        'elements': ['वॉट्सऐप पर भेजें', 'शेयर करें (Share)', 'डिलीट (Delete)', 'एडिट (Edit)'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'इस फोटो को परिवार को भेजने के लिए नीचे शेयर करें (Share) या वॉट्सऐप वाले निशान को दबाएं।',
+            'अगर यह फोटो धुंधली या खराब है, तो डिलीट (Delete) वाले डस्टबिन पर दबाकर इसे हटा सकते हैं।'
+        ]
+    },
+
+    # --- MESSAGES & BANK OTP ---
+    {
+        'app': 'com.google.android.apps.messaging',
+        'elements': ['एसबीआई बैंक (SBI Bank)', 'ओटीपी 482910 (OTP)', 'डिलीट करें', 'मैसेज लिखें'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'आपका बैंक ओटीपी (OTP) नंबर 482910 है। ध्यान रखें, यह नंबर किसी भी अनजान व्यक्ति को फोन पर न बताएं।',
+            'बैंक का मैसेज देखने के लिए ऊपर एसबीआई बैंक वाले मैसेज पर टैप करें।'
+        ]
+    },
+    {
+        'app': 'com.google.android.apps.messaging',
+        'elements': ['लॉटरी जीतें 25 लाख', 'डिलीट करें (Delete)', 'ब्लॉक करें (Block)'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'यह लॉटरी वाला मैसेज फ्रॉड है, इसके किसी लिंक पर न दबाएं। इसे हटाने के लिए डिलीट (Delete) दबाएं।',
+            'अनजान इनाम वाले मैसेज को तुरंत ब्लॉक करें (Block) या डिलीट कर दें।'
+        ]
+    },
+
+    # --- CONTACTS ---
+    {
+        'app': 'com.android.contacts',
+        'elements': ['नया संपर्क जोड़ें (Add Contact)', 'सर्च संपर्क', 'बेटा', 'बेटी'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'नया फोन नंबर सेव करने के लिए नया संपर्क जोड़ें (Add Contact) वाले प्लस निशान पर दबाएं।',
+            'बेटी को फोन मिलाने के लिए बेटी वाले नाम पर एक बार टैप करें।'
+        ]
+    },
+
+    # --- CLOCK & MEDICINE ALARM ---
+    {
+        'app': 'com.google.android.deskclock',
+        'elements': ['अलार्म (Alarm)', 'सुबह 8:00 दवाई', 'नया अलार्म जोड़ें (+)', 'टाइमर'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'दवाई का नया अलार्म लगाने के लिए नीचे दिए गए प्लस (+) के निशान को दबाएं।',
+            'सुबह की दवाई का अलार्म चालू करने के लिए सुबह 8:00 दवाई के सामने वाले स्विच को दबाएं।'
+        ]
+    },
+
+    # --- CAMERA ---
+    {
+        'app': 'com.google.android.GoogleCamera',
+        'elements': ['फोटो खींचें (Shutter)', 'कैमरा घुमाएं (Flip)', 'फ्लैश (Flash)', 'वीडियो'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'फोटो खींचने के लिए नीचे सफेद रंग के बड़े गोल बटन को दबाएं।',
+            'अपनी सेल्फी लेने के लिए कैमरा घुमाएं (Flip) वाले गोल तीर के निशान पर टैप करें।'
+        ]
+    },
+
     # --- SYSTEM SETTINGS ---
     {
         'app': 'com.android.settings',
@@ -162,7 +235,7 @@ SCENARIOS = [
     }
 ]
 
-def generate_dataset(num_samples=600):
+def generate_dataset(num_samples=1000):
     dataset = []
     
     follow_up_templates = [
@@ -232,7 +305,7 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
     output_file = os.path.join(output_dir, "saralgati_multiturn_train.jsonl")
     
-    dataset = generate_dataset(600)
+    dataset = generate_dataset(1000)
     
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in dataset:

@@ -55,7 +55,7 @@ Instructions:
       payload.lora = process.env.CLOUDFLARE_LORA_NAME;
     }
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiToken}`,
@@ -63,6 +63,22 @@ Instructions:
       },
       body: JSON.stringify(payload)
     });
+
+    // Permanent Solution: Graceful Fallback if Custom LoRA fails
+    if (!response.ok && payload.lora) {
+      console.warn(`Cloudflare LoRA failed with status ${response.status}. Falling back to stable base model.`);
+      delete payload.lora; // Remove the failing LoRA
+      
+      // Retry without LoRA
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+    }
 
     if (!response.ok) {
       throw new Error(`Cloudflare AI error: ${response.status} ${response.statusText}`);

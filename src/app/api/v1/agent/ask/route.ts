@@ -64,28 +64,41 @@ Instructions:
       body: JSON.stringify(payload)
     });
 
-    // Permanent Solution: Graceful Fallback if Custom LoRA fails
+    let rawExplanation = "मुझे समझने में परेशानी हुई।";
+
+    // Permanent Solution: Graceful Fallback to Gemini AI Studio if Custom LoRA fails
     if (!response.ok && payload.lora) {
-      console.warn(`Cloudflare LoRA failed with status ${response.status}. Falling back to stable base model.`);
-      delete payload.lora; // Remove the failing LoRA
+      console.warn(`Cloudflare LoRA failed with status ${response.status}. Falling back to Gemini AI Studio.`);
       
-      // Retry without LoRA
-      response = await fetch(url, {
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        throw new Error("LoRA failed and GEMINI_API_KEY is not set for fallback.");
+      }
+      
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+      const geminiPayload = {
+        contents: [{ parts: [{ text: `${systemPrompt}\n\nUser Question: ${question}` }] }]
+      };
+
+      const geminiRes = await fetch(geminiUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload)
       });
-    }
 
-    if (!response.ok) {
-      throw new Error(`Cloudflare AI error: ${response.status} ${response.statusText}`);
-    }
+      if (!geminiRes.ok) {
+        throw new Error(`Gemini AI error: ${geminiRes.status} ${geminiRes.statusText}`);
+      }
 
-    const result = await response.json();
-    const rawExplanation = (result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे समझने में परेशानी हुई।").trim();
+      const geminiData = await geminiRes.json();
+      rawExplanation = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "मुझे समझने में परेशानी हुई।").trim();
+    } else {
+      if (!response.ok) {
+        throw new Error(`Cloudflare AI error: ${response.status} ${response.statusText}`);
+      }
+      const result = await response.json();
+      rawExplanation = (result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे समझने में परेशानी हुई।").trim();
+    }
 
     const targetMatch = rawExplanation.match(/TARGET:\s*(\d+)/i);
     let highlightIndex: number | null = null;

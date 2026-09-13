@@ -39,6 +39,11 @@
             </intent-filter>
         </activity>
 
+        <activity 
+            android:name=".ui.voice.VoicePromptActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false" />
+
         <!-- SaralGati Accessibility Service -->
         <service
             android:name=".services.accessibility.SaralGatiAccessibilityService"

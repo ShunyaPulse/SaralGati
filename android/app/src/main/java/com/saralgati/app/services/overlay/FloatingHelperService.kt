@@ -194,13 +194,17 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
         layout.addView(btnExplain)
 
-        // Button 2: Next Step
+        // Button 2: Next Step / Follow up question
         val btnNext = Button(this)
-        btnNext.text = "मुझे क्या दबाना चाहिए?\n(What to tap?)"
+        btnNext.text = "मेरा सवाल पूछें (Ask a Question)"
         btnNext.setBackgroundColor(Color.parseColor("#22C55E"))
         btnNext.setTextColor(Color.WHITE)
         btnNext.setOnClickListener {
-            speak("आप मुख्य मेनू पर जाने के लिए पीछे जाने वाला बटन दबा सकते हैं।")
+            collapseHelper()
+            val voiceIntent = Intent(this, com.saralgati.app.ui.voice.VoicePromptActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            startActivity(voiceIntent)
         }
         val btnParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,

@@ -34,6 +34,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
     companion object {
         const val ACTION_EXTRACT_SCREEN = "com.saralgati.app.ACTION_EXTRACT_SCREEN"
+        const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
         const val ACTION_SPEAK_EXPLANATION = "com.saralgati.app.ACTION_SPEAK_EXPLANATION"
         const val EXTRA_EXPLANATION_TEXT = "explanation_text"
         
@@ -46,6 +47,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == ACTION_EXTRACT_SCREEN) {
                 extractAndExplainScreen()
+            } else if (intent?.action == ACTION_EXTRACT_AND_ASK) {
+                val question = intent.getStringExtra("question") ?: return
+                extractAndAskScreen(question)
             }
         }
     }
@@ -55,7 +59,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         isServiceRunning = true
         localPrefs = LocalPrefs(applicationContext)
         
-        val filter = IntentFilter(ACTION_EXTRACT_SCREEN)
+        val filter = IntentFilter().apply {
+            addAction(ACTION_EXTRACT_SCREEN)
+            addAction(ACTION_EXTRACT_AND_ASK)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(screenExtractReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -175,6 +182,41 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to explain screen: ${e.message}")
+                broadcastExplanation("नेटवर्क में दिक्कत है।")
+            } finally {
+                rootNode.recycle()
+            }
+        }
+    }
+
+    private fun extractAndAskScreen(question: String) {
+        serviceScope.launch {
+            // Wait for transparent activity to finish and focus to return to target app
+            kotlinx.coroutines.delay(500)
+            
+            val rootNode = rootInActiveWindow
+            if (rootNode == null) {
+                Log.e(TAG, "extractAndAskScreen: rootInActiveWindow is null")
+                broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ।")
+                return@launch
+            }
+            
+            val elements = mutableListOf<String>()
+            traverseNode(rootNode, elements)
+            
+            val appPackage = rootNode.packageName?.toString() ?: "unknown"
+            
+            try {
+                val request = com.saralgati.app.data.model.AskContextRequest(appPackage, elements, question)
+                val response = NetworkModule.agentApi.askQuestion(request)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val explanation = response.body()?.data?.explanation ?: "मुझे इस सवाल का जवाब नहीं मिला।"
+                    broadcastExplanation(explanation)
+                } else {
+                    broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to ask question: ${e.message}")
                 broadcastExplanation("नेटवर्क में दिक्कत है।")
             } finally {
                 rootNode.recycle()

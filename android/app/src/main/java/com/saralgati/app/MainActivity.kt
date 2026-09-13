@@ -1,4 +1,4 @@
-﻿package com.saralgati.app
+package com.saralgati.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -24,6 +24,10 @@ class MainActivity : ComponentActivity() {
         
         localPrefs = LocalPrefs(this)
         
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1001)
+        }
+
         setContent {
             SaralGatiTheme {
                 Surface(

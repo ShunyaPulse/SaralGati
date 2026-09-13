@@ -189,6 +189,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
     }
 
+    private var currentAppPackage: String? = null
+    private val conversationHistory = mutableListOf<com.saralgati.app.data.model.ChatMessage>()
+
     private fun extractAndAskScreen(question: String) {
         serviceScope.launch {
             // Wait for transparent activity to finish and focus to return to target app
@@ -205,12 +208,23 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             traverseNode(rootNode, elements)
             
             val appPackage = rootNode.packageName?.toString() ?: "unknown"
+            if (appPackage != currentAppPackage) {
+                currentAppPackage = appPackage
+                conversationHistory.clear()
+            }
             
             try {
-                val request = com.saralgati.app.data.model.AskContextRequest(appPackage, elements, question)
+                val request = com.saralgati.app.data.model.AskContextRequest(appPackage, elements, question, conversationHistory.toList())
                 val response = NetworkModule.agentApi.askQuestion(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val explanation = response.body()?.data?.explanation ?: "मुझे इस सवाल का जवाब नहीं मिला।"
+                    conversationHistory.add(com.saralgati.app.data.model.ChatMessage("user", question))
+                    conversationHistory.add(com.saralgati.app.data.model.ChatMessage("assistant", explanation))
+                    // Keep max 6 turns
+                    if (conversationHistory.size > 6) {
+                        conversationHistory.removeAt(0)
+                        conversationHistory.removeAt(0)
+                    }
                     broadcastExplanation(explanation)
                 } else {
                     broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")

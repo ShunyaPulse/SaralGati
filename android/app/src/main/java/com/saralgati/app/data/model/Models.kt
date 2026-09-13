@@ -66,5 +66,12 @@ data class ScreenExplanationResponse(
 data class AskContextRequest(
     @Json(name = "app_package") val appPackage: String,
     @Json(name = "ui_elements") val uiElements: List<String>,
-    val question: String
+    val question: String,
+    @Json(name = "conversation_history") val conversationHistory: List<ChatMessage> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class ChatMessage(
+    val role: String,
+    val content: String
 )

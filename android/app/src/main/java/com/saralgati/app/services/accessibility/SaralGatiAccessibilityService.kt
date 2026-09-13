@@ -147,20 +147,23 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     private fun extractAndExplainScreen() {
-        val rootNode = rootInActiveWindow
-        if (rootNode == null) {
-            Log.e(TAG, "extractAndExplainScreen: rootInActiveWindow is null")
-            broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ, कृपया ऐप को दोबारा खोलें।")
-            return
-        }
-        
-        val elements = mutableListOf<String>()
-        traverseNode(rootNode, elements)
-        
-        val appPackage = rootNode.packageName?.toString() ?: "unknown"
-        Log.i(TAG, "Extracted ${elements.size} elements from $appPackage")
-        
         serviceScope.launch {
+            // Give a short delay for the floating menu to collapse and focus to return to the background app
+            kotlinx.coroutines.delay(500)
+            
+            val rootNode = rootInActiveWindow
+            if (rootNode == null) {
+                Log.e(TAG, "extractAndExplainScreen: rootInActiveWindow is null")
+                broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ, कृपया ऐप को दोबारा खोलें।")
+                return@launch
+            }
+            
+            val elements = mutableListOf<String>()
+            traverseNode(rootNode, elements)
+            
+            val appPackage = rootNode.packageName?.toString() ?: "unknown"
+            Log.i(TAG, "Extracted ${elements.size} elements from $appPackage")
+        
             try {
                 val request = ScreenContextRequest(appPackage, elements)
                 val response = NetworkModule.agentApi.explainScreen(request)

@@ -185,9 +185,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         btnExplain.setBackgroundColor(Color.parseColor("#0074c8"))
         btnExplain.setTextColor(Color.WHITE)
         btnExplain.setOnClickListener {
-            val titleView = expandedView.findViewWithTag<TextView>("titleView")
-            titleView?.text = "सोच रहा है..."
             speak("एक सेकंड रुकिए, मैं देख रहा हूँ...")
+            collapseHelper() // <-- Collapse the big menu so it doesn't hide the screen
             val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_SCREEN").apply {
                 setPackage(packageName)
             }

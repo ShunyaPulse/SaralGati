@@ -40,10 +40,14 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
   const apiToken = process.env.CLOUDFLARE_API_TOKEN;
   const loraName = process.env.CLOUDFLARE_LORA_NAME;
+  const baseModel = process.env.CLOUDFLARE_BASE_MODEL || 
+    (loraName?.includes('31') || loraName?.includes('8b') 
+      ? '@cf/meta/llama-3.1-8b-instruct-fast' 
+      : '@cf/meta/llama-3.2-3b-instruct');
 
   if (accountId && apiToken && loraName) {
     try {
-      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-3b-instruct`;
+      const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${baseModel}`;
       const messages = [
         { role: 'system', content: systemPrompt },
         ...conversationHistory,

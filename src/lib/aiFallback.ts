@@ -55,7 +55,7 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
       ];
 
       let loraSuccess = false;
-      const MAX_LORA_RETRIES = 3;
+      const MAX_LORA_RETRIES = 5;
 
       for (let attempt = 1; attempt <= MAX_LORA_RETRIES; attempt++) {
         try {
@@ -82,8 +82,8 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
             if (attempt === MAX_LORA_RETRIES) {
               console.warn(`[Tier 1] Max retries reached. Initiating Tier 2 Gemini multi-key cascade...`);
             } else {
-              // Wait 500ms before retrying
-              await new Promise(resolve => setTimeout(resolve, 500));
+              // Wait 250ms before retrying
+              await new Promise(resolve => setTimeout(resolve, 250));
             }
           }
         } catch (cfErr) {

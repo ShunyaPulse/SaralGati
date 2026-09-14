@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateAIResponse } from '@/lib/aiFallback';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,22 +8,6 @@ export async function POST(req: NextRequest) {
     if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
-
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-
-    if (!accountId || !apiToken) {
-      console.warn("Cloudflare credentials missing. Returning fallback heuristic.");
-      return NextResponse.json({
-        success: true,
-        data: {
-          explanation: `माफ़ कीजिये, मैं अभी आपके सवाल का जवाब नहीं दे पा रहा हूँ।`
-        }
-      });
-    }
-
-    // Cloudflare Workers AI Endpoint for Llama 3.2 3B Instruct
-    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-3b-instruct`;
 
     const formattedElements = ui_elements.map((el: string, idx: number) => `[${idx}] ${el}`).join('\n');
 
@@ -37,68 +22,13 @@ Instructions:
 3. If no specific element needs to be tapped, do NOT output any TARGET tag.
 4. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
-    const messages = [
-      { role: 'system', content: systemPrompt }
-    ];
-
-    if (conversation_history && conversation_history.length > 0) {
-      messages.push(...conversation_history);
-    }
-
-    messages.push({ role: 'user', content: question });
-
-    const payload: any = {
-      messages: messages
-    };
-
-    if (process.env.CLOUDFLARE_LORA_NAME) {
-      payload.lora = process.env.CLOUDFLARE_LORA_NAME;
-    }
-
-    let response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    const aiResult = await generateAIResponse({
+      systemPrompt,
+      userPrompt: question,
+      conversationHistory: conversation_history
     });
 
-    let rawExplanation = "मुझे समझने में परेशानी हुई।";
-
-    // Permanent Solution: Graceful Fallback to Gemini AI Studio if Custom LoRA fails
-    if (!response.ok && payload.lora) {
-      console.warn(`Cloudflare LoRA failed with status ${response.status}. Falling back to Gemini AI Studio.`);
-      
-      const geminiApiKey = process.env.GEMINI_API_KEY;
-      if (!geminiApiKey) {
-        throw new Error("LoRA failed and GEMINI_API_KEY is not set for fallback.");
-      }
-      
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
-      const geminiPayload = {
-        contents: [{ parts: [{ text: `${systemPrompt}\n\nUser Question: ${question}` }] }]
-      };
-
-      const geminiRes = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(geminiPayload)
-      });
-
-      if (!geminiRes.ok) {
-        throw new Error(`Gemini AI error: ${geminiRes.status} ${geminiRes.statusText}`);
-      }
-
-      const geminiData = await geminiRes.json();
-      rawExplanation = (geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "मुझे समझने में परेशानी हुई।").trim();
-    } else {
-      if (!response.ok) {
-        throw new Error(`Cloudflare AI error: ${response.status} ${response.statusText}`);
-      }
-      const result = await response.json();
-      rawExplanation = (result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे समझने में परेशानी हुई।").trim();
-    }
+    const rawExplanation = aiResult.text;
 
     const targetMatch = rawExplanation.match(/TARGET:\s*(\d+)/i);
     let highlightIndex: number | null = null;
@@ -149,7 +79,9 @@ Instructions:
       success: true,
       data: {
         explanation: cleanExplanation,
-        highlight_index: highlightIndex
+        highlight_index: highlightIndex,
+        source: aiResult.source,
+        model_used: aiResult.modelUsed
       }
     });
 

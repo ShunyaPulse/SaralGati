@@ -67,7 +67,8 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
             },
             body: JSON.stringify({
               messages,
-              lora: loraName
+              lora: loraName,
+              max_tokens: 65
             })
           });
 
@@ -123,7 +124,10 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
   const requestBody = {
     contents: [{
       parts: [{ text: fullPrompt }]
-    }]
+    }],
+    generationConfig: {
+      maxOutputTokens: 65
+    }
   };
 
   // Outer loop: Model stays constant

@@ -1,73 +1,239 @@
 import json
 import random
 
-apps = {
-    "com.whatsapp": {
+# Comprehensive Icon & App Categories for Indian Elders
+categories = [
+    # 1. CAMERA & PHOTOGRAPHY
+    {
+        "app_pkg": "com.google.android.GoogleCamera",
         "intents": [
-            {"intent": "video_call", "queries": ["video call lagao", "video call kaise kare", "video call milao", "वीडियो कॉल करना है", "beti ko video call karo", "chehra dekhna hai"], "ui": ["video call", "वीडियो", "video", "call icon"], "response": "वीडियो कॉल शुरू करने के लिए यहाँ दबाएं।"},
-            {"intent": "audio_call", "queries": ["call lagao", "phone karo", "audio call milao", "कॉल करो", "baat karni hai"], "ui": ["call", "phone", "कॉल", "voice call"], "response": "कॉल करने के लिए इस बटन को दबाएं।"},
-            {"intent": "status", "queries": ["status dekhna hai", "photo status", "update dekho", "स्टेटस", "kya naya hai"], "ui": ["status", "updates", "स्टेटस", "my status"], "response": "स्टेटस देखने या डालने के लिए यहाँ क्लिक करें।"},
-            {"intent": "new_chat", "queries": ["message bhejo", "naya chat", "msg karna hai", "मैसेज लिखो", "kuch likhna hai"], "ui": ["new chat", "message icon", "नया चैट"], "response": "नया मैसेज भेजने के लिए यहाँ दबाएं।"},
-            {"intent": "voice_note", "queries": ["bol kar bhejo", "voice message", "aawaz bhejni hai", "ऑडियो भेजो"], "ui": ["mic", "microphone", "माइक", "voice message"], "response": "बोलकर मैसेज भेजने के लिए इस माइक को दबाए रखें।"}
+            {
+                "queries": ["photo kheencho", "tasveer lo", "photo click karo", "फोटो खींचो", "tasveer utaro", "photo nikaalo"],
+                "target_ui": "Photo kheenchne wala button (Camera Shutter)",
+                "response": "फोटो खींचने के लिए यहाँ बीच वाला गोल बटन दबाएं।"
+            },
+            {
+                "queries": ["aage ka camera chalao", "apna chehra dekhna hai", "selfie leni hai", "camera badlo", "peeche ka camera karo"],
+                "target_ui": "Camera badalne wala button (Flip Front/Back Camera)",
+                "response": "कैमरा बदलने के लिए इस बटन को दबाएं।"
+            },
+            {
+                "queries": ["andhera hai roshni jalao", "flash on karo", "roshni chahiye", "फ्लैश जलाओ"],
+                "target_ui": "Flash / Roshni chalane wala button",
+                "response": "रोशनी (Flash) चालू करने के लिए यहाँ दबाएं।"
+            },
+            {
+                "queries": ["video banana hai", "recording karo", "chalta firta video banao"],
+                "target_ui": "Video banane wala mode (Video Record)",
+                "response": "वीडियो रिकॉर्डिंग शुरू करने के लिए यहाँ दबाएं।"
+            }
         ],
-        "noise_elements": ["settings", "search", "more options", "camera", "chats", "calls"]
+        "noise": ["Camera timer (Photo lene ka samay)", "Camera zoom (Pass ya door karne ka button)", "Gallery / Purani photo", "Settings"]
     },
-    "com.facebook.katana": {
+
+    # 2. SEARCH & DISCOVERY (Fixing Magnifying Glass / '0' confusion)
+    {
+        "app_pkg": "com.google.android.youtube",
         "intents": [
-            {"intent": "create_post", "queries": ["photo dalo", "post likho", "kuch share karo", "स्टेटस डालो", "photo upload", "nayi photo"], "ui": ["what's on your mind", "photo/video", "create post", "फोटो"], "response": "नया पोस्ट या फोटो डालने के लिए यहाँ दबाएं।"},
-            {"intent": "watch_video", "queries": ["video dekho", "watch", "kuch dekhna hai", "वीडियो चलाओ"], "ui": ["video", "watch", "वीडियो"], "response": "वीडियो देखने के लिए यहाँ क्लिक करें।"},
-            {"intent": "friend_request", "queries": ["friends dekho", "naya dost", "friend request", "मित्र"], "ui": ["friends", "friend requests", "मित्र"], "response": "फ्रेंड रिक्वेस्ट देखने के लिए यहाँ दबाएं।"},
-            {"intent": "like", "queries": ["like karo", "pasand aaya", "achha laga", "लाइक"], "ui": ["like", "लाइक", "thumbs up"], "response": "इस पोस्ट को लाइक करने के लिए यहाँ दबाएं।"}
+            {
+                "queries": ["kuch dhoondo", "bhajan search karo", "gana khojo", "सर्च करो", "khoj", "dhundhna hai"],
+                "target_ui": "Search / Khojne wala button (Lens)",
+                "response": "मनपसंद वीडियो या गाना खोजने के लिए इस सर्च लेंस पर दबाएं।"
+            },
+            {
+                "queries": ["video roko", "pause karo", "rok do", "band karo gana"],
+                "target_ui": "Video / Gana rokne ka button (Pause)",
+                "response": "वीडियो को रोकने के लिए यहाँ बीच में दबाएं।"
+            },
+            {
+                "queries": ["video chalao", "play karo", "shuru karo"],
+                "target_ui": "Video / Gana chalane ka button (Play)",
+                "response": "वीडियो शुरू करने के लिए यहाँ दबाएं।"
+            },
+            {
+                "queries": ["badi screen par dekho", "full screen karo", "bada karo video"],
+                "target_ui": "Badi screen karne ka button (Fullscreen)",
+                "response": "पूरे स्क्रीन पर वीडियो देखने के लिए यहाँ दबाएं।"
+            },
+            {
+                "queries": ["agla gana lagao", "skip karo", "aage badhao"],
+                "target_ui": "Agla video ya gana chalane ka button (Next / Skip)",
+                "response": "अगला वीडियो चलाने के लिए यहाँ दबाएं।"
+            }
         ],
-        "noise_elements": ["search", "menu", "notifications", "marketplace", "profile"]
+        "noise": ["Subtitles / Likhe hue shabda dikhane ka button (CC)", "Home screen", "Subscriptions", "Khule hue tabs dekhne ka button"]
     },
-    "com.google.android.youtube": {
+
+    # 3. UPI, PAYMENTS & BANKING (GPay, PhonePe, Paytm)
+    {
+        "app_pkg": "com.google.android.apps.nbu.paisa.user",
         "intents": [
-            {"intent": "search", "queries": ["bhajan lagao", "gana khojo", "search karo", "kuch dhoondo", "खोजो", "arti chalao"], "ui": ["search", "खोज", "search icon", "magnifying glass"], "response": "मनपसंद वीडियो खोजने के लिए यहाँ सर्च करें।"},
-            {"intent": "shorts", "queries": ["chote video", "shorts dekho", "timepass", "शॉर्ट्स"], "ui": ["shorts", "शॉर्ट्स"], "response": "छोटे वीडियो (Shorts) देखने के लिए यहाँ दबाएं।"},
-            {"intent": "play_pause", "queries": ["roko", "chalao", "pause karo", "play", "रोक दो"], "ui": ["play", "pause", "रोकें", "चलाएं"], "response": "वीडियो को रोकने या चलाने के लिए यहाँ दबाएं।"}
+            {
+                "queries": ["dukan par scan karna hai", "qr code scan karo", "barcode scanner", "क्यूआर कोड"],
+                "target_ui": "QR Code scan karne ka camera (Scan & Pay)",
+                "response": "दुकान का QR कोड स्कैन करने के लिए यहाँ कैमरा स्कैनर खोलें।"
+            },
+            {
+                "queries": ["paise bhejo", "transfer karo", "rupaye dalne hain"],
+                "target_ui": "Paise bhejne ka button (Pay / Transfer)",
+                "response": "पैसे भेजने के लिए यहाँ 'Pay' पर दबाएं।"
+            },
+            {
+                "queries": ["khate me kitne paise hain", "balance check karo", "mera bank balance batao"],
+                "target_ui": "Bank balance check karne ka button",
+                "response": "अपना बैंक बैलेंस चेक करने के लिए यहाँ दबाएं।"
+            },
+            {
+                "queries": ["purana hisab dikhao", "passbook dekho", "kisko kitna paisa gaya", "history check karo"],
+                "target_ui": "Purane len-den dekhne ka button (History / Passbook)",
+                "response": "पुराने लेन-देन की रसीद देखने के लिए यहाँ हिस्ट्री पर दबाएं।"
+            }
         ],
-        "noise_elements": ["home", "subscriptions", "library", "history", "cast"]
+        "noise": ["Khareedari ka jhola (Shopping Cart)", "Peeche jane wala button (Back Arrow)", "Help & Support", "Profile"]
     },
-    "com.google.android.dialer": {
+
+    # 4. WHATSAPP & CHAT COMMUNICATIONS
+    {
+        "app_pkg": "com.whatsapp",
         "intents": [
-            {"intent": "dial_number", "queries": ["number milao", "call karna hai", "phone lagao", "नंबर डायल करो", "dial pad"], "ui": ["keypad", "dialpad", "डायलर", "number pad"], "response": "नंबर डायल करने के लिए यहाँ कीपैड (Keypad) खोलें।"},
-            {"intent": "contacts", "queries": ["number dekho", "kis kis ka number hai", "contacts", "संपर्क"], "ui": ["contacts", "संपर्क", "people"], "response": "सेव किये हुए नंबर (Contacts) देखने के लिए यहाँ दबाएं।"},
-            {"intent": "speaker", "queries": ["aawaz badao", "speaker par dalo", "loudspeaker", "स्पीकर"], "ui": ["speaker", "स्पीकर", "loudspeaker"], "response": "आवाज़ तेज़ करने के लिए स्पीकर बटन दबाएं।"}
+            {
+                "queries": ["bol kar message bhejo", "aawaz record karo", "voice note bhejna hai", "audio bhejo"],
+                "target_ui": "Awaaz record karne wala mic button (Voice Note)",
+                "response": "बोलकर संदेश भेजने के लिए इस माइक बटन को दबाए रखें।"
+            },
+            {
+                "queries": ["photo ya kagaz bhejo", "file attach karo", "tasveer jod kar bhejo", "pin ka nishan"],
+                "target_ui": "Photo / Document jodne wala button (Attachment Clip)",
+                "response": "फोटो या डॉक्यूमेंट भेजने के लिए इस पिन (Attach) वाले निशान पर दबाएं।"
+            },
+            {
+                "queries": ["chehra dekh kar baat karo", "video call lagao", "video call milao"],
+                "target_ui": "Video call karne ka button",
+                "response": "वीडियो कॉल शुरू करने के लिए यहाँ दबाएं।"
+            },
+            {
+                "queries": ["phone milao", "audio call karo", "baat karni hai phone par"],
+                "target_ui": "Phone milane ka button (Call)",
+                "response": "कॉल करने के लिए इस फोन वाले बटन पर दबाएं।"
+            },
+            {
+                "queries": ["message bhej do", "likha hua send karo", "ravana karo"],
+                "target_ui": "Message bhejne wala button (Send Arrow)",
+                "response": "मैसेज भेजने के लिए इस तीर (Send) वाले बटन पर दबाएं।"
+            },
+            {
+                "queries": ["status dekhna hai", "story dekho", "naya status kya hai"],
+                "target_ui": "Status ya Story dekhne ka button",
+                "response": "स्टेटस या स्टोरी देखने के लिए यहाँ दबाएं।"
+            }
         ],
-        "noise_elements": ["recent", "favorites", "voicemail", "mute", "hold"]
+        "noise": ["Emoji ya Sticker wala button", "Menu / 3 Bindi (More Options)", "Peeche jane wala button (Back Arrow)", "Search / Khojne wala button (Lens)"]
     },
-    "com.google.android.apps.photos": {
+
+    # 5. PHONE & CALLING (Dialer)
+    {
+        "app_pkg": "com.google.android.dialer",
         "intents": [
-            {"intent": "share", "queries": ["photo bhejo", "share karo", "kisi ko bhejna hai", "शेयर"], "ui": ["share", "शेयर", "send"], "response": "इस फोटो को किसी और को भेजने के लिए यहाँ शेयर दबाएं।"},
-            {"intent": "delete", "queries": ["delete karo", "hatao", "khrab photo hai", "डिलीट"], "ui": ["delete", "trash", "डिलीट"], "response": "इस फोटो को हटाने (Delete) के लिए यहाँ दबाएं।"},
-            {"intent": "edit", "queries": ["thik karo", "edit karo", "crop karna hai", "सुधारें"], "ui": ["edit", "सुधारें", "crop"], "response": "फोटो को सही करने या एडिट करने के लिए यहाँ दबाएं।"}
+            {
+                "queries": ["number dial karo", "keypad kholo", "number milana hai", "dial pad"],
+                "target_ui": "Number dial karne ka keypad",
+                "response": "नंबर टाइप करने के लिए यहाँ कीपैड खोलें।"
+            },
+            {
+                "queries": ["call kaat do", "phone disconnect karo", "laal button dabao", "baat khatam"],
+                "target_ui": "Call kaatne wala laal button (End Call)",
+                "response": "फोन काटने के लिए इस लाल बटन को दबाएं।"
+            },
+            {
+                "queries": ["speaker par dalo", "aawaz tez karo", "loudspeaker chalu karo"],
+                "target_ui": "Speaker par aawaz tez karne ka button",
+                "response": "आवाज़ तेज़ सुनने के लिए स्पीकर बटन पर दबाएं।"
+            },
+            {
+                "queries": ["aawaz band karo", "mute karo", "mic mute karo"],
+                "target_ui": "Mic band karne ka button (Mute)",
+                "response": "अपनी आवाज़ बंद करने के लिए म्यूट बटन दबाएं।"
+            },
+            {
+                "queries": ["naya number save karo", "contact add karo", "naya dost save karo"],
+                "target_ui": "Naya number save karne ka button (Add Contact)",
+                "response": "नया नंबर फोन में सेव करने के लिए यहाँ दबाएं।"
+            }
         ],
-        "noise_elements": ["albums", "search", "sharing", "library", "lens"]
+        "noise": ["Call hold par rakhne ka button", "Menu / 3 Bindi (More Options)", "Recent calls", "Favorites"]
     },
-    "com.google.android.apps.messaging": {
+
+    # 6. GALLERY & PHOTOS
+    {
+        "app_pkg": "com.google.android.apps.photos",
         "intents": [
-            {"intent": "new_sms", "queries": ["sms likho", "text message", "message bhejo", "naya sms"], "ui": ["start chat", "new message", "नया संदेश"], "response": "नया SMS भेजने के लिए यहाँ क्लिक करें।"},
-            {"intent": "read_otp", "queries": ["otp kya hai", "code dekho", "bank ka message", "पासवर्ड"], "ui": ["unread", "otp", "bank", "message body"], "response": "अपना मैसेज या OTP पढ़ने के लिए यहाँ दबाएं।"}
+            {
+                "queries": ["ye photo bekar hai hatao", "delete karo", "trash me dalo", "mita do photo"],
+                "target_ui": "Delete / Hatane ka dabba (Trash)",
+                "response": "फोटो हटाने के लिए इस कचरे के डिब्बे (Delete) पर दबाएं।"
+            },
+            {
+                "queries": ["kisi ko bhejna hai", "share karo photo", "whatsapp par bhejo"],
+                "target_ui": "Share / Aage bhejne ka button",
+                "response": "फोटो किसी और को भेजने के लिए यहाँ शेयर दबाएं।"
+            },
+            {
+                "queries": ["photo thik karo", "crop karo", "pencil wala nishan", "edit karo"],
+                "target_ui": "Photo sudharne ka button (Edit / Pencil)",
+                "response": "फोटो को सही करने या काटने के लिए यहाँ पेंसिल (Edit) पर दबाएं।"
+            },
+            {
+                "queries": ["pasand aayi", "favorite banao", "star mark karo"],
+                "target_ui": "Pasand karne ka button (Favorite / Star)",
+                "response": "फोटो को पसंदीदा (Favorite) मार्क करने के लिए इस तारे पर दबाएं।"
+            }
         ],
-        "noise_elements": ["search", "archive", "settings", "spam", "mark as read"]
+        "noise": ["Photo ghumane ka button (Rotate)", "Photo ya file ki jaankari dekhne ka button (Info)", "Peeche jane wala button (Back Arrow)"]
+    },
+
+    # 7. GENERAL NAVIGATION & CONTROLS
+    {
+        "app_pkg": "com.android.chrome",
+        "intents": [
+            {
+                "queries": ["peeche jao", "back karo", "purane page par jao", "teer ka nishan"],
+                "target_ui": "Peeche jane wala button (Back Arrow)",
+                "response": "पिछले पेज पर वापस जाने के लिए इस तीर के निशान पर दबाएं।"
+            },
+            {
+                "queries": ["menu kholo", "teen bindi dabao", "options dekhna hai"],
+                "target_ui": "Menu / 3 Bindi (More Options)",
+                "response": "अन्य विकल्प देखने के लिए इन तीन बिन्दुओं पर दबाएं।"
+            },
+            {
+                "queries": ["band karo", "hatao ise", "cross dabao", "close karo"],
+                "target_ui": "Band karne ka cross button (Close)",
+                "response": "इसे बंद करने के लिए इस क्रॉस (X) पर दबाएं।"
+            }
+        ],
+        "noise": ["Home screen / Mukhya prishth par jane ka button", "Refresh / Dubara load karne ka button", "Khule hue tabs dekhne ka button"]
     }
-}
+]
 
 dataset = []
 
-for app_pkg, app_data in apps.items():
-    for intent_data in app_data["intents"]:
-        for i in range(150):  # Generate 150 variations per intent
-            query = random.choice(intent_data["queries"])
-            target_ui = random.choice(intent_data["ui"])
+# Generate 150 diverse combinations per intent
+for cat in categories:
+    app_pkg = cat["app_pkg"]
+    for item in cat["intents"]:
+        for _ in range(150):
+            query = random.choice(item["queries"])
+            target = item["target_ui"]
             
-            # Construct UI elements array with noise
-            ui_elements = random.sample(app_data["noise_elements"], k=min(3, len(app_data["noise_elements"])))
-            target_index = random.randint(0, len(ui_elements))
-            ui_elements.insert(target_index, target_ui)
+            # Select 2 to 4 random noise elements
+            num_noise = random.randint(2, min(4, len(cat["noise"])))
+            screen_elements = random.sample(cat["noise"], k=num_noise)
             
-            formatted_elements = "\\n".join([f"[{idx}] {el}" for idx, el in enumerate(ui_elements)])
+            # Insert target element at random position
+            target_idx = random.randint(0, len(screen_elements))
+            screen_elements.insert(target_idx, target)
+            
+            formatted_elements = "\n".join([f"[{i}] {el}" for i, el in enumerate(screen_elements)])
             
             system_prompt = f"""You are SaralGati, a patient, warm companion for Indian elders.
 The user is looking at an Android app: {app_pkg}.
@@ -80,7 +246,7 @@ Instructions:
 3. If no specific element needs to be tapped, do NOT output any TARGET tag.
 4. Do not mention that you are an AI. Only output the Hindi sentence."""
 
-            response = f"{intent_data['response']} TARGET:{target_index}"
+            response = f"{item['response']} TARGET:{target_idx}"
             
             dataset.append({
                 "messages": [
@@ -90,13 +256,11 @@ Instructions:
                 ]
             })
 
-# Shuffle dataset
 random.shuffle(dataset)
 
-# Save to JSONL
 output_file = "saralgati_popular_apps_train.jsonl"
 with open(output_file, "w", encoding="utf-8") as f:
-    for item in dataset:
-        f.write(json.dumps(item, ensure_ascii=False) + "\n")
+    for entry in dataset:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
-print(f"Generated {len(dataset)} examples in {output_file}")
+print(f"Generated {len(dataset)} high-precision samples in {output_file}!")

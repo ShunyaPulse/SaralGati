@@ -50,30 +50,43 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
         { role: 'user', content: userPrompt }
       ];
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          messages,
-          lora: loraName
-        })
-      });
+      let loraSuccess = false;
+      const MAX_LORA_RETRIES = 3;
 
-      if (response.ok) {
-        const result = await response.json();
-        const text = result.result?.response || result.result?.choices?.[0]?.message?.content;
-        if (text && typeof text === 'string' && text.trim()) {
-          return { text: text.trim(), source: 'lora', modelUsed: loraName };
+      for (let attempt = 1; attempt <= MAX_LORA_RETRIES; attempt++) {
+        try {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${apiToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messages,
+              lora: loraName
+            })
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            const text = result.result?.response || result.result?.choices?.[0]?.message?.content;
+            if (text && typeof text === 'string' && text.trim()) {
+              return { text: text.trim(), source: 'lora', modelUsed: loraName };
+            }
+          } else {
+            console.warn(`[Tier 1] Cloudflare LoRA returned status ${response.status} on attempt ${attempt}.`);
+            if (attempt === MAX_LORA_RETRIES) {
+              console.warn(`[Tier 1] Max retries reached. Initiating Tier 2 Gemini multi-key cascade...`);
+            } else {
+              // Wait 500ms before retrying
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        } catch (cfErr) {
+          console.warn(`[Tier 1] Cloudflare LoRA error on attempt ${attempt}:`, cfErr);
+          if (attempt === MAX_LORA_RETRIES) break;
         }
-      } else {
-        console.warn(`[Tier 1] Cloudflare LoRA returned status ${response.status}. Initiating Tier 2 Gemini multi-key cascade...`);
       }
-    } catch (cfErr) {
-      console.warn(`[Tier 1] Cloudflare LoRA error:`, cfErr);
-    }
   }
 
   // =========================================================================

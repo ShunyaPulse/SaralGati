@@ -87,6 +87,9 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
           if (attempt === MAX_LORA_RETRIES) break;
         }
       }
+    } catch (cfErr) {
+      console.warn(`[Tier 1] Cloudflare LoRA outer error:`, cfErr);
+    }
   }
 
   // =========================================================================

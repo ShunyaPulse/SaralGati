@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
     let promoted = false;
     let corrected = false;
     let evicted = false;
+    let demoted = false;
 
     const normalizedQuestion = updatedRow.question
       .trim()
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
       // 2A. Positive Reinforcement: User tapped the suggested button
       try {
         verifiedCount = await redis.hincrby(statsKey, 'verified_count', 1);
+        await redis.hset(statsKey, 'consecutive_rejections', '0'); // Reset consecutive failure streak
         await redis.expire(statsKey, 60 * 86400); // Retain stats for 60 days
 
         // Auto-promote to Golden Cache if verified count >= 2
@@ -84,47 +86,52 @@ export async function POST(req: NextRequest) {
       } catch (redisErr) {
         console.error('Failed to update Redis feedback stats:', redisErr);
       }
-    } else if (feedback === 'tapped_other' && actual_tapped_index !== undefined && actual_tapped_index !== null) {
-      // 2B. User Correction Flywheel: User tapped a different button than suggested
-      try {
-        // Increment votes for this user-corrected index
-        const correctionKey = `correction:${actual_tapped_index}`;
-        const correctionVotes = await redis.hincrby(statsKey, correctionKey, 1);
-        const rejectionCount = await redis.hincrby(statsKey, 'rejection_count', 1);
-        await redis.expire(statsKey, 60 * 86400);
-
-        // Bad Cache Eviction: If rejections >= 2, evict existing stale/wrong cache entry
-        if (rejectionCount >= 2) {
-          await redis.del(cacheKey);
-          evicted = true;
-        }
-
-        // Auto-Correction Promotion: If 2 or more users tap the same alternative button, promote as new Golden Answer
-        if (correctionVotes >= 2) {
-          await cacheSet(
-            cacheKey,
-            {
-              explanation: updatedRow.explanation,
-              highlight_index: actual_tapped_index,
-            },
-            30 * 86400 // 30-day extended TTL for corrected golden answer
-          );
-          corrected = true;
-        }
-      } catch (redisErr) {
-        console.error('Failed to process tapped_other correction in Redis:', redisErr);
-      }
-    } else if (feedback === 'disliked') {
-      // 2C. Direct Dislike: Invalidate cache if consistently rejected
+    } else if (feedback === 'tapped_other' || feedback === 'disliked') {
+      // 2B. Negative Feedback, Cache Demotion, & Invalidation
       try {
         const rejectionCount = await redis.hincrby(statsKey, 'rejection_count', 1);
+        const consecutiveRejections = await redis.hincrby(statsKey, 'consecutive_rejections', 1);
+        const curVerified = parseInt((await redis.hget(statsKey, 'verified_count')) || '0', 10);
         await redis.expire(statsKey, 60 * 86400);
-        if (rejectionCount >= 2) {
+
+        // Trust score: positive verifications weighted against double rejections
+        const trustScore = curVerified - (2 * rejectionCount);
+
+        // Immediate Invalidation / Eviction:
+        // Evict if 2 consecutive rejections OR negative trust score OR unreconciled rejection
+        if (consecutiveRejections >= 2 || trustScore <= 0 || rejectionCount >= 2) {
           await redis.del(cacheKey);
           evicted = true;
+        } else {
+          // Demotion: entry is questionable, downgrade TTL to 1 hour instead of 30 days
+          await redis.expire(cacheKey, 3600);
+          demoted = true;
+        }
+
+        // 2C. User Correction Flywheel (if elder tapped an alternative button)
+        if (feedback === 'tapped_other' && actual_tapped_index !== undefined && actual_tapped_index !== null) {
+          const correctionKey = `correction:${actual_tapped_index}`;
+          const correctionVotes = await redis.hincrby(statsKey, correctionKey, 1);
+
+          // Auto-Correction Promotion: If 2 or more users independently tap this corrected index
+          if (correctionVotes >= 2) {
+            await cacheSet(
+              cacheKey,
+              {
+                explanation: updatedRow.explanation,
+                highlight_index: actual_tapped_index,
+              },
+              30 * 86400 // 30-day extended TTL for corrected golden answer
+            );
+            // Reset rejection counters for the newly promoted golden answer
+            await redis.hset(statsKey, 'consecutive_rejections', '0');
+            await redis.hset(statsKey, 'rejection_count', '0');
+            corrected = true;
+            evicted = false; // Overwritten with correct golden answer
+          }
         }
       } catch (redisErr) {
-        console.error('Failed to record dislike in Redis:', redisErr);
+        console.error('Failed to process negative feedback / demotion in Redis:', redisErr);
       }
     }
 
@@ -137,6 +144,7 @@ export async function POST(req: NextRequest) {
         promoted_to_golden_cache: promoted,
         auto_corrected_golden_cache: corrected,
         bad_cache_evicted: evicted,
+        cache_demoted: demoted,
       },
     });
   } catch (error) {

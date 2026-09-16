@@ -5,8 +5,26 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get('status') || 'verified';
+    const includeCorrections = searchParams.get('include_corrections') === 'true' || status === 'flywheel';
     const limit = Math.min(parseInt(searchParams.get('limit') || '500', 10), 2000);
     const format = searchParams.get('format') || 'json';
+
+    let sqlQuery = `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
+       FROM model_interactions
+       WHERE feedback_status = $1
+       ORDER BY created_at DESC
+       LIMIT $2`;
+    let queryParams: (string | number)[] = [status, limit];
+
+    if (includeCorrections) {
+      sqlQuery = `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
+       FROM model_interactions
+       WHERE feedback_status = 'verified' 
+          OR (feedback_status = 'rejected' AND actual_tapped_index IS NOT NULL)
+       ORDER BY created_at DESC
+       LIMIT $1`;
+      queryParams = [limit];
+    }
 
     const rows = await query<{
       id: string;
@@ -18,14 +36,7 @@ export async function GET(req: NextRequest) {
       explanation: string;
       feedback_status: string;
       created_at: string;
-    }>(
-      `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
-       FROM model_interactions
-       WHERE feedback_status = $1
-       ORDER BY created_at DESC
-       LIMIT $2`,
-      [status, limit]
-    );
+    }>(sqlQuery, queryParams);
 
     // Convert into instruction-tuning format suitable for Unsloth / LoRA training
     const dataset = rows.map((row) => {
@@ -45,7 +56,7 @@ ${formattedElements}
 Instructions:
 1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
 2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).
-3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).
+3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] or preview count noise.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end.`;
 
       const assistantContent = targetIndex !== null

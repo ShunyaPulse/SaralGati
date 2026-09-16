@@ -50,24 +50,27 @@ export async function POST(req: NextRequest) {
 
     let verifiedCount = 0;
     let promoted = false;
+    let corrected = false;
+    let evicted = false;
 
-    // 2. Continuous Learning: If user successfully tapped the suggested button, promote to Redis GSC
+    const normalizedQuestion = updatedRow.question
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s\u0900-\u097F]/g, '')
+      .replace(/\s+/g, ' ');
+
+    const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
+    const cacheKey = `screen_cache:${updatedRow.app_package}:${updatedRow.screen_hash}:${normalizedQuestion}`;
+
+    // 2. Continuous Learning Loop
     if (feedback === 'tapped_highlight' && updatedRow.suggested_index !== null) {
-      const normalizedQuestion = updatedRow.question
-        .trim()
-        .toLowerCase()
-        .replace(/[^\w\s\u0900-\u097F]/g, '')
-        .replace(/\s+/g, ' ');
-
-      const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
-
+      // 2A. Positive Reinforcement: User tapped the suggested button
       try {
         verifiedCount = await redis.hincrby(statsKey, 'verified_count', 1);
         await redis.expire(statsKey, 60 * 86400); // Retain stats for 60 days
 
-        // Auto-promote to Golden Cache if verified count >= 2 (or on first success for instant feedback)
+        // Auto-promote to Golden Cache if verified count >= 2
         if (verifiedCount >= 2) {
-          const cacheKey = `screen_cache:${updatedRow.app_package}:${updatedRow.screen_hash}:${normalizedQuestion}`;
           await cacheSet(
             cacheKey,
             {
@@ -81,6 +84,48 @@ export async function POST(req: NextRequest) {
       } catch (redisErr) {
         console.error('Failed to update Redis feedback stats:', redisErr);
       }
+    } else if (feedback === 'tapped_other' && actual_tapped_index !== undefined && actual_tapped_index !== null) {
+      // 2B. User Correction Flywheel: User tapped a different button than suggested
+      try {
+        // Increment votes for this user-corrected index
+        const correctionKey = `correction:${actual_tapped_index}`;
+        const correctionVotes = await redis.hincrby(statsKey, correctionKey, 1);
+        const rejectionCount = await redis.hincrby(statsKey, 'rejection_count', 1);
+        await redis.expire(statsKey, 60 * 86400);
+
+        // Bad Cache Eviction: If rejections >= 2, evict existing stale/wrong cache entry
+        if (rejectionCount >= 2) {
+          await redis.del(cacheKey);
+          evicted = true;
+        }
+
+        // Auto-Correction Promotion: If 2 or more users tap the same alternative button, promote as new Golden Answer
+        if (correctionVotes >= 2) {
+          await cacheSet(
+            cacheKey,
+            {
+              explanation: updatedRow.explanation,
+              highlight_index: actual_tapped_index,
+            },
+            30 * 86400 // 30-day extended TTL for corrected golden answer
+          );
+          corrected = true;
+        }
+      } catch (redisErr) {
+        console.error('Failed to process tapped_other correction in Redis:', redisErr);
+      }
+    } else if (feedback === 'disliked') {
+      // 2C. Direct Dislike: Invalidate cache if consistently rejected
+      try {
+        const rejectionCount = await redis.hincrby(statsKey, 'rejection_count', 1);
+        await redis.expire(statsKey, 60 * 86400);
+        if (rejectionCount >= 2) {
+          await redis.del(cacheKey);
+          evicted = true;
+        }
+      } catch (redisErr) {
+        console.error('Failed to record dislike in Redis:', redisErr);
+      }
     }
 
     return NextResponse.json({
@@ -90,6 +135,8 @@ export async function POST(req: NextRequest) {
         status: newStatus,
         verified_count: verifiedCount,
         promoted_to_golden_cache: promoted,
+        auto_corrected_golden_cache: corrected,
+        bad_cache_evicted: evicted,
       },
     });
   } catch (error) {

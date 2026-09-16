@@ -60,6 +60,11 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- SaralGati On-Screen Floating Helper Service -->
+        <service
+            android:name=".services.overlay.FloatingHelperService"
+            android:exported="false" />
+
     </application>
 
 </manifest>

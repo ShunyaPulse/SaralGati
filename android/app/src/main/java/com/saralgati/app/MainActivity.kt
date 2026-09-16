@@ -1,47 +1,47 @@
-package com.saralgati.app
+﻿package com.saralgati.app
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import com.saralgati.app.data.local.LocalPrefs
+import com.saralgati.app.ui.dashboard.DashboardScreen
+import com.saralgati.app.ui.onboarding.PairingScreen
 import com.saralgati.app.ui.theme.SaralGatiTheme
 
 class MainActivity : ComponentActivity() {
+    private lateinit var localPrefs: LocalPrefs
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        
+        localPrefs = LocalPrefs(this)
+        
         setContent {
             SaralGatiTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
-                    )
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
+                    
+                    if (isPaired) {
+                        DashboardScreen()
+                    } else {
+                        PairingScreen(
+                            localPrefs = localPrefs,
+                            onPairedSuccess = { isPaired = true }
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    SaralGatiTheme {
-        Greeting("Android")
     }
 }

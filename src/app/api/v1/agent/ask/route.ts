@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { generateAIResponse } from '@/lib/aiFallback';
 import { cacheGet, cacheSet } from '@/lib/redis';
 import { matchElderIntent } from '@/lib/intentDictionary';
+import { pruneUITree } from '@/lib/uiPruner';
 import { query } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -216,7 +217,8 @@ export async function POST(req: NextRequest) {
     }
     // === END REDIS GLOBAL SCREEN CACHE ===
 
-    const formattedElements = ui_elements.map((el: string, idx: number) => `[${idx}] ${el}`).join('\n');
+    // Prune UI Tree: filter preview noise and static boilerplate while preserving original client indices
+    const { formattedString: formattedElements } = pruneUITree(ui_elements, question);
 
     const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
 The user is looking at an Android app: ${app_package}.

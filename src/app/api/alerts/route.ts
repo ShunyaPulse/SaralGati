@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
-import { query } from '@/lib/db';
-import { cacheGet, cacheSet } from '@/lib/redis';
+import { query, queryOne } from '@/lib/db';
+import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog[]>>> {
@@ -29,7 +29,7 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
 
     // Build query dynamically
     let queryStr = `
-      SELECT al.*, ep.name as elder_name 
+      SELECT al.*, ep.elder_name as elder_name 
       FROM assistance_logs al
       JOIN elder_profiles ep ON al.elder_id = ep.id
       WHERE ep.caregiver_id = $1
@@ -63,3 +63,51 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export async function POST(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog>>> {
+  try {
+    const body = await request.json();
+    const { elder_id, event_type, description, severity, screenshot_url, screen_name, app_package } = body;
+
+    if (!elder_id) {
+      return NextResponse.json({ success: false, error: 'elder_id is required' }, { status: 400 });
+    }
+
+    // Lookup elder and caregiver
+    const elder = await queryOne<{ id: string; caregiver_id: string }>(
+      `SELECT id, caregiver_id FROM elder_profiles WHERE id = $1`,
+      [elder_id]
+    );
+
+    if (!elder) {
+      return NextResponse.json({ success: false, error: 'Elder profile not found' }, { status: 404 });
+    }
+
+    // Map sos_trigger from Android to emergency to satisfy DB constraint
+    const mappedEventType = event_type === 'sos_trigger' ? 'emergency' : (event_type || 'emergency');
+
+    // Insert alert log
+    const newAlert = await queryOne<AssistanceLog>(
+      `INSERT INTO assistance_logs (
+        elder_id, event_type, screen_name, app_package, duration_ms, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        elder_id,
+        mappedEventType,
+        screen_name || 'SOS / Companion App',
+        app_package || 'com.saralgati.app',
+        0,
+        JSON.stringify({ description: description || 'Mobile alert', severity: severity || 'critical', screenshot_url })
+      ]
+    );
+
+    // Invalidate alerts cache for caregiver
+    await invalidatePattern(`alerts:${elder.caregiver_id}*`);
+
+    return NextResponse.json({ success: true, data: newAlert as AssistanceLog }, { status: 201 });
+  } catch (error: any) {
+    console.error('Error creating alert:', error);
+    return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
+  }
+}
+

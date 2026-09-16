@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">SaralGati</string>
+    <string name="accessibility_service_label">SaralGati Elder Assistant</string>
+    <string name="accessibility_service_description">SaralGati helps elders navigate apps easily with simplified audio-visual guidance and fraud protection.</string>
+    <string name="heartbeat_notification_title">SaralGati Protection Active</string>
+    <string name="heartbeat_notification_desc">Monitoring device status and keeping family connected.</string>
+</resources>

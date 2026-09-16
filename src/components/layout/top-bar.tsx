@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { Bell, Menu, User } from 'lucide-react';
@@ -39,14 +40,19 @@ export function TopBar() {
         </div>
 
         <div className="flex items-center space-x-4">
-          <button className="relative rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0074c8]">
+          <Link
+            href="/alerts"
+            className="relative rounded-full p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#0074c8]"
+            title="View Alerts"
+            aria-label="View Alerts"
+          >
             <Bell className="h-6 w-6" />
             {unreadAlertsCount > 0 && (
               <span className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
                 {unreadAlertsCount}
               </span>
             )}
-          </button>
+          </Link>
 
           <div className="relative">
             <button

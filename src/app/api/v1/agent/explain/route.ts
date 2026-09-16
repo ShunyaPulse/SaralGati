@@ -33,18 +33,24 @@ ${ui_elements.join(' | ')}
 Explain this screen to the elder in 1 or 2 very simple Hindi sentences. 
 Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
+    const payload: any = {
+      messages: [
+        { role: 'system', content: 'You are a helpful elder companion assistant. Output only Hindi.' },
+        { role: 'user', content: prompt }
+      ]
+    };
+
+    if (process.env.CLOUDFLARE_LORA_NAME) {
+      payload.lora = process.env.CLOUDFLARE_LORA_NAME;
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        messages: [
-          { role: 'system', content: 'You are a helpful elder companion assistant. Output only Hindi.' },
-          { role: 'user', content: prompt }
-        ]
-      })
+      body: JSON.stringify(payload)
     });
 
     if (!response.ok) {

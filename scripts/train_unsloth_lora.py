@@ -32,7 +32,7 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
 
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
-    url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?format=jsonl&limit=2000"
+    url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=2000"
     print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
     try:
         res = requests.get(url, timeout=30)

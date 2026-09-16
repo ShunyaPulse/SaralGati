@@ -27,7 +27,7 @@ jobs:
       - name: Check Training Data Availability
         id: check_data
         run: |
-          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=verified&limit=500"
+          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=500"
           echo "Fetching verified interactions..."
           COUNT=$(curl -s "$API_URL" | grep -o '"count":[0-9]*' | cut -d':' -f2 || echo "0")
           echo "Found $COUNT verified elder interactions in database."
@@ -44,7 +44,7 @@ jobs:
       - name: Download Training Dataset
         if: steps.check_data.outputs.should_train == 'true'
         run: |
-          curl -s "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=verified&format=jsonl" -o dataset.jsonl
+          curl -s "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" -o dataset.jsonl
           echo "Downloaded $(wc -l < dataset.jsonl) rows to dataset.jsonl"
 
       - name: Upload Dataset Artifact

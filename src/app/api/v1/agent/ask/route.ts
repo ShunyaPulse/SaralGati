@@ -4,6 +4,7 @@ import { generateAIResponse } from '@/lib/aiFallback';
 import { cacheGet, cacheSet } from '@/lib/redis';
 import { matchElderIntent } from '@/lib/intentDictionary';
 import { pruneUITree } from '@/lib/uiPruner';
+import { evaluateMultiStepFlow } from '@/lib/flowEngine';
 import { query } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -42,6 +43,28 @@ export async function POST(req: NextRequest) {
         console.error('Error recording interaction:', err);
       }
     };
+
+    // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
+    const flowResult = await evaluateMultiStepFlow(elder_id, question, ui_elements);
+    if (flowResult && flowResult.isFlowActive && typeof flowResult.highlightIndex === 'number' && flowResult.highlightIndex >= 0) {
+      await logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId);
+      return NextResponse.json({
+        success: true,
+        data: {
+          interaction_id: interactionId,
+          explanation: flowResult.explanation,
+          highlight_index: flowResult.highlightIndex,
+          source: 'multi_step_flow',
+          model_used: flowResult.flowId,
+          flow: {
+            flow_id: flowResult.flowId,
+            current_step: flowResult.currentStep,
+            total_steps: flowResult.totalSteps,
+            step_label: flowResult.stepLabel
+          }
+        }
+      });
+    }
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
     const questionLower = question.toLowerCase();

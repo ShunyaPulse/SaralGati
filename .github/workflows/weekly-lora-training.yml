@@ -1,0 +1,75 @@
+name: Weekly Autonomous LoRA Training
+
+on:
+  schedule:
+    # Run every Sunday at 03:00 AM IST (21:30 UTC Saturday)
+    - cron: '30 21 * * 6'
+  workflow_dispatch:
+    inputs:
+      force_train:
+        description: 'Force training even with low sample count'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  check-and-trigger-training:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Check Training Data Availability
+        id: check_data
+        run: |
+          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=verified&limit=500"
+          echo "Fetching verified interactions..."
+          COUNT=$(curl -s "$API_URL" | grep -o '"count":[0-9]*' | cut -d':' -f2 || echo "0")
+          echo "Found $COUNT verified elder interactions in database."
+          echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
+          
+          FORCE="${{ inputs.force_train }}"
+          if [ "$COUNT" -ge 10 ] || [ "$FORCE" = "true" ]; then
+            echo "should_train=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_train=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Less than 10 verified samples ($COUNT). Skipping training cycle to save GPU quota."
+          fi
+
+      - name: Download Training Dataset
+        if: steps.check_data.outputs.should_train == 'true'
+        run: |
+          curl -s "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=verified&format=jsonl" -o dataset.jsonl
+          echo "Downloaded $(wc -l < dataset.jsonl) rows to dataset.jsonl"
+
+      - name: Upload Dataset Artifact
+        if: steps.check_data.outputs.should_train == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: saralgati-verified-dataset
+          path: dataset.jsonl
+          retention-days: 14
+
+      - name: Trigger Kaggle GPU Kernel
+        if: steps.check_data.outputs.should_train == 'true'
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$KAGGLE_KEY" ] || [ -z "$KAGGLE_USERNAME" ]; then
+            echo "⚠️ KAGGLE_KEY or KAGGLE_USERNAME is empty. Skipping Kaggle run."
+            exit 0
+          fi
+          pip install kaggle
+          mkdir -p ~/.kaggle
+          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+          echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
+          kaggle kernels push -p scripts/

@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
     // === METHOD 2: REDIS GLOBAL SCREEN CACHE ===
     const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
     const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
-    const normalizedQuestion = question.trim().toLowerCase();
+    const normalizedQuestion = question.trim().toLowerCase().replace(/[^\w\s\u0900-\u097F]/g, '').replace(/\s+/g, ' ');
     const historyHash = conversation_history.length > 0
       ? `:${crypto.createHash('sha256').update(JSON.stringify(conversation_history)).digest('hex').slice(0, 8)}`
       : '';

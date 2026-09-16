@@ -1,0 +1,13 @@
+{
+  "name": "SaralGati - Elderly Accessibility Companion",
+  "short_name": "SaralGati",
+  "description": "Caregiver hub for elderly accessibility assistance",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f0f7ff",
+  "theme_color": "#0074c8",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

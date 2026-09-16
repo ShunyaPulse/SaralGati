@@ -39,4 +39,7 @@ interface AgentApi {
 
     @POST("api/v1/agent/ask")
     suspend fun askQuestion(@Body request: com.saralgati.app.data.model.AskContextRequest): Response<ApiResponse<com.saralgati.app.data.model.ScreenExplanationResponse>>
+
+    @POST("api/v1/agent/feedback")
+    suspend fun sendFeedback(@Body request: com.saralgati.app.data.model.FeedbackRequest): Response<ApiResponse<Map<String, Any>>>
 }

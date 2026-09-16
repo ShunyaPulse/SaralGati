@@ -32,6 +32,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private val RAGE_TAP_TIME_WINDOW_MS = 2000L // 3 clicks within 2 seconds
     private val ALERT_COOLDOWN_MS = 15000L // 15 seconds cooldown between alerts
 
+    // Variables for Continuous Learning Implicit Feedback Loop
+    private var activeInteractionId: String? = null
+    private var activeHighlightedBounds: android.graphics.Rect? = null
+    private var activeHighlightTime: Long = 0L
+    private val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
+
     companion object {
         const val ACTION_EXTRACT_SCREEN = "com.saralgati.app.ACTION_EXTRACT_SCREEN"
         const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
@@ -96,6 +102,40 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private fun handleViewClicked(event: AccessibilityEvent) {
         val nodeInfo = event.source ?: return
         val currentTime = System.currentTimeMillis()
+
+        // --- Continuous Learning: Check if click matches active highlighted button ---
+        val interactionId = activeInteractionId
+        val targetBounds = activeHighlightedBounds
+        if (interactionId != null && targetBounds != null) {
+            val elapsed = currentTime - activeHighlightTime
+            if (elapsed < FEEDBACK_EXPIRY_MS) {
+                val clickedRect = android.graphics.Rect()
+                nodeInfo.getBoundsInScreen(clickedRect)
+
+                val isTargetTapped = android.graphics.Rect.intersects(clickedRect, targetBounds)
+                val feedbackType = if (isTargetTapped) "tapped_highlight" else "tapped_other"
+
+                // Clear immediately to prevent duplicate feedback calls
+                activeInteractionId = null
+                activeHighlightedBounds = null
+
+                serviceScope.launch {
+                    try {
+                        val req = com.saralgati.app.data.model.FeedbackRequest(
+                            interactionId = interactionId,
+                            feedback = feedbackType
+                        )
+                        NetworkModule.agentApi.sendFeedback(req)
+                        Log.d(TAG, "Sent implicit feedback: $feedbackType for interaction: $interactionId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send implicit feedback: ${e.message}")
+                    }
+                }
+            } else {
+                activeInteractionId = null
+                activeHighlightedBounds = null
+            }
+        }
 
         // If an alert was recently triggered, ignore taps during the cooldown period
         if (currentTime - lastAlertTriggerTime < ALERT_COOLDOWN_MS) {
@@ -244,7 +284,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     broadcastExplanation(explanation)
                     val highlightIndex = data?.highlightIndex
                     if (highlightIndex != null && highlightIndex in elementBounds.indices) {
+                        activeInteractionId = data?.interactionId
+                        activeHighlightedBounds = elementBounds[highlightIndex]
+                        activeHighlightTime = System.currentTimeMillis()
                         broadcastVisualCue(elementBounds[highlightIndex])
+                    } else {
+                        activeInteractionId = null
+                        activeHighlightedBounds = null
                     }
                 } else {
                     broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
@@ -259,6 +305,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     private fun clearVisualCue() {
+        activeInteractionId = null
+        activeHighlightedBounds = null
         val intent = Intent("com.saralgati.app.ACTION_CLEAR_VISUAL_CUE").apply {
             setPackage(packageName)
         }

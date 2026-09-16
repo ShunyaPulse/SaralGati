@@ -2,14 +2,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { generateAIResponse } from '@/lib/aiFallback';
 import { cacheGet, cacheSet } from '@/lib/redis';
+import { matchElderIntent } from '@/lib/intentDictionary';
+import { query } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
-    const { app_package, ui_elements, question, conversation_history = [] } = await req.json();
+    const { app_package, ui_elements, question, conversation_history = [], elder_id } = await req.json();
 
     if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
+
+    const interactionId = crypto.randomUUID();
+    const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
+    const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
+
+    const logInteraction = (suggestedIndex: number | null, explanation: string, source: string, modelUsed?: string) => {
+      query(
+        `INSERT INTO model_interactions 
+         (id, elder_id, app_package, screen_hash, question, ui_elements, suggested_index, explanation, source, model_used)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          interactionId,
+          elder_id || null,
+          app_package,
+          screenHash,
+          question,
+          JSON.stringify(ui_elements),
+          suggestedIndex,
+          explanation,
+          source,
+          modelUsed || 'unknown'
+        ]
+      ).catch(err => console.error('Error recording interaction:', err));
+    };
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
     const questionLower = question.toLowerCase();
@@ -89,9 +116,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (fpMatch) {
+      logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules');
       return NextResponse.json({
         success: true,
         data: {
+          interaction_id: interactionId,
           explanation: fpExplanation,
           highlight_index: fpIndex,
           source: 'fast_path',
@@ -102,8 +131,6 @@ export async function POST(req: NextRequest) {
     // === END FAST-PATH ENGINE ===
 
     // === METHOD 2: REDIS GLOBAL SCREEN CACHE ===
-    const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
-    const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
     const normalizedQuestion = question.trim().toLowerCase().replace(/[^\w\s\u0900-\u097F]/g, '').replace(/\s+/g, ' ');
     const historyHash = conversation_history.length > 0
       ? `:${crypto.createHash('sha256').update(JSON.stringify(conversation_history)).digest('hex').slice(0, 8)}`
@@ -112,9 +139,11 @@ export async function POST(req: NextRequest) {
 
     const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
     if (cached) {
+      logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache');
       return NextResponse.json({
         success: true,
         data: {
+          interaction_id: interactionId,
           explanation: cached.explanation,
           highlight_index: cached.highlight_index,
           source: 'redis_cache',
@@ -160,52 +189,11 @@ Instructions:
       cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
     }
 
-    // Smart Fallback: If AI model forgot TARGET tag, match intent prioritizing actionable buttons over static text
+    // Smart Fallback: If AI model forgot TARGET tag or chose invalid index, match using comprehensive elder intent dictionary
     if (highlightIndex === null || highlightIndex < 0 || highlightIndex >= ui_elements.length) {
-      const qLower = question.toLowerCase();
-      
-      const intentKeywords: Record<string, string[]> = {
-        search: ['search', 'khoj', 'dhoondh', 'खोज', 'ढूंढ'],
-        chat: ['chat', 'message', 'msg', 'naye chat', 'new chat', 'चैट', 'संदेश', 'मैसेज'],
-        camera: ['camera', 'photo', 'tasveer', 'कैमरा', 'फोटो'],
-        call: ['call', 'phone', 'कॉल', 'फोन'],
-        status: ['status', 'update', 'story', 'अपडेट', 'स्टेटस'],
-        settings: ['setting', 'option', 'more', 'dots', 'सेटिंग', 'विकल्प']
-      };
-
-      // Pass 1: Prioritize actionable buttons/inputs/toggles
-      for (let i = 0; i < ui_elements.length; i++) {
-        const elText = ui_elements[i].toLowerCase();
-        const isActionable = elText.startsWith('[button]') || elText.startsWith('[input]') || elText.startsWith('[toggle]');
-        if (!isActionable) continue;
-
-        // Intent-based synonym matching
-        for (const keywords of Object.values(intentKeywords)) {
-          const qHas = keywords.some(k => qLower.includes(k));
-          const elHas = keywords.some(k => elText.includes(k));
-          if (qHas && elHas) {
-            highlightIndex = i;
-            break;
-          }
-        }
-        if (highlightIndex !== null) break;
-      }
-
-      // Pass 2: If still not matched, check all elements
-      if (highlightIndex === null) {
-        for (let i = 0; i < ui_elements.length; i++) {
-          const elText = ui_elements[i].toLowerCase();
-
-          for (const keywords of Object.values(intentKeywords)) {
-            const qHas = keywords.some(k => qLower.includes(k));
-            const elHas = keywords.some(k => elText.includes(k));
-            if (qHas && elHas) {
-              highlightIndex = i;
-              break;
-            }
-          }
-          if (highlightIndex !== null) break;
-        }
+      const intentMatch = matchElderIntent(question, ui_elements);
+      if (intentMatch.highlightIndex !== null) {
+        highlightIndex = intentMatch.highlightIndex;
       }
     }
 
@@ -222,9 +210,14 @@ Instructions:
       highlight_index: highlightIndex
     }, 7 * 86400);
 
+    logInteraction(highlightIndex, cleanExplanation, aiResult.source, aiResult.modelUsed);
+
     return NextResponse.json({
       success: true,
-      data: resultData
+      data: {
+        interaction_id: interactionId,
+        ...resultData
+      }
     });
 
   } catch (error) {

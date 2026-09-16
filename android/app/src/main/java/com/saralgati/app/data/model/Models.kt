@@ -60,7 +60,15 @@ data class ScreenContextRequest(
 @JsonClass(generateAdapter = true)
 data class ScreenExplanationResponse(
     val explanation: String,
-    @Json(name = "highlight_index") val highlightIndex: Int? = null
+    @Json(name = "highlight_index") val highlightIndex: Int? = null,
+    @Json(name = "interaction_id") val interactionId: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class FeedbackRequest(
+    @Json(name = "interaction_id") val interactionId: String,
+    val feedback: String,
+    @Json(name = "actual_tapped_index") val actualTappedIndex: Int? = null
 )
 
 @JsonClass(generateAdapter = true)

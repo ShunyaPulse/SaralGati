@@ -16,6 +16,9 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      GCP_CREDS: ${{ secrets.GCP_CREDENTIALS }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

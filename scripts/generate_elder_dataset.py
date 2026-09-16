@@ -130,26 +130,99 @@ SCENARIOS = [
         ]
     },
     
-    # --- UBER / OLA ---
+    # --- FACEBOOK ---
     {
-        'app': 'com.ubercab',
-        'elements': ['राइड (Ride)', 'पैकेज (Package)', 'कहाँ जाना है? (Where to?)'],
-        'query': 'explain',
+        'app': 'com.facebook.katana',
+        'elements': ['लाइक (Like)', 'कमेंट (Comment)', 'शेयर (Share)', 'वीडियो देखें (Watch)'],
+        'query': 'what_to_tap',
         'outputs': [
-            'यह उबर ऐप है। यहाँ से आप कहीं जाने के लिए कैब या ऑटो बुला सकते हैं।',
-            'आप उबर पर हैं। गाड़ी बुक करने के लिए आपको बताना होगा कि आपको कहाँ जाना है।'
+            'यह फोटो पसंद आई हो तो लाइक (Like) वाले अंगूठे के निशान पर दबाएं।',
+            'अगर आप वीडियो देखना चाहते हैं, तो वीडियो देखें (Watch) वाले टीवी के निशान पर टैप करें।'
         ]
     },
     {
-        'app': 'com.ubercab',
-        'elements': ['कहाँ जाना है? (Where to?)'],
-        'query': 'what_to_tap',
+        'app': 'com.facebook.katana',
+        'elements': ['फ्रेंड रिक्वेस्ट (Friend Requests)', 'नोटिफिकेशन्स (Notifications)', 'सर्च (Search)'],
+        'query': 'explain',
         'outputs': [
-            'कैब बुलाने के लिए कहाँ जाना है? (Where to?) वाले बॉक्स पर टैप करें और जगह का नाम लिखें।',
-            'अपनी मंजिल डालने के लिए कहाँ जाना है वाले डब्बे को दबाएं।'
+            'यह फेसबुक ऐप है। यहाँ आप अपने दोस्तों और रिश्तेदारों की तस्वीरें और पोस्ट देख सकते हैं।',
+            'आप फेसबुक पर हैं। ऊपर दिए गए फ्रेंड रिक्वेस्ट बटन से आप देख सकते हैं कि किसने आपको जोड़ा है।'
         ]
     },
     
+    # --- GALLERY & PHOTOS ---
+    {
+        'app': 'com.google.android.apps.photos',
+        'elements': ['तस्वीरें (Photos)', 'एल्बम (Albums)', 'शेयर करें (Share)', 'डिलीट करें (Delete)'],
+        'query': 'explain',
+        'outputs': [
+            'यह आपकी फोटो गैलरी है। यहाँ आपकी खींची हुई और वॉट्सऐप पर आई सारी तस्वीरें सुरक्षित हैं।',
+            'आप फोटो गैलरी में हैं। यहाँ से आप पुरानी पारिवारिक तस्वीरें देख सकते हैं।'
+        ]
+    },
+    {
+        'app': 'com.google.android.apps.photos',
+        'elements': ['वॉट्सऐप पर भेजें', 'शेयर करें (Share)', 'डिलीट (Delete)', 'एडिट (Edit)'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'इस फोटो को परिवार को भेजने के लिए नीचे शेयर करें (Share) या वॉट्सऐप वाले निशान को दबाएं।',
+            'अगर यह फोटो धुंधली या खराब है, तो डिलीट (Delete) वाले डस्टबिन पर दबाकर इसे हटा सकते हैं।'
+        ]
+    },
+
+    # --- MESSAGES & BANK OTP ---
+    {
+        'app': 'com.google.android.apps.messaging',
+        'elements': ['एसबीआई बैंक (SBI Bank)', 'ओटीपी 482910 (OTP)', 'डिलीट करें', 'मैसेज लिखें'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'आपका बैंक ओटीपी (OTP) नंबर 482910 है। ध्यान रखें, यह नंबर किसी भी अनजान व्यक्ति को फोन पर न बताएं।',
+            'बैंक का मैसेज देखने के लिए ऊपर एसबीआई बैंक वाले मैसेज पर टैप करें।'
+        ]
+    },
+    {
+        'app': 'com.google.android.apps.messaging',
+        'elements': ['लॉटरी जीतें 25 लाख', 'डिलीट करें (Delete)', 'ब्लॉक करें (Block)'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'यह लॉटरी वाला मैसेज फ्रॉड है, इसके किसी लिंक पर न दबाएं। इसे हटाने के लिए डिलीट (Delete) दबाएं।',
+            'अनजान इनाम वाले मैसेज को तुरंत ब्लॉक करें (Block) या डिलीट कर दें।'
+        ]
+    },
+
+    # --- CONTACTS ---
+    {
+        'app': 'com.android.contacts',
+        'elements': ['नया संपर्क जोड़ें (Add Contact)', 'सर्च संपर्क', 'बेटा', 'बेटी'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'नया फोन नंबर सेव करने के लिए नया संपर्क जोड़ें (Add Contact) वाले प्लस निशान पर दबाएं।',
+            'बेटी को फोन मिलाने के लिए बेटी वाले नाम पर एक बार टैप करें।'
+        ]
+    },
+
+    # --- CLOCK & MEDICINE ALARM ---
+    {
+        'app': 'com.google.android.deskclock',
+        'elements': ['अलार्म (Alarm)', 'सुबह 8:00 दवाई', 'नया अलार्म जोड़ें (+)', 'टाइमर'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'दवाई का नया अलार्म लगाने के लिए नीचे दिए गए प्लस (+) के निशान को दबाएं।',
+            'सुबह की दवाई का अलार्म चालू करने के लिए सुबह 8:00 दवाई के सामने वाले स्विच को दबाएं।'
+        ]
+    },
+
+    # --- CAMERA ---
+    {
+        'app': 'com.google.android.GoogleCamera',
+        'elements': ['फोटो खींचें (Shutter)', 'कैमरा घुमाएं (Flip)', 'फ्लैश (Flash)', 'वीडियो'],
+        'query': 'what_to_tap',
+        'outputs': [
+            'फोटो खींचने के लिए नीचे सफेद रंग के बड़े गोल बटन को दबाएं।',
+            'अपनी सेल्फी लेने के लिए कैमरा घुमाएं (Flip) वाले गोल तीर के निशान पर टैप करें।'
+        ]
+    },
+
     # --- SYSTEM SETTINGS ---
     {
         'app': 'com.android.settings',
@@ -162,62 +235,83 @@ SCENARIOS = [
     }
 ]
 
-def generate_dataset(num_samples=500):
+def generate_dataset(num_samples=1000):
     dataset = []
+    
+    follow_up_templates = [
+        ("Kahan par hai?", "Screen par theek dhyan se dekhiye, wahan nishan bana hua hai."),
+        ("Samajh nahi aaya", "Koi baat nahi babuji, wahan tap karein jahan highlight kiya hai."),
+        ("Nahi dikh raha", "Screen ko thoda aaram se dekhiye, wahan gol button bana hai.")
+    ]
     
     for _ in range(num_samples):
         base = random.choice(SCENARIOS)
         
-        # Shuffle elements slightly to simulate different screen states
         elements = base["elements"].copy()
-        
-        # Add random noise elements to make model robust
         noise = random.choice([
             [],
-            ['बैटरी 45% (Battery 45%)'],
-            ['समय 10:30 (Time 10:30)'],
-            ['सिग्नल (Signal)'],
-            ['नेटवर्क (Network)']
+            ['Battery 45%'],
+            ['10:30 AM'],
+            ['Signal 4G']
         ])
-        
         elements.extend(noise)
         random.shuffle(elements)
-            
-        elements_str = " | ".join(elements)
         
-        prompt = f"You are SaralGati, a patient companion for Indian elders.\n"
-        prompt += f"The user is currently looking at an app with package name: {base['app']}.\n"
-        prompt += f"Here are the text elements visible on their screen:\n{elements_str}\n\n"
+        formatted_elements = "\n".join([f"[{i}] {el}" for i, el in enumerate(elements)])
         
-        if base["query"] == "explain":
-            prompt += "Explain this screen to the elder in 1 or 2 very simple Hindi sentences. Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence."
-        else:
-            prompt += "The elder wants to know what to tap next. Based on the screen context, guide them on exactly which button or element to press in 1 simple Hindi sentence. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence."
+        system_prompt = f"You are SaralGati, a patient, warm companion for Indian elders.\n"
+        system_prompt += f"The user is looking at an Android app: {base['app']}.\n"
+        system_prompt += f"Here are the numbered interactive elements on their screen:\n{formatted_elements}\n\n"
+        system_prompt += "Instructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n"
+        system_prompt += "2. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).\n"
+        system_prompt += "3. If no specific element needs to be tapped, do NOT output any TARGET tag.\n"
+        system_prompt += "4. Do not mention that you are an AI. Only output the Hindi sentence."
 
-        # Select a random paraphrase output so the model learns diverse responses
         output = random.choice(base["outputs"])
+        
+        # Determine target index if an element is mentioned in the output
+        target_idx = None
+        for idx, el in enumerate(elements):
+            clean_el = el.split('(')[0].strip()
+            if clean_el and clean_el in output:
+                target_idx = idx
+                break
+        
+        if target_idx is not None and base["query"] != "explain":
+            output_with_target = f"{output} TARGET:{target_idx}"
+        else:
+            output_with_target = output
 
-        sample = {
-            "instruction": prompt,
-            "input": "",
-            "output": output
-        }
-        dataset.append(sample)
+        user_query = "Yeh screen samjhaiye" if base["query"] == "explain" else "Aage kya karein / kaunsa button dabayein?"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_query},
+            {"role": "assistant", "content": output_with_target}
+        ]
+        
+        # 50% chance of adding a follow-up turn
+        if random.random() < 0.5 and target_idx is not None:
+            fu_q, fu_a = random.choice(follow_up_templates)
+            messages.append({"role": "user", "content": fu_q})
+            messages.append({"role": "assistant", "content": f"{fu_a} TARGET:{target_idx}"})
+
+        dataset.append({"messages": messages})
         
     return dataset
 
 def main():
     output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "saralgati_train.jsonl")
+    output_file = os.path.join(output_dir, "saralgati_multiturn_train.jsonl")
     
-    dataset = generate_dataset(500)
+    dataset = generate_dataset(1000)
     
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in dataset:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
             
-    print(f"Successfully generated {len(dataset)} highly diverse elder training samples at: {output_file}")
+    print(f"Successfully generated {len(dataset)} multi-turn grounded samples at: {output_file}")
 
 if __name__ == "__main__":
     main()

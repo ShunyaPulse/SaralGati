@@ -36,6 +36,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var activeInteractionId: String? = null
     private var activeHighlightedBounds: android.graphics.Rect? = null
     private var activeHighlightTime: Long = 0L
+    private var activeAppPackage: String? = null
+    private var activeWindowClassName: String? = null
+    private var activeElementBounds: List<android.graphics.Rect> = emptyList()
     private val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
 
     companion object {
@@ -92,9 +95,54 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val pkg = event.packageName?.toString() ?: ""
                 val cls = event.className?.toString() ?: ""
                 Log.d(TAG, "Window switched: $pkg / $cls")
+                handleWindowStateChanged(pkg, cls)
             }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 handleViewClicked(event)
+            }
+        }
+    }
+
+    private fun handleWindowStateChanged(pkg: String, cls: String) {
+        val interactionId = activeInteractionId ?: return
+        val highlightTime = activeHighlightTime
+        val currentTime = System.currentTimeMillis()
+        val elapsed = currentTime - highlightTime
+
+        // Ignore overlay or own app events
+        if (pkg == packageName) return
+
+        // Check if transition occurred within active feedback window
+        // (with a small 250ms guard to ensure it's not the initial trigger window)
+        if (elapsed in 250L..FEEDBACK_EXPIRY_MS) {
+            val appChanged = activeAppPackage != null && pkg != activeAppPackage
+            val windowChanged = activeWindowClassName != null && cls != activeWindowClassName
+
+            if (appChanged || windowChanged) {
+                Log.i(TAG, "Window transition detected ($pkg / $cls). Auto-verifying interaction: $interactionId")
+
+                // Clear immediately to prevent duplicate feedback
+                activeInteractionId = null
+                activeHighlightedBounds = null
+                activeAppPackage = null
+                activeWindowClassName = null
+                activeElementBounds = emptyList()
+
+                // Dismiss visual cue overlay
+                clearVisualCue()
+
+                serviceScope.launch {
+                    try {
+                        val req = com.saralgati.app.data.model.FeedbackRequest(
+                            interactionId = interactionId,
+                            feedback = "tapped_highlight"
+                        )
+                        NetworkModule.agentApi.sendFeedback(req)
+                        Log.d(TAG, "Sent window-transition auto-verification for: $interactionId")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to send window-transition feedback: ${e.message}")
+                    }
+                }
             }
         }
     }
@@ -115,18 +163,32 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val isTargetTapped = android.graphics.Rect.intersects(clickedRect, targetBounds)
                 val feedbackType = if (isTargetTapped) "tapped_highlight" else "tapped_other"
 
+                // If tapped other, determine which element index was actually tapped
+                var actualIndex: Int? = null
+                if (!isTargetTapped) {
+                    val foundIdx = activeElementBounds.indexOfFirst { android.graphics.Rect.intersects(clickedRect, it) }
+                    if (foundIdx != -1) {
+                        actualIndex = foundIdx
+                    }
+                }
+
                 // Clear immediately to prevent duplicate feedback calls
                 activeInteractionId = null
                 activeHighlightedBounds = null
+                activeAppPackage = null
+                activeWindowClassName = null
+                activeElementBounds = emptyList()
+                clearVisualCue()
 
                 serviceScope.launch {
                     try {
                         val req = com.saralgati.app.data.model.FeedbackRequest(
                             interactionId = interactionId,
-                            feedback = feedbackType
+                            feedback = feedbackType,
+                            actualTappedIndex = actualIndex
                         )
                         NetworkModule.agentApi.sendFeedback(req)
-                        Log.d(TAG, "Sent implicit feedback: $feedbackType for interaction: $interactionId")
+                        Log.d(TAG, "Sent implicit feedback: $feedbackType (actualIndex: $actualIndex) for interaction: $interactionId")
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to send implicit feedback: ${e.message}")
                     }
@@ -134,6 +196,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             } else {
                 activeInteractionId = null
                 activeHighlightedBounds = null
+                activeAppPackage = null
+                activeWindowClassName = null
+                activeElementBounds = emptyList()
             }
         }
 
@@ -287,10 +352,16 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeInteractionId = data?.interactionId
                         activeHighlightedBounds = elementBounds[highlightIndex]
                         activeHighlightTime = System.currentTimeMillis()
+                        activeAppPackage = appPackage
+                        activeWindowClassName = rootNode.className?.toString()
+                        activeElementBounds = elementBounds.toList()
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
                         activeInteractionId = null
                         activeHighlightedBounds = null
+                        activeAppPackage = null
+                        activeWindowClassName = null
+                        activeElementBounds = emptyList()
                     }
                 } else {
                     broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
@@ -307,6 +378,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private fun clearVisualCue() {
         activeInteractionId = null
         activeHighlightedBounds = null
+        activeAppPackage = null
+        activeWindowClassName = null
+        activeElementBounds = emptyList()
         val intent = Intent("com.saralgati.app.ACTION_CLEAR_VISUAL_CUE").apply {
             setPackage(packageName)
         }

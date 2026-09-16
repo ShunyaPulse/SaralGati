@@ -4,7 +4,9 @@ const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const redis = new Redis(redisUrl, {
   tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: 1,
+  connectTimeout: 3000,
+  commandTimeout: 2000,
 });
 
 redis.on('error', (err) => {

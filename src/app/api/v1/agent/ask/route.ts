@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { generateAIResponse } from '@/lib/aiFallback';
+import { cacheGet, cacheSet } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
   try {
@@ -99,6 +101,29 @@ export async function POST(req: NextRequest) {
     }
     // === END FAST-PATH ENGINE ===
 
+    // === METHOD 2: REDIS GLOBAL SCREEN CACHE ===
+    const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
+    const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
+    const normalizedQuestion = question.trim().toLowerCase();
+    const historyHash = conversation_history.length > 0
+      ? `:${crypto.createHash('sha256').update(JSON.stringify(conversation_history)).digest('hex').slice(0, 8)}`
+      : '';
+    const cacheKey = `screen_cache:${app_package}:${screenHash}:${normalizedQuestion}${historyHash}`;
+
+    const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
+    if (cached) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          explanation: cached.explanation,
+          highlight_index: cached.highlight_index,
+          source: 'redis_cache',
+          model_used: 'global_screen_cache'
+        }
+      });
+    }
+    // === END REDIS GLOBAL SCREEN CACHE ===
+
     const formattedElements = ui_elements.map((el: string, idx: number) => `[${idx}] ${el}`).join('\n');
 
     const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
@@ -184,14 +209,22 @@ Instructions:
       }
     }
 
+    const resultData = {
+      explanation: cleanExplanation,
+      highlight_index: highlightIndex,
+      source: aiResult.source,
+      model_used: aiResult.modelUsed
+    };
+
+    // Cache successful AI response for 7 days (604,800 seconds)
+    await cacheSet(cacheKey, {
+      explanation: cleanExplanation,
+      highlight_index: highlightIndex
+    }, 7 * 86400);
+
     return NextResponse.json({
       success: true,
-      data: {
-        explanation: cleanExplanation,
-        highlight_index: highlightIndex,
-        source: aiResult.source,
-        model_used: aiResult.modelUsed
-      }
+      data: resultData
     });
 
   } catch (error) {

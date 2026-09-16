@@ -36,4 +36,7 @@ interface HabitsApi {
 interface AgentApi {
     @POST("api/v1/agent/explain")
     suspend fun explainScreen(@Body request: com.saralgati.app.data.model.ScreenContextRequest): Response<ApiResponse<com.saralgati.app.data.model.ScreenExplanationResponse>>
+
+    @POST("api/v1/agent/ask")
+    suspend fun askQuestion(@Body request: com.saralgati.app.data.model.AskContextRequest): Response<ApiResponse<com.saralgati.app.data.model.ScreenExplanationResponse>>
 }

@@ -36,6 +36,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     
     private var isExpanded = false
     private lateinit var tts: TextToSpeech
+    private var speechRecognizer: android.speech.SpeechRecognizer? = null
     private lateinit var localPrefs: LocalPrefs
 
     companion object {
@@ -47,14 +48,18 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     private val explanationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION") {
-                val text = intent.getStringExtra("explanation_text") ?: return
-                speak(text)
-                
-                // Reset title if it was loading
-                val titleView = expandedView.findViewWithTag<TextView>("titleView")
-                if (titleView?.text == "सोच रहा है...") {
-                    titleView.text = "सरलगति सहायक"
+            if (intent?.action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SPEAK_EXPLANATION ||
+                intent?.action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION") {
+                val text = intent.getStringExtra(com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.EXTRA_EXPLANATION_TEXT)
+                    ?: intent.getStringExtra("explanation_text")
+                if (!text.isNullOrEmpty()) {
+                    speak(text, true)
+                    
+                    // Reset title if it was loading
+                    val titleView = expandedView.findViewWithTag<TextView>("titleView")
+                    if (titleView?.text == "सोच रहा है...") {
+                        titleView.text = "सरलगति सहायक"
+                    }
                 }
             }
         }
@@ -93,21 +98,83 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            // Set language based on preference. Default to Hindi.
             val langPref = localPrefs.getString("pref_lang", "hi")
             val locale = if (langPref == "en") Locale.ENGLISH else Locale("hi", "IN")
             val result = tts.setLanguage(locale)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e(TAG, "TTS Language not supported")
             }
+            
+            tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) {}
+                override fun onDone(utteranceId: String?) {
+                    if (utteranceId == "explanation_done") {
+                        // Gently start silent microphone listener after explanation
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            startListeningSilent()
+                        }
+                    }
+                }
+                override fun onError(utteranceId: String?) {}
+            })
         }
     }
 
-    private fun speak(text: String) {
+    private fun speak(text: String, isExplanation: Boolean = false) {
         val voiceEnabled = localPrefs.getBoolean("pref_voice", true)
         if (voiceEnabled) {
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+            val utteranceId = if (isExplanation) "explanation_done" else "standard_msg"
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         }
+    }
+
+    private fun startListeningSilent() {
+        if (speechRecognizer == null) {
+            speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    // Turn floating bubble red to indicate recording
+                    resetBubbleColor(android.graphics.Color.RED)
+                }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {
+                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
+                }
+                override fun onError(error: Int) {
+                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
+                }
+                override fun onResults(results: android.os.Bundle?) {
+                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
+                    val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                    val text: String? = matches?.firstOrNull()
+                    if (text != null && text.isNotEmpty()) {
+                        speak("हाँ, मैं ढूँढ रहा हूँ...", false)
+                        val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_AND_ASK").apply {
+                            setPackage(packageName)
+                            putExtra("question", text)
+                        }
+                        sendBroadcast(extractIntent)
+                    }
+                }
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+            })
+        }
+        
+        val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+        }
+        speechRecognizer?.startListening(intent)
+    }
+
+    private fun resetBubbleColor(color: Int) {
+        val vg = bubbleView as? android.view.ViewGroup
+        val icon = vg?.getChildAt(0) as? ImageView
+        val bg = icon?.background as? android.graphics.drawable.GradientDrawable
+        bg?.setColor(color)
     }
 
     private fun createBubbleView() {
@@ -194,13 +261,16 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
         layout.addView(btnExplain)
 
-        // Button 2: Next Step
+        // Button 2: Next Step / Follow up question
         val btnNext = Button(this)
-        btnNext.text = "मुझे क्या दबाना चाहिए?\n(What to tap?)"
+        btnNext.text = "मेरा सवाल पूछें (Ask a Question)"
         btnNext.setBackgroundColor(Color.parseColor("#22C55E"))
         btnNext.setTextColor(Color.WHITE)
         btnNext.setOnClickListener {
-            speak("आप मुख्य मेनू पर जाने के लिए पीछे जाने वाला बटन दबा सकते हैं।")
+            collapseHelper()
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                startListeningSilent()
+            }
         }
         val btnParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,

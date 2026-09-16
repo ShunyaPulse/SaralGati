@@ -17,25 +17,29 @@ export async function POST(req: NextRequest) {
     const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
     const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
 
-    const logInteraction = (suggestedIndex: number | null, explanation: string, source: string, modelUsed?: string) => {
-      query(
-        `INSERT INTO model_interactions 
-         (id, elder_id, app_package, screen_hash, question, ui_elements, suggested_index, explanation, source, model_used)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-         ON CONFLICT (id) DO NOTHING`,
-        [
-          interactionId,
-          elder_id || null,
-          app_package,
-          screenHash,
-          question,
-          JSON.stringify(ui_elements),
-          suggestedIndex,
-          explanation,
-          source,
-          modelUsed || 'unknown'
-        ]
-      ).catch(err => console.error('Error recording interaction:', err));
+    const logInteraction = async (suggestedIndex: number | null, explanation: string, source: string, modelUsed?: string) => {
+      try {
+        await query(
+          `INSERT INTO model_interactions 
+           (id, elder_id, app_package, screen_hash, question, ui_elements, suggested_index, explanation, source, model_used)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            interactionId,
+            elder_id || null,
+            app_package,
+            screenHash,
+            question,
+            JSON.stringify(ui_elements),
+            suggestedIndex,
+            explanation,
+            source,
+            modelUsed || 'unknown'
+          ]
+        );
+      } catch (err) {
+        console.error('Error recording interaction:', err);
+      }
     };
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
@@ -116,7 +120,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (fpMatch) {
-      logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules');
+      await logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules');
       return NextResponse.json({
         success: true,
         data: {
@@ -139,7 +143,7 @@ export async function POST(req: NextRequest) {
 
     const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
     if (cached) {
-      logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache');
+      await logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache');
       return NextResponse.json({
         success: true,
         data: {
@@ -210,7 +214,7 @@ Instructions:
       highlight_index: highlightIndex
     }, 7 * 86400);
 
-    logInteraction(highlightIndex, cleanExplanation, aiResult.source, aiResult.modelUsed);
+    await logInteraction(highlightIndex, cleanExplanation, aiResult.source, aiResult.modelUsed);
 
     return NextResponse.json({
       success: true,

@@ -291,7 +291,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             val isInteractiveOrLeaf = node.isClickable || node.childCount == 0
             
             if (isReasonableButtonSize && isInteractiveOrLeaf) {
-                elements.add(label.trim())
+                val role = getElementRole(node)
+                elements.add("$role ${label.trim()}")
                 elementBounds.add(rect)
             }
         }
@@ -301,6 +302,29 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 traverseNode(it, elements, elementBounds)
                 it.recycle()
             }
+        }
+    }
+
+    /**
+     * Classifies an AccessibilityNodeInfo into high-level UI roles:
+     * [BUTTON] -> Clickable button, action icon, ImageButton, or clickable container
+     * [INPUT] -> EditText, text field
+     * [TOGGLE] -> CheckBox, Switch, RadioButton
+     * [TEXT] -> Plain static non-clickable text
+     */
+    private fun getElementRole(node: AccessibilityNodeInfo): String {
+        val className = node.className?.toString() ?: ""
+        val isClickable = node.isClickable
+
+        return when {
+            className.contains("EditText", ignoreCase = true) -> "[INPUT]"
+            className.contains("CheckBox", ignoreCase = true) ||
+            className.contains("Switch", ignoreCase = true) ||
+            className.contains("RadioButton", ignoreCase = true) -> "[TOGGLE]"
+            className.contains("Button", ignoreCase = true) ||
+            (className.contains("ImageView", ignoreCase = true) && isClickable) ||
+            isClickable -> "[BUTTON]"
+            else -> "[TEXT]"
         }
     }
 

@@ -108,9 +108,15 @@ ${formattedElements}
 
 Instructions:
 1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
-2. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
-3. If no specific element needs to be tapped, do NOT output any TARGET tag.
-4. Do not mention that you are an AI. Only output the Hindi sentence.`;
+2. Elements on screen are prefixed with their role:
+   - [BUTTON]: Clickable button or icon that can be tapped.
+   - [INPUT]: Text input box for typing.
+   - [TOGGLE]: Switch or checkbox.
+   - [TEXT]: Plain static non-clickable text or title.
+3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
+4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
+5. If no specific element needs to be tapped, do NOT output any TARGET tag.
+6. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
     const aiResult = await generateAIResponse({
       systemPrompt,
@@ -129,7 +135,7 @@ Instructions:
       cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
     }
 
-    // Smart Fallback: If AI model forgot TARGET tag, match intent from question and screen elements
+    // Smart Fallback: If AI model forgot TARGET tag, match intent prioritizing actionable buttons over static text
     if (highlightIndex === null || highlightIndex < 0 || highlightIndex >= ui_elements.length) {
       const qLower = question.toLowerCase();
       
@@ -142,16 +148,13 @@ Instructions:
         settings: ['setting', 'option', 'more', 'dots', 'सेटिंग', 'विकल्प']
       };
 
+      // Pass 1: Prioritize actionable buttons/inputs/toggles
       for (let i = 0; i < ui_elements.length; i++) {
         const elText = ui_elements[i].toLowerCase();
+        const isActionable = elText.startsWith('[button]') || elText.startsWith('[input]') || elText.startsWith('[toggle]');
+        if (!isActionable) continue;
 
-        // 1. Direct containment
-        if (elText.length > 2 && (qLower.includes(elText) || elText.includes(qLower))) {
-          highlightIndex = i;
-          break;
-        }
-
-        // 2. Intent-based synonym matching
+        // Intent-based synonym matching
         for (const keywords of Object.values(intentKeywords)) {
           const qHas = keywords.some(k => qLower.includes(k));
           const elHas = keywords.some(k => elText.includes(k));
@@ -160,8 +163,24 @@ Instructions:
             break;
           }
         }
-
         if (highlightIndex !== null) break;
+      }
+
+      // Pass 2: If still not matched, check all elements
+      if (highlightIndex === null) {
+        for (let i = 0; i < ui_elements.length; i++) {
+          const elText = ui_elements[i].toLowerCase();
+
+          for (const keywords of Object.values(intentKeywords)) {
+            const qHas = keywords.some(k => qLower.includes(k));
+            const elHas = keywords.some(k => elText.includes(k));
+            if (qHas && elHas) {
+              highlightIndex = i;
+              break;
+            }
+          }
+          if (highlightIndex !== null) break;
+        }
       }
     }
 

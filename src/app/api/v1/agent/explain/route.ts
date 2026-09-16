@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateAIResponse } from '@/lib/aiFallback';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,24 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
-    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-    const apiToken = process.env.CLOUDFLARE_API_TOKEN;
-
-    if (!accountId || !apiToken) {
-      console.warn("Cloudflare credentials missing. Returning fallback heuristic.");
-      // Fallback heuristic if API keys aren't setup yet
-      return NextResponse.json({
-        success: true,
-        data: {
-          explanation: `आप अभी ऐप इस्तेमाल कर रहे हैं। यहाँ आप मेनू से आगे जा सकते हैं।`
-        }
-      });
-    }
-
-    // Cloudflare Workers AI Endpoint for Llama 3.2 3B Instruct
-    const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/@cf/meta/llama-3.2-3b-instruct`;
-
-    const prompt = `You are SaralGati, a patient companion for Indian elders.
+    const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
 The user is currently looking at an app with package name: ${app_package}.
 Here are the text elements visible on their screen:
 ${ui_elements.join(' | ')}
@@ -33,37 +17,17 @@ ${ui_elements.join(' | ')}
 Explain this screen to the elder in 1 or 2 very simple Hindi sentences. 
 Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
 
-    const payload: any = {
-      messages: [
-        { role: 'system', content: 'You are a helpful elder companion assistant. Output only Hindi.' },
-        { role: 'user', content: prompt }
-      ]
-    };
-
-    if (process.env.CLOUDFLARE_LORA_NAME) {
-      payload.lora = process.env.CLOUDFLARE_LORA_NAME;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
+    const aiResult = await generateAIResponse({
+      systemPrompt,
+      userPrompt: 'इस स्क्रीन के बारे में समझाओ और बताओ मुझे क्या करना चाहिए।'
     });
-
-    if (!response.ok) {
-      throw new Error(`Cloudflare AI error: ${response.status} ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    const explanation = result.result?.response || result.result?.choices?.[0]?.message?.content || "मुझे यह स्क्रीन समझ नहीं आ रही है।";
 
     return NextResponse.json({
       success: true,
       data: {
-        explanation: explanation.trim()
+        explanation: aiResult.text,
+        source: aiResult.source,
+        model_used: aiResult.modelUsed
       }
     });
 

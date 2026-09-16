@@ -44,11 +44,36 @@ export async function POST(req: NextRequest) {
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
     const questionLower = question.toLowerCase();
-    const findUIIndex = (keywords: string[]) => {
-      return ui_elements.findIndex((el: string) => {
+
+    // Role-aware UI finder: strictly prioritizes interactive elements ([BUTTON], [INPUT], [TOGGLE])
+    // and ignores subtitle/message preview noise (e.g. "3 videos", "2 photos", timestamps)
+    const findUIIndex = (keywords: string[], requireActionable = true): number => {
+      const isNoise = (txt: string) => {
+        return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(txt) ||
+               /\b(yesterday|am|pm|today)\b/i.test(txt);
+      };
+
+      // Pass 1: Prioritize interactive elements ([BUTTON], [INPUT], [TOGGLE])
+      const interactiveIdx = ui_elements.findIndex((el: string) => {
+        const isActionable = el.startsWith('[BUTTON]') || el.startsWith('[INPUT]') || el.startsWith('[TOGGLE]');
+        if (!isActionable) return false;
         const txt = el.toLowerCase();
-        return keywords.some(k => txt.includes(k));
+        if (isNoise(txt)) return false;
+        return keywords.some(k => txt.includes(k.toLowerCase()));
       });
+
+      if (interactiveIdx !== -1) return interactiveIdx;
+
+      // Pass 2: Fallback only if requireActionable is false
+      if (!requireActionable) {
+        return ui_elements.findIndex((el: string) => {
+          const txt = el.toLowerCase();
+          if (isNoise(txt)) return false;
+          return keywords.some(k => txt.includes(k.toLowerCase()));
+        });
+      }
+
+      return -1;
     };
 
     let fpMatch = false;
@@ -57,14 +82,38 @@ export async function POST(req: NextRequest) {
 
     if (app_package === 'com.whatsapp') {
       if (questionLower.includes('video') || questionLower.includes('वीडियो')) {
-        fpIndex = findUIIndex(['video', 'वीडियो', 'call']);
-        if (fpIndex !== -1) { fpExplanation = 'वीडियो कॉल करने के लिए यहाँ दबाएं।'; fpMatch = true; }
-      } else if (questionLower.includes('call') || questionLower.includes('कॉल') || questionLower.includes('phone')) {
-        fpIndex = findUIIndex(['call', 'कॉल', 'phone']);
-        if (fpIndex !== -1) { fpExplanation = 'कॉल करने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        // 1. First check if a dedicated Video Call button is present (inside an active chat)
+        let idx = findUIIndex(['video call', 'वीडियो कॉल', 'video_call']);
+        if (idx !== -1) {
+          fpIndex = idx;
+          fpExplanation = 'वीडियो कॉल करने के लिए यहाँ वीडियो कॉल बटन पर दबाएं।';
+          fpMatch = true;
+        } else {
+          // 2. On main screen, direct to Calls tab on bottom navigation bar
+          idx = findUIIndex(['calls', 'कॉल', 'call']);
+          if (idx !== -1) {
+            fpIndex = idx;
+            fpExplanation = 'वीडियो या ऑडियो कॉल लगाने के लिए नीचे Calls (कॉल) पर दबाएं, या जिस व्यक्ति से बात करनी है उनकी चैट खोलें।';
+            fpMatch = true;
+          }
+        }
+      } else if (questionLower.includes('call') || questionLower.includes('कॉल') || questionLower.includes('phone') || questionLower.includes('फोन')) {
+        let idx = findUIIndex(['audio call', 'voice call', 'कॉल']);
+        if (idx !== -1) {
+          fpIndex = idx;
+          fpExplanation = 'कॉल करने के लिए यहाँ दबाएं।';
+          fpMatch = true;
+        } else {
+          idx = findUIIndex(['calls', 'call', 'कॉल']);
+          if (idx !== -1) {
+            fpIndex = idx;
+            fpExplanation = 'कॉल लगाने के लिए नीचे Calls (कॉल) पर दबाएं, या किसी की चैट खोलें।';
+            fpMatch = true;
+          }
+        }
       } else if (questionLower.includes('status') || questionLower.includes('स्टेटस') || questionLower.includes('update')) {
-        fpIndex = findUIIndex(['status', 'स्टेटस', 'update']);
-        if (fpIndex !== -1) { fpExplanation = 'स्टेटस देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        fpIndex = findUIIndex(['updates', 'status', 'स्टेटस', 'update']);
+        if (fpIndex !== -1) { fpExplanation = 'स्टेटस (Updates) देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
       } else if (questionLower.includes('message') || questionLower.includes('chat') || questionLower.includes('मैसेज') || questionLower.includes('new')) {
         fpIndex = findUIIndex(['message', 'chat', 'new', 'मैसेज', 'नया']);
         if (fpIndex !== -1) { fpExplanation = 'नया मैसेज भेजने के लिए यहाँ दबाएं।'; fpMatch = true; }

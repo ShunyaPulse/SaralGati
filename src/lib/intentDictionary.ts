@@ -18,7 +18,7 @@ export const ELDER_INTENTS: IntentDefinition[] = [
       'video call lagao', 'video call kaise kare', 'video calling', 'chehra dekhna',
       'वीडियो', 'वीडियो कॉल', 'विडियो', 'चेहरा देखकर', 'विडिओ', 'वीडियो कॉलिंग'
     ],
-    elementKeywords: ['video call', 'video', 'vc', 'cam', 'camcorder', 'वीडियो']
+    elementKeywords: ['video call', 'video_call', 'vc', 'camcorder', 'वीडियो कॉल']
   },
 
   // 2. Audio Call / Phone Dialer

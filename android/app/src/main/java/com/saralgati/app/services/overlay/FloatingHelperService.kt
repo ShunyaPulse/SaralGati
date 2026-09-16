@@ -46,10 +46,15 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             private set
     }
 
+    private var activeHighlightView: View? = null
+    private val highlightHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var removeHighlightRunnable: Runnable? = null
+
     private val explanationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SPEAK_EXPLANATION ||
-                intent?.action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION") {
+            val action = intent?.action
+            if (action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SPEAK_EXPLANATION ||
+                action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION") {
                 val text = intent.getStringExtra(com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.EXTRA_EXPLANATION_TEXT)
                     ?: intent.getStringExtra("explanation_text")
                 if (!text.isNullOrEmpty()) {
@@ -61,6 +66,15 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                         titleView.text = "सरलगति सहायक"
                     }
                 }
+            } else if (action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SHOW_VISUAL_CUE ||
+                       action == "com.saralgati.app.ACTION_SHOW_VISUAL_CUE") {
+                val left = intent.getIntExtra("bounds_left", 0)
+                val top = intent.getIntExtra("bounds_top", 0)
+                val right = intent.getIntExtra("bounds_right", 0)
+                val bottom = intent.getIntExtra("bounds_bottom", 0)
+                showVisualCue(left, top, right, bottom)
+            } else if (action == "com.saralgati.app.ACTION_CLEAR_VISUAL_CUE") {
+                highlightHandler.post { removeCurrentHighlight() }
             }
         }
     }
@@ -72,7 +86,11 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         tts = TextToSpeech(this, this)
         
-        val filter = IntentFilter("com.saralgati.app.ACTION_SPEAK_EXPLANATION")
+        val filter = IntentFilter().apply {
+            addAction("com.saralgati.app.ACTION_SPEAK_EXPLANATION")
+            addAction("com.saralgati.app.ACTION_SHOW_VISUAL_CUE")
+            addAction("com.saralgati.app.ACTION_CLEAR_VISUAL_CUE")
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(explanationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -150,7 +168,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
                     val text: String? = matches?.firstOrNull()
                     if (text != null && text.isNotEmpty()) {
-                        speak("हाँ, मैं ढूँढ रहा हूँ...", false)
                         val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_AND_ASK").apply {
                             setPackage(packageName)
                             putExtra("question", text)
@@ -367,9 +384,84 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    private fun showVisualCue(left: Int, top: Int, right: Int, bottom: Int) {
+        val width = right - left
+        val height = bottom - top
+        if (width <= 0 || height <= 0) return
+
+        highlightHandler.post {
+            removeCurrentHighlight()
+
+            val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            } else {
+                WindowManager.LayoutParams.TYPE_PHONE
+            }
+
+            val highlightView = View(this).apply {
+                val strokeColor = Color.parseColor("#10B981") // Vibrant Emerald Green
+                val bg = GradientDrawable().apply {
+                    shape = GradientDrawable.RECTANGLE
+                    cornerRadius = 16f
+                    setStroke(8, strokeColor)
+                    setColor(Color.parseColor("#3310B981")) // 20% transparent green tint
+                }
+                background = bg
+
+                val anim = android.view.animation.AlphaAnimation(0.3f, 1.0f).apply {
+                    duration = 600
+                    repeatMode = android.view.animation.Animation.REVERSE
+                    repeatCount = android.view.animation.Animation.INFINITE
+                }
+                startAnimation(anim)
+            }
+
+            val params = WindowManager.LayoutParams(
+                width,
+                height,
+                overlayType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = left
+                y = top
+            }
+
+            try {
+                windowManager.addView(highlightView, params)
+                activeHighlightView = highlightView
+
+                removeHighlightRunnable = Runnable {
+                    removeCurrentHighlight()
+                }
+                highlightHandler.postDelayed(removeHighlightRunnable!!, 7000L)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to show visual cue: ${e.message}")
+            }
+        }
+    }
+
+    private fun removeCurrentHighlight() {
+        removeHighlightRunnable?.let { highlightHandler.removeCallbacks(it) }
+        activeHighlightView?.let {
+            it.clearAnimation()
+            try {
+                windowManager.removeView(it)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error removing highlight view: ${e.message}")
+            }
+            activeHighlightView = null
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         isRunning = false
+        removeCurrentHighlight()
         if (isExpanded) {
             windowManager.removeView(expandedView)
         } else {

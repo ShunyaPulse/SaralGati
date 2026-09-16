@@ -59,7 +59,8 @@ data class ScreenContextRequest(
 
 @JsonClass(generateAdapter = true)
 data class ScreenExplanationResponse(
-    val explanation: String
+    val explanation: String,
+    @Json(name = "highlight_index") val highlightIndex: Int? = null
 )
 
 @JsonClass(generateAdapter = true)

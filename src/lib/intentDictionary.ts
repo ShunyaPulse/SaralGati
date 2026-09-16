@@ -617,15 +617,79 @@ export const ELDER_INTENTS: IntentDefinition[] = [
   }
 ];
 
+export const INTENT_HINDI_EXPLANATIONS: Record<string, string> = {
+  video_call: 'वीडियो कॉल करने के लिए यहाँ दिए गए बटन पर दबाएं।',
+  call: 'कॉल लगाने के लिए यहाँ दबाएं।',
+  chat_message: 'मैसेज या चैट करने के लिए यहाँ दबाएं।',
+  voice_message: 'बोलकर संदेश (वॉइस नोट) भेजने के लिए माइक पर दबाएं।',
+  search: 'खोजने (Search) के लिए यहाँ दबाएं।',
+  camera_photo: 'फोटो खींचने या कैमरा खोलने के लिए यहाँ दबाएं।',
+  gallery_media: 'फोटो या गैलरी देखने के लिए यहाँ दबाएं।',
+  play_video_music: 'चलाने (Play) के लिए यहाँ दबाएं।',
+  pause_stop: 'रोकने (Pause/Stop) के लिए यहाँ दबाएं।',
+  order_food_shopping: 'ऑर्डर करने या खरीदने के लिए यहाँ दबाएं।',
+  payment_upi: 'पैसे भेजने या भुगतान (UPI) के लिए यहाँ दबाएं।',
+  recharge_mobile: 'रिचार्ज या बिल भरने के लिए यहाँ दबाएं।',
+  settings_options: 'सेटिंग्स या अन्य विकल्प देखने के लिए यहाँ दबाएं।',
+  delete_remove: 'हटाने या डिलीट (Delete) करने के लिए यहाँ दबाएं।',
+  share_forward: 'शेयर करने या आगे भेजने के लिए यहाँ दबाएं।',
+  add_new: 'नया जोड़ने के लिए यहाँ प्लस (+) बटन पर दबाएं।',
+  status_story: 'स्टेटस (Status) देखने के लिए यहाँ दबाएं।',
+  mic_voice_search: 'बोलकर आवाज़ से सर्च करने के लिए यहाँ माइक पर दबाएं।',
+  back_close: 'पीछे जाने के लिए यहाँ बैक (Back) बटन दबाएं।',
+  download_save: 'डाउनलोड या सेव करने के लिए यहाँ दबाएं।',
+  help_assistance: 'मदद या सहायता पाने के लिए यहाँ दबाएं।',
+  profile_account: 'अपनी प्रोफाइल या खाता देखने के लिए यहाँ दबाएं।',
+  alarm_clock_time: 'अलार्म या समय सेट करने के लिए यहाँ दबाएं।',
+  weather_mausam: 'मौसम की जानकारी देखने के लिए यहाँ दबाएं।',
+  flashlight_torch: 'टॉर्च या रोशनी चालू/बंद करने के लिए यहाँ दबाएं।',
+  train_railway: 'ट्रेन या टिकट की जानकारी के लिए यहाँ दबाएं।',
+  cab_auto_ride: 'गाड़ी या कैब बुक करने के लिए यहाँ दबाएं।',
+  medicine_health: 'दवा या स्वास्थ्य संबंधी जानकारी के लिए यहाँ दबाएं।',
+  battery_power: 'बैटरी की स्थिति देखने के लिए यहाँ दबाएं।',
+  wifi_internet: 'इंटरनेट या वाई-फाई के लिए यहाँ दबाएं।',
+  bluetooth_connect: 'ब्लूटूथ कनेक्ट करने के लिए यहाँ दबाएं।',
+  calculator_math: 'कैलकुलेटर या हिसाब के लिए यहाँ दबाएं।',
+  notes_reminder: 'नोट्स लिखने या याद रखने के लिए यहाँ दबाएं।',
+  news_samachar: 'ताज़ा समाचार पढ़ने के लिए यहाँ दबाएं।',
+  whatsapp_group: 'ग्रुप देखने या खोलने के लिए यहाँ दबाएं।',
+  read_screen_text: 'स्क्रीन की आवाज़ सुनने के लिए यहाँ दबाएं।',
+  zoom_magnify: 'अक्षर बड़े या ज़ूम करने के लिए यहाँ दबाएं।',
+  volume_sound: 'आवाज़ कम या तेज़ करने के लिए यहाँ दबाएं।',
+  mute_silent: 'फोन को साइलेंट या शांत करने के लिए यहाँ दबाएं।',
+  location_map: 'रास्ता या मैप देखने के लिए यहाँ दबाएं।',
+  otp_verification: 'ओटीपी या कोड देखने के लिए यहाँ दबाएं।',
+  block_spam: 'नंबर ब्लॉक करने के लिए यहाँ दबाएं।',
+  brightness_screen: 'स्क्रीन की चमक (Brightness) के लिए यहाँ दबाएं।',
+  notification_alert: 'नोटिफिकेशन देखने के लिए यहाँ घंटी पर दबाएं।',
+  copy_paste: 'कॉपी या पेस्ट करने के लिए यहाँ दबाएं।',
+  update_app: 'ऐप अपडेट करने के लिए यहाँ दबाएं।',
+  call_history_logs: 'हाल की कॉल लिस्ट देखने के लिए यहाँ दबाएं।',
+  contacts_addressbook: 'संपर्क (Contacts) सूची देखने के लिए यहाँ दबाएं।',
+  screenshot_capture: 'स्क्रीनशॉट लेने के लिए यहाँ दबाएं।',
+  language_hindi: 'भाषा बदलने या हिंदी करने के लिए यहाँ दबाएं।',
+};
+
+export function getIntentExplanation(intent: IntentDefinition | null): string {
+  if (!intent) return 'आगे बढ़ने के लिए यहाँ दिए गए बटन पर दबाएं।';
+  return INTENT_HINDI_EXPLANATIONS[intent.id] || `${intent.name} के लिए यहाँ दबाएं।`;
+}
+
 /**
  * Matches an elder's question to the best matching interactive element on the screen.
- * Prioritizes actionable elements ([BUTTON], [INPUT], [TOGGLE]) over static [TEXT].
+ * Prioritizes actionable elements ([BUTTON], [INPUT], [TOGGLE]) over static [TEXT],
+ * and filters media/preview noise (e.g., '3 videos', timestamps).
  */
 export function matchElderIntent(
   question: string,
   uiElements: string[]
-): { highlightIndex: number | null; matchedIntent: IntentDefinition | null } {
+): { highlightIndex: number | null; matchedIntent: IntentDefinition | null; explanation: string } {
   const qLower = question.toLowerCase();
+
+  const isNoise = (txt: string) => {
+    return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(txt) ||
+           /\b(yesterday|am|pm|today)\b/i.test(txt);
+  };
 
   // Find all intents triggered by the user's question
   const matchingIntents = ELDER_INTENTS.filter((intent) =>
@@ -633,13 +697,15 @@ export function matchElderIntent(
   );
 
   if (matchingIntents.length === 0) {
-    return { highlightIndex: null, matchedIntent: null };
+    return { highlightIndex: null, matchedIntent: null, explanation: 'स्क्रीन पर दिए गए विकल्पों को ध्यान से देखें।' };
   }
 
   // Pass 1: Prioritize actionable elements ([BUTTON], [INPUT], [TOGGLE])
   for (const intent of matchingIntents) {
     for (let i = 0; i < uiElements.length; i++) {
       const elLower = uiElements[i].toLowerCase();
+      if (isNoise(elLower)) continue;
+
       const isActionable =
         elLower.startsWith('[button]') ||
         elLower.startsWith('[input]') ||
@@ -647,7 +713,7 @@ export function matchElderIntent(
 
       if (isActionable) {
         if (intent.elementKeywords.some((keyword) => elLower.includes(keyword))) {
-          return { highlightIndex: i, matchedIntent: intent };
+          return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent) };
         }
       }
     }
@@ -657,11 +723,17 @@ export function matchElderIntent(
   for (const intent of matchingIntents) {
     for (let i = 0; i < uiElements.length; i++) {
       const elLower = uiElements[i].toLowerCase();
+      if (isNoise(elLower)) continue;
+
       if (intent.elementKeywords.some((keyword) => elLower.includes(keyword))) {
-        return { highlightIndex: i, matchedIntent: intent };
+        return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent) };
       }
     }
   }
 
-  return { highlightIndex: null, matchedIntent: matchingIntents[0] };
+  return {
+    highlightIndex: null,
+    matchedIntent: matchingIntents[0],
+    explanation: getIntentExplanation(matchingIntents[0])
+  };
 }

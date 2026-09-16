@@ -168,6 +168,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // General Elder Intent Fast-Path: If app-specific rules didn't hit, check 50-category dictionary
+    if (!fpMatch) {
+      const intentFastMatch = matchElderIntent(question, ui_elements);
+      if (intentFastMatch.highlightIndex !== null && intentFastMatch.matchedIntent !== null) {
+        fpIndex = intentFastMatch.highlightIndex;
+        fpExplanation = intentFastMatch.explanation;
+        fpMatch = true;
+      }
+    }
+
     if (fpMatch) {
       await logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules');
       return NextResponse.json({

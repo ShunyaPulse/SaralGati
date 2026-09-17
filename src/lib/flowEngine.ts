@@ -34,9 +34,10 @@ const FLOW_TTL_SECONDS = 900; // 15 minutes session TTL
 
 function findMatchingElement(uiElements: string[], keywords: string[]): number {
   return uiElements.findIndex((el) => {
-    const isActionable = el.startsWith('[BUTTON]') || el.startsWith('[INPUT]') || el.startsWith('[TOGGLE]');
+    const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
+    const isActionable = clean.startsWith('[BUTTON]') || clean.startsWith('[INPUT]') || clean.startsWith('[TOGGLE]');
     if (!isActionable) return false;
-    const lower = el.toLowerCase();
+    const lower = clean.toLowerCase();
     return keywords.some((k) => lower.includes(k.toLowerCase()));
   });
 }

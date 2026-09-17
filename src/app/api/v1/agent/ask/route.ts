@@ -81,9 +81,10 @@ export async function POST(req: NextRequest) {
 
       // Pass 1: Prioritize interactive elements ([BUTTON], [INPUT], [TOGGLE])
       const interactiveIdx = ui_elements.findIndex((el: string) => {
-        const isActionable = el.startsWith('[BUTTON]') || el.startsWith('[INPUT]') || el.startsWith('[TOGGLE]');
+        const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
+        const isActionable = clean.startsWith('[BUTTON]') || clean.startsWith('[INPUT]') || clean.startsWith('[TOGGLE]');
         if (!isActionable) return false;
-        const txt = el.toLowerCase();
+        const txt = clean.toLowerCase();
         if (isNoise(txt)) return false;
         return keywords.some(k => txt.includes(k.toLowerCase()));
       });

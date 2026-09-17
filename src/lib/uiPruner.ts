@@ -1,4 +1,4 @@
-﻿/**
+/**
  * UI Tree Pruner for Elder Companion screen hierarchies.
  * 
  * Objectives:
@@ -40,10 +40,11 @@ export function pruneUITree(
     const trimmed = el.trim();
     if (!trimmed) return;
 
+    const cleanRole = trimmed.replace(/^\[BELOW-FOLD\]\s*/i, '');
     const isActionable =
-      trimmed.startsWith('[BUTTON]') ||
-      trimmed.startsWith('[INPUT]') ||
-      trimmed.startsWith('[TOGGLE]');
+      cleanRole.startsWith('[BUTTON]') ||
+      cleanRole.startsWith('[INPUT]') ||
+      cleanRole.startsWith('[TOGGLE]');
 
     const lower = trimmed.toLowerCase();
 

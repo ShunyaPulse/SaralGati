@@ -264,6 +264,126 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
     }
 
+    // Infinite feeds and long communication/media lists that must NEVER be auto-scrolled
+    private val INFINITE_AND_LONG_SCROLL_PACKAGES = setOf(
+        "com.google.android.youtube",
+        "com.google.android.apps.youtube.music",
+        "com.instagram.android",
+        "com.twitter.android",
+        "com.x.android",
+        "com.facebook.katana",
+        "com.facebook.orca",
+        "com.zhiliaoapp.musically",
+        "com.ss.android.ugc.trill",
+        "com.snapchat.android",
+        "com.reddit.frontpage",
+        "com.pinterest",
+        "com.whatsapp",
+        "com.whatsapp.w4b",
+        "org.telegram.messenger",
+        "com.google.android.gm",
+        "com.google.android.apps.messaging",
+        "com.google.android.apps.photos"
+    )
+
+    private fun isInfiniteOrLongScrollApp(pkg: String): Boolean {
+        val lower = pkg.lowercase()
+        if (INFINITE_AND_LONG_SCROLL_PACKAGES.contains(lower)) return true
+        return lower.contains("youtube") ||
+               lower.contains("instagram") ||
+               lower.contains("facebook") ||
+               lower.contains("twitter") ||
+               lower.contains("whatsapp") ||
+               lower.contains("reddit") ||
+               lower.contains("tiktok") ||
+               lower.contains("gmail") ||
+               lower.contains("messaging") ||
+               lower.contains("photos")
+    }
+
+    private fun findScrollableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isScrollable) {
+            val hasForward = node.actionList.any {
+                it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ||
+                it.id == android.R.id.accessibilityActionScrollDown
+            }
+            if (hasForward) return node
+        }
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val found = findScrollableNode(child)
+            if (found != null) return found
+            child.recycle()
+        }
+        return null
+    }
+
+    /**
+     * Extracts full screen content including below-the-fold elements for non-feed screens.
+     * Guarantees:
+     * 1. Never scrolls on infinite feeds or long chat/mail lists (YouTube, Instagram, WhatsApp, Gmail, etc.)
+     * 2. Non-disruptive: Immediately restores scroll position back to top after a single controlled peek.
+     * 3. Strictly at most 1 single peek scroll (never loops or goes to the end).
+     */
+    private suspend fun extractFullWindowElements(
+        rootNode: AccessibilityNodeInfo,
+        appPackage: String,
+        elements: MutableList<String>,
+        elementBounds: MutableList<android.graphics.Rect>,
+        belowFoldFlags: MutableList<Boolean>
+    ) {
+        // Step 1: Extract visible viewport elements first
+        traverseNode(rootNode, elements, elementBounds)
+        for (i in elements.indices) {
+            belowFoldFlags.add(false)
+        }
+
+        // Guardrail 1: Do NOT scroll on infinite feeds or long chat/mail lists
+        if (isInfiniteOrLongScrollApp(appPackage)) {
+            Log.d(TAG, "Skipping below-fold scan for feed/chat package: $appPackage")
+            return
+        }
+
+        // Guardrail 2: Check if there is an active scrollable container
+        val scrollableNode = findScrollableNode(rootNode) ?: return
+
+        try {
+            // Perform 1 Controlled Peek Scroll
+            val scrolled = scrollableNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            if (scrolled) {
+                kotlinx.coroutines.delay(200) // Allow layout to settle
+
+                val freshRoot = rootInActiveWindow
+                if (freshRoot != null) {
+                    val peekElements = mutableListOf<String>()
+                    val peekBounds = mutableListOf<android.graphics.Rect>()
+                    traverseNode(freshRoot, peekElements, peekBounds)
+
+                    // Identify and add new elements that were not present on the visible screen
+                    val existingLabels = elements.toSet()
+                    for (idx in peekElements.indices) {
+                        val el = peekElements[idx]
+                        if (!existingLabels.contains(el)) {
+                            // Tag with [BELOW-FOLD] so backend and companion know its position
+                            elements.add("[BELOW-FOLD] $el")
+                            elementBounds.add(peekBounds[idx])
+                            belowFoldFlags.add(true)
+                        }
+                    }
+
+                    // IMMEDIATE RESTORE: Scroll back to the top so user's screen is 100% untouched!
+                    val restoreScrollNode = findScrollableNode(freshRoot)
+                    restoreScrollNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                    kotlinx.coroutines.delay(150)
+                    freshRoot.recycle()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Safe scroll peek error: ${e.message}")
+        }
+    }
+
     private fun extractAndExplainScreen() {
         serviceScope.launch {
             // Immediately clear any old highlight box so it does not interfere or get scanned
@@ -279,10 +399,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
-            traverseNode(rootNode, elements, elementBounds)
-            
+            val belowFoldFlags = mutableListOf<Boolean>()
             val appPackage = rootNode.packageName?.toString() ?: "unknown"
-            Log.i(TAG, "Extracted ${elements.size} elements from $appPackage")
+            
+            extractFullWindowElements(rootNode, appPackage, elements, elementBounds, belowFoldFlags)
+            Log.i(TAG, "Extracted ${elements.size} elements (below-fold included) from $appPackage")
         
             try {
                 val request = ScreenContextRequest(appPackage, elements)
@@ -325,9 +446,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
-            traverseNode(rootNode, elements, elementBounds)
-            
+            val belowFoldFlags = mutableListOf<Boolean>()
             val appPackage = rootNode.packageName?.toString() ?: "unknown"
+            
+            extractFullWindowElements(rootNode, appPackage, elements, elementBounds, belowFoldFlags)
+            
             if (appPackage != currentAppPackage) {
                 currentAppPackage = appPackage
                 conversationHistory.clear()
@@ -355,7 +478,37 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeAppPackage = appPackage
                         activeWindowClassName = rootNode.className?.toString()
                         activeElementBounds = elementBounds.toList()
-                        broadcastVisualCue(elementBounds[highlightIndex])
+                        
+                        val isBelowFold = highlightIndex in belowFoldFlags.indices && belowFoldFlags[highlightIndex]
+                        if (isBelowFold) {
+                            // Element was detected below the fold: smoothly scroll down so elder can see the highlight box
+                            val curRoot = rootInActiveWindow
+                            val scrollDownNode = findScrollableNode(curRoot)
+                            scrollDownNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                            kotlinx.coroutines.delay(250)
+                            curRoot?.recycle()
+
+                            val afterScrollRoot = rootInActiveWindow
+                            if (afterScrollRoot != null) {
+                                val freshElements = mutableListOf<String>()
+                                val freshBounds = mutableListOf<android.graphics.Rect>()
+                                traverseNode(afterScrollRoot, freshElements, freshBounds)
+
+                                val rawTargetLabel = elements.getOrNull(highlightIndex)?.replace(Regex("^\\[BELOW-FOLD\\]\\s*"), "")?.trim()
+                                val matchedIdx = freshElements.indexOfFirst { it.trim() == rawTargetLabel }
+                                val cueBounds = if (matchedIdx != -1 && matchedIdx in freshBounds.indices) {
+                                    freshBounds[matchedIdx]
+                                } else {
+                                    elementBounds[highlightIndex]
+                                }
+                                broadcastVisualCue(cueBounds)
+                                afterScrollRoot.recycle()
+                            } else {
+                                broadcastVisualCue(elementBounds[highlightIndex])
+                            }
+                        } else {
+                            broadcastVisualCue(elementBounds[highlightIndex])
+                        }
                     } else {
                         activeInteractionId = null
                         activeHighlightedBounds = null

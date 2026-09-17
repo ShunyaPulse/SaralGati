@@ -17,7 +17,7 @@ const NOISE_REGEXES = [
 ];
 
 function cleanElementText(text: string): string {
-  return text.replace(/^\d+:\s*/, '').trim().toLowerCase();
+  return text.replace(/^\d+:\s*/, '').replace(/^\[below-fold\]\s*/i, '').trim().toLowerCase();
 }
 
 export function isNoiseElement(elementText: string): boolean {

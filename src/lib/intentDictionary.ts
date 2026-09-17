@@ -706,13 +706,14 @@ export function matchElderIntent(
       const elLower = uiElements[i].toLowerCase();
       if (isNoise(elLower)) continue;
 
+      const clean = elLower.replace(/^\[below-fold\]\s*/i, '');
       const isActionable =
-        elLower.startsWith('[button]') ||
-        elLower.startsWith('[input]') ||
-        elLower.startsWith('[toggle]');
+        clean.startsWith('[button]') ||
+        clean.startsWith('[input]') ||
+        clean.startsWith('[toggle]');
 
       if (isActionable) {
-        if (intent.elementKeywords.some((keyword) => elLower.includes(keyword))) {
+        if (intent.elementKeywords.some((keyword) => clean.includes(keyword))) {
           return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent) };
         }
       }
@@ -725,7 +726,8 @@ export function matchElderIntent(
       const elLower = uiElements[i].toLowerCase();
       if (isNoise(elLower)) continue;
 
-      if (intent.elementKeywords.some((keyword) => elLower.includes(keyword))) {
+      const clean = elLower.replace(/^\[below-fold\]\s*/i, '');
+      if (intent.elementKeywords.some((keyword) => clean.includes(keyword))) {
         return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent) };
       }
     }

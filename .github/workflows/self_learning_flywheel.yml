@@ -51,4 +51,4 @@ jobs:
           if [ -n "${{ github.event.inputs.max_cases }}" ]; then
             LIMIT_ARG="--limit ${{ github.event.inputs.max_cases }}"
           fi
-          python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" $LIMIT_ARG
+          python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" --gemini-key "$GEMINI_API_KEY" $LIMIT_ARG

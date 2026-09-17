@@ -80,9 +80,20 @@ def generate_infinite_screens_via_gemini(gemini_api_key, count=5):
     ]
     selected_apps = random.sample(popular_apps, min(count, len(popular_apps)))
 
+    # Add variation seed to prevent duplicate scenarios across hourly runs
+    import datetime
+    hour_seed = datetime.datetime.utcnow().strftime("%Y-%m-%d-%H")
+    variation_contexts = [
+        "home screen", "settings page", "payment confirmation", "search results",
+        "order history", "profile page", "notification panel", "login screen",
+        "checkout page", "booking confirmation", "help section", "menu drawer"
+    ]
+    variation = random.choice(variation_contexts)
+
     prompt = f"""You are a synthetic Android UI generator for SaralGati, an AI companion designed for Indian elders.
 Generate exactly {len(selected_apps)} realistic Android app screens for Indian apps based on these topics:
 {json.dumps(selected_apps)}
+Context variation: Show the {variation} view. Generation seed: {hour_seed}.
 
 For each screen:
 1. Provide "app_package" (e.g. 'cris.org.in.prs.ima', 'com.phonepe.app', 'com.sbi.lotusintouch').
@@ -180,10 +191,17 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
         for scenario in screen["scenarios"]:
             if max_cases and count >= max_cases:
                 break
-            count += 1
+
             query = scenario["query"]
             expected_index = scenario["expected"]
             intent_name = scenario.get("intent", "general")
+
+            # Validate ground truth: skip if expected index is out of bounds
+            if not isinstance(expected_index, int) or expected_index < 0 or expected_index >= len(elements):
+                print(f"    ⚠️ Skipping scenario (expected index {expected_index} out of bounds for {len(elements)} elements)")
+                continue
+
+            count += 1
 
             print(f"[{count}] App: {pkg:<28} | Intent: {intent_name:<18}")
             print(f"    Query: \"{query}\"")

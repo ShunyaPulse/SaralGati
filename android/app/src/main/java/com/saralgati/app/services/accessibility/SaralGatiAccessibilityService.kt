@@ -30,9 +30,6 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var lastClickedNodeId: String? = null
     private val recentClickTimes = ArrayDeque<Long>(RAGE_TAP_THRESHOLD)
     private var lastAlertTriggerTime: Long = 0
-    private val RAGE_TAP_THRESHOLD = 3
-    private val RAGE_TAP_TIME_WINDOW_MS = 2000L // 3 clicks within 2 seconds
-    private val ALERT_COOLDOWN_MS = 15000L // 15 seconds cooldown between alerts
 
     // Variables for Continuous Learning Implicit Feedback Loop
     private var activeInteractionId: String? = null
@@ -41,9 +38,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var activeAppPackage: String? = null
     private var activeWindowClassName: String? = null
     private var activeElementBounds: List<android.graphics.Rect> = emptyList()
-    private val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
 
     companion object {
+        private const val RAGE_TAP_THRESHOLD = 3
+        private const val RAGE_TAP_TIME_WINDOW_MS = 2000L // 3 clicks within 2 seconds
+        private const val ALERT_COOLDOWN_MS = 15000L // 15 seconds cooldown between alerts
+        private const val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
+
         const val ACTION_EXTRACT_SCREEN = "com.saralgati.app.ACTION_EXTRACT_SCREEN"
         const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
         const val ACTION_SPEAK_EXPLANATION = "com.saralgati.app.ACTION_SPEAK_EXPLANATION"
@@ -59,6 +60,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         var isServiceRunning = false
             private set
     }
+
 
     private val screenExtractReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {

@@ -8,6 +8,7 @@ import { evaluateMultiStepFlow } from '@/lib/flowEngine';
 import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
 import { validateSemanticTarget } from '@/lib/semanticValidator';
 import { query } from '@/lib/db';
+import { validateDeviceToken } from '@/lib/agent-auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +17,13 @@ export async function POST(req: NextRequest) {
     if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
+
+    // Validate device session via Redis/DB
+    const auth = await validateDeviceToken(req);
+    if (!auth.isAuthenticated && process.env.ENFORCE_DEVICE_AUTH === 'true') {
+      return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
+    }
+    const effectiveElderId = auth.elderId || elder_id || null;
 
     const interactionId = crypto.randomUUID();
     const normalizedElements = ui_elements.map((el: string) =>
@@ -32,7 +40,7 @@ export async function POST(req: NextRequest) {
            ON CONFLICT (id) DO NOTHING`,
           [
             interactionId,
-            elder_id || null,
+            effectiveElderId,
             app_package,
             screenHash,
             question,
@@ -49,7 +57,7 @@ export async function POST(req: NextRequest) {
     };
 
     // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
-    const flowResult = await evaluateMultiStepFlow(elder_id, question, ui_elements);
+    const flowResult = await evaluateMultiStepFlow(effectiveElderId, question, ui_elements);
     if (flowResult && flowResult.isFlowActive && typeof flowResult.highlightIndex === 'number' && flowResult.highlightIndex >= 0) {
       logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId).catch(() => {});
       return NextResponse.json({

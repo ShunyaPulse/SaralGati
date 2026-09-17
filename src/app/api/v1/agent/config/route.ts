@@ -38,7 +38,7 @@ export async function GET(request: Request) {
   try {
     const authResult = await validateDeviceToken(request);
     
-    if (!authResult) {
+    if (!authResult.isAuthenticated || !authResult.elderId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 

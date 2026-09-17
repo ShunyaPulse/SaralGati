@@ -32,6 +32,7 @@ class TelemetryService : Service() {
     override fun onCreate() {
         super.onCreate()
         localPrefs = LocalPrefs(applicationContext)
+        NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildForegroundNotification())
         Log.i(TAG, "TelemetryService created and running in foreground.")

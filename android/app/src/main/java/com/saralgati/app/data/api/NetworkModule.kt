@@ -10,6 +10,8 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 object NetworkModule {
     private const val BASE_URL = "https://saralgati-685823552970.asia-south1.run.app/"
 
+    var tokenProvider: (() -> String?)? = null
+
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
@@ -18,7 +20,21 @@ object NetworkModule {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    private val authInterceptor = okhttp3.Interceptor { chain ->
+        val original = chain.request()
+        val token = tokenProvider?.invoke()
+        val request = if (!token.isNullOrBlank() && original.header("Authorization") == null) {
+            original.newBuilder()
+                .header("Authorization", "Bearer $token")
+                .build()
+        } else {
+            original
+        }
+        chain.proceed(request)
+    }
+
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
         .build()
 

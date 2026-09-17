@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   try {
     const authResult = await validateDeviceToken(request);
     
-    if (!authResult) {
+    if (!authResult.isAuthenticated || !authResult.elderId || !authResult.caregiverId) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 

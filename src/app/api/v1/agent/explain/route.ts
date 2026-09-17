@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAIResponse } from '@/lib/aiFallback';
+import { validateDeviceToken } from '@/lib/agent-auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,6 +8,11 @@ export async function POST(req: NextRequest) {
 
     if (!app_package || !ui_elements || !Array.isArray(ui_elements)) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+    }
+
+    const auth = await validateDeviceToken(req);
+    if (!auth.isAuthenticated && process.env.ENFORCE_DEVICE_AUTH === 'true') {
+      return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
     }
 
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.

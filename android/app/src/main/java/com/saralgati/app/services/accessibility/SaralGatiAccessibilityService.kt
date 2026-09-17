@@ -75,6 +75,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         isServiceRunning = true
         localPrefs = LocalPrefs(applicationContext)
+        NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
         
         val filter = IntentFilter().apply {
             addAction(ACTION_EXTRACT_SCREEN)

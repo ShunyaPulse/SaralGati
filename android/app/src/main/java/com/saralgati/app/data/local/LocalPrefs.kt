@@ -9,16 +9,28 @@ class LocalPrefs(context: Context) {
     companion object {
         private const val KEY_ELDER_ID = "elder_id"
         private const val KEY_CAREGIVER_ID = "caregiver_id"
+        private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_IS_PAIRED = "is_paired"
     }
 
-    fun savePairingInfo(elderId: String, caregiverId: String) {
-        prefs.edit()
+    fun savePairingInfo(elderId: String, caregiverId: String, deviceToken: String? = null) {
+        val editor = prefs.edit()
             .putString(KEY_ELDER_ID, elderId)
             .putString(KEY_CAREGIVER_ID, caregiverId)
             .putBoolean(KEY_IS_PAIRED, true)
-            .apply()
+        if (deviceToken != null) {
+            editor.putString(KEY_DEVICE_TOKEN, deviceToken)
+        }
+        editor.apply()
     }
+
+    fun saveDeviceToken(token: String) {
+        prefs.edit().putString(KEY_DEVICE_TOKEN, token).apply()
+    }
+
+    fun getDeviceToken(): String? = prefs.getString(KEY_DEVICE_TOKEN, null)
+
+    fun getAuthToken(): String? = getDeviceToken() ?: getElderId()
 
     fun getElderId(): String? = prefs.getString(KEY_ELDER_ID, null)
     

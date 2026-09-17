@@ -239,72 +239,119 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun createExpandedView() {
-        val layout = LinearLayout(this)
-        layout.orientation = LinearLayout.VERTICAL
-        layout.setBackgroundColor(Color.WHITE)
-        layout.setPadding(32, 32, 32, 32)
-        
-        val bgDrawable = GradientDrawable()
-        bgDrawable.setColor(Color.WHITE)
-        bgDrawable.cornerRadius = 32f
-        bgDrawable.setStroke(4, Color.parseColor("#E5E7EB"))
-        layout.background = bgDrawable
+        val density = resources.displayMetrics.density
+        val dp = { value: Int -> (value * density).toInt() }
 
-        val titleParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        titleParams.bottomMargin = 24
-        
-        val titleText = TextView(this)
-        titleText.text = "सरलगति सहायक"
-        titleText.textSize = 20f
-        titleText.setTextColor(Color.parseColor("#111827"))
-        titleText.tag = "titleView"
-        layout.addView(titleText, titleParams)
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(16))
+            
+            val bgDrawable = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = dp(24).toFloat()
+                setStroke(dp(1), Color.parseColor("#E2E8F0"))
+            }
+            background = bgDrawable
+            elevation = dp(12).toFloat()
+        }
+
+        // Header: Title + Sleek Close '✕' Icon
+        val headerRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                bottomMargin = dp(10)
+            }
+        }
+
+        val titleText = TextView(this).apply {
+            text = "सरलगति सहायक"
+            textSize = 16f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(Color.parseColor("#0F172A"))
+            tag = "titleView"
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerRow.addView(titleText)
+
+        val btnCloseIcon = TextView(this).apply {
+            text = "✕"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#64748B"))
+            val closeBg = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.parseColor("#F1F5F9"))
+            }
+            background = closeBg
+            layoutParams = LinearLayout.LayoutParams(dp(28), dp(28))
+            setOnClickListener {
+                collapseHelper()
+            }
+        }
+        headerRow.addView(btnCloseIcon)
+        rootLayout.addView(headerRow)
+
+        // Action Buttons Row (Side-by-side for ultra-compact vertical footprint)
+        val actionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
 
         // Button 1: Explain Screen
-        val btnExplain = Button(this)
-        btnExplain.text = "यह स्क्रीन समझाइए\n(Explain Screen)"
-        btnExplain.setBackgroundColor(Color.parseColor("#0074c8"))
-        btnExplain.setTextColor(Color.WHITE)
-        btnExplain.setOnClickListener {
-            speak("एक सेकंड रुकिए, मैं देख रहा हूँ...")
-            collapseHelper() // <-- Collapse the big menu so it doesn't hide the screen
-            val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_SCREEN").apply {
-                setPackage(packageName)
+        val btnExplain = Button(this).apply {
+            text = "🔍 स्क्रीन समझाइए\n(Explain Screen)"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            val bg = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#0284C7")) // Calm Sky Blue
             }
-            sendBroadcast(extractIntent)
-        }
-        layout.addView(btnExplain)
-
-        // Button 2: Next Step / Follow up question
-        val btnNext = Button(this)
-        btnNext.text = "मेरा सवाल पूछें (Ask a Question)"
-        btnNext.setBackgroundColor(Color.parseColor("#22C55E"))
-        btnNext.setTextColor(Color.WHITE)
-        btnNext.setOnClickListener {
-            collapseHelper()
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                startListeningSilent()
+            background = bg
+            layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+                marginEnd = dp(6)
+            }
+            setOnClickListener {
+                speak("एक सेकंड रुकिए, मैं देख रहा हूँ...")
+                collapseHelper()
+                val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_SCREEN").apply {
+                    setPackage(packageName)
+                }
+                sendBroadcast(extractIntent)
             }
         }
-        val btnParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        btnParams.topMargin = 16
-        layout.addView(btnNext, btnParams)
+        actionsRow.addView(btnExplain)
 
-        // Close Button
-        val btnClose = Button(this)
-        btnClose.text = "बंद करें (Close)"
-        btnClose.setBackgroundColor(Color.parseColor("#EF4444"))
-        btnClose.setTextColor(Color.WHITE)
-        btnClose.setOnClickListener {
-            collapseHelper()
+        // Button 2: Ask a Question
+        val btnNext = Button(this).apply {
+            text = "🎙️ सवाल पूछें\n(Ask a Question)"
+            textSize = 12f
+            setTextColor(Color.WHITE)
+            isAllCaps = false
+            val bg = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Color.parseColor("#16A34A")) // Emerald Green
+            }
+            background = bg
+            layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
+                marginStart = dp(6)
+            }
+            setOnClickListener {
+                collapseHelper()
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    startListeningSilent()
+                }
+            }
         }
-        layout.addView(btnClose, btnParams)
+        actionsRow.addView(btnNext)
+        rootLayout.addView(actionsRow)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -312,16 +359,21 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             WindowManager.LayoutParams.TYPE_PHONE
         }
 
+        val screenWidth = resources.displayMetrics.widthPixels
+        val horizontalMargin = dp(16)
+
         paramsExpanded = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
+            screenWidth - (horizontalMargin * 2),
             WindowManager.LayoutParams.WRAP_CONTENT,
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
-        )
-        paramsExpanded?.gravity = Gravity.CENTER
-        
-        expandedView = layout
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            y = dp(24) // Float 24dp above system navigation bar
+        }
+
+        expandedView = rootLayout
     }
 
     private fun expandHelper(title: String, speakMsg: String) {

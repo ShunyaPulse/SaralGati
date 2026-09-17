@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Edit2, Trash2, Battery, Smartphone, Activity } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Battery, Smartphone, Activity, QrCode } from 'lucide-react';
 import { useElderStore } from '@/stores/elder-store';
 import { useAlertStore } from '@/stores/alert-store';
 import { ElderForm } from '@/components/elders/elder-form';
 import { HabitRulesList } from '@/components/elders/habit-rules-list';
 import { AssistanceLogsTimeline } from '@/components/elders/assistance-logs-timeline';
 import { Modal } from '@/components/ui/modal';
+import { PairingModal } from '@/components/elders/pairing-modal';
 import { ElderProfile } from '@/types';
 
 export default function ElderDetailPage() {
@@ -22,6 +23,7 @@ export default function ElderDetailPage() {
   
   const [elder, setElder] = useState<ElderProfile | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isPairingModalOpen, setIsPairingModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
@@ -81,11 +83,20 @@ export default function ElderDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4 mb-2">
-        <Link href="/elders" className="p-2 -ml-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold text-slate-900">{elder.elder_name}</h1>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+        <div className="flex items-center gap-4">
+          <Link href="/elders" className="p-2 -ml-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <h1 className="text-2xl font-bold text-slate-900">{elder.elder_name}</h1>
+        </div>
+        <button
+          onClick={() => setIsPairingModalOpen(true)}
+          className="inline-flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 transition-colors"
+        >
+          <QrCode className="h-4 w-4" />
+          Pair Device (QR Code)
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -180,6 +191,13 @@ export default function ElderDetailPage() {
           onCancel={() => setIsEditModalOpen(false)} 
         />
       </Modal>
+
+      <PairingModal
+        elderId={elder.id}
+        elderName={elder.elder_name}
+        isOpen={isPairingModalOpen}
+        onClose={() => setIsPairingModalOpen(false)}
+      />
     </div>
   );
 }

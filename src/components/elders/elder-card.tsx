@@ -1,17 +1,21 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Battery, Smartphone, PhoneCall, Clock } from 'lucide-react';
+import { Battery, Smartphone, PhoneCall, Clock, QrCode } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
 import Link from 'next/link';
+import { PairingModal } from './pairing-modal';
 
 interface ElderCardProps {
   elder: ElderProfile;
 }
 
 export function ElderCard({ elder }: ElderCardProps) {
+  const [isPairingOpen, setIsPairingOpen] = useState(false);
   const isLowBattery = elder.battery_status !== null && elder.battery_status <= 20;
   
   // Calculate if active based on last heartbeat within 5 minutes
@@ -68,10 +72,25 @@ export function ElderCard({ elder }: ElderCardProps) {
         </div>
 
         <div className="mt-6 flex gap-2">
-          <Link href={`/elders/${elder.id}`} className="w-full">
+          <Button
+            variant="outline"
+            className="flex-1 justify-center gap-1.5 text-teal-700 hover:text-teal-800 hover:bg-teal-50 border-teal-200"
+            onClick={() => setIsPairingOpen(true)}
+          >
+            <QrCode className="h-4 w-4 text-teal-600" />
+            Pair QR
+          </Button>
+          <Link href={`/elders/${elder.id}`} className="flex-1">
             <Button variant="outline" className="w-full justify-center">View Details</Button>
           </Link>
         </div>
+
+        <PairingModal
+          elderId={elder.id}
+          elderName={elder.elder_name}
+          isOpen={isPairingOpen}
+          onClose={() => setIsPairingOpen(false)}
+        />
       </CardContent>
     </Card>
   );

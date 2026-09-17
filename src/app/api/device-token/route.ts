@@ -20,34 +20,44 @@ export async function POST(request: Request) {
     }
 
     // Verify ownership
-    const elder = await queryOne(`SELECT id FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`, [elderId, userId]);
+    const elder = await queryOne<{ id: string; elder_name: string }>(
+      `SELECT id, elder_name FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`,
+      [elderId, userId]
+    );
     if (!elder) {
       return NextResponse.json({ success: false, error: 'Not Found or Unauthorized' }, { status: 404 });
     }
 
-    // Generate token (plain text for the user)
-    // Format: sg_ + 32 random hex chars
+    // Generate bearer token: sg_ + 32 random hex chars
     const plainToken = `sg_${randomBytes(16).toString('hex')}`;
-    
-    // Hash token for database storage
-    const salt = await bcrypt.genSalt(10);
-    const hashedToken = await bcrypt.hash(plainToken, salt);
 
-    // Save hashed token in DB
+    // Save token in DB
     const updated = await queryOne(`
       UPDATE elder_profiles 
       SET device_token = $1, updated_at = NOW() 
       WHERE id = $2 RETURNING id
-    `, [hashedToken, elderId]);
+    `, [plainToken, elderId]);
 
     if (!updated) {
       throw new Error('Failed to save device token');
     }
 
-    // Return the plain token exactly once
+    // Cache in Redis device session for 30 days
+    try {
+      const { setDeviceSession } = await import('@/lib/redis');
+      await setDeviceSession(plainToken, { elderId, caregiverId: userId }, 30 * 86400);
+    } catch (redisErr) {
+      console.error('Failed to cache device session in Redis:', redisErr);
+    }
+
     return NextResponse.json({ 
       success: true, 
-      data: { token: plainToken } 
+      data: { 
+        token: plainToken,
+        elderId,
+        elderName: elder.elder_name,
+        apiUrl: process.env.NEXTAUTH_URL || 'https://saralgati-685823552970.asia-south1.run.app'
+      } 
     });
   } catch (error) {
     console.error('Error generating device token:', error);

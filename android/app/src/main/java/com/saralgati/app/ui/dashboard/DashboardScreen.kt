@@ -23,7 +23,9 @@ import com.saralgati.app.data.model.AssistanceLog
 import kotlinx.coroutines.launch
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(
+    onUnpair: () -> Unit = {}
+) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val localPrefs = remember { LocalPrefs(context) }
@@ -66,12 +68,25 @@ fun DashboardScreen() {
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.padding(vertical = 8.dp)
             ) {
-                Text(
-                    text = "Connected Elder ID:\n$elderId",
-                    style = MaterialTheme.typography.bodySmall,
-                    textAlign = TextAlign.Center,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+                ) {
+                    Text(
+                        text = "Connected Elder ID:\n$elderId",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = onUnpair,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("Disconnect / Pair New QR", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))

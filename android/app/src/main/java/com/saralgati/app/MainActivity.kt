@@ -38,7 +38,12 @@ class MainActivity : ComponentActivity() {
                     var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
                     
                     if (isPaired) {
-                        DashboardScreen()
+                        DashboardScreen(
+                            onUnpair = {
+                                localPrefs.clear()
+                                isPaired = false
+                            }
+                        )
                     } else {
                         PairingScreen(
                             localPrefs = localPrefs,

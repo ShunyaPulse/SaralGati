@@ -5,6 +5,7 @@
     <!-- Network permissions for API sync -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- Foreground service permissions for persistent elder telemetry / heartbeat -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

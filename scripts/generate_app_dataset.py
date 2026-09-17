@@ -258,7 +258,7 @@ Instructions:
 
 random.shuffle(dataset)
 
-output_file = "saralgati_popular_apps_train.jsonl"
+output_file = "data/saralgati_popular_apps_train.jsonl"
 with open(output_file, "w", encoding="utf-8") as f:
     for entry in dataset:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")

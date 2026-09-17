@@ -5,6 +5,7 @@ import { cacheGet, cacheSet } from '@/lib/redis';
 import { matchElderIntent } from '@/lib/intentDictionary';
 import { pruneUITree } from '@/lib/uiPruner';
 import { evaluateMultiStepFlow } from '@/lib/flowEngine';
+import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
 import { query } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -243,6 +244,8 @@ export async function POST(req: NextRequest) {
     // Prune UI Tree: filter preview noise and static boilerplate while preserving original client indices
     const { formattedString: formattedElements } = pruneUITree(ui_elements, question);
 
+    const fewShots = formatRelevantFewShots(app_package, question, 4);
+
     const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
 The user is looking at an Android app: ${app_package}.
 Here are the numbered interactive elements on their screen:
@@ -258,7 +261,10 @@ Instructions:
 3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
 5. If no specific element needs to be tapped, do NOT output any TARGET tag.
-6. Do not mention that you are an AI. Only output the Hindi sentence.`;
+6. Do not mention that you are an AI. Only output the Hindi sentence.
+
+Few-shot Grounding Examples:
+${fewShots}`;
 
     const aiResult = await generateAIResponse({
       systemPrompt,

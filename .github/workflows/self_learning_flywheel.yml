@@ -1,0 +1,54 @@
+name: SaralGati Autonomous Self-Learning Flywheel
+
+on:
+  schedule:
+    # Runs automatically every 1 hour in the cloud (24 dynamic learning cycles per day)
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    # Allows manual trigger anytime from GitHub Actions tab
+    inputs:
+      max_cases:
+        description: 'Maximum test scenarios to simulate'
+        required: false
+        default: '30'
+
+jobs:
+  cloud-self-learning:
+    name: Cloud Synthetic Self-Play & Flywheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Run Cloud Self-Learning Pipeline
+        env:
+          SARALGATI_API_URL: ${{ vars.SARALGATI_API_URL || 'https://saralgati-685823552970.asia-south1.run.app' }}
+          DEVICE_TOKEN: ${{ secrets.DEVICE_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # Guard: Blackout window during scheduled GPU Training (Wed & Sun 1:30 AM - 4:30 AM IST / 20:00 - 23:00 UTC Tue & Sat)
+          IS_MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
+          DOW=$(date -u +%u)
+          HOUR=$(date -u +%H)
+          if [ "$IS_MANUAL" != "true" ] && ([ "$DOW" = "2" ] || [ "$DOW" = "6" ]) && [ "$HOUR" -ge 20 ] && [ "$HOUR" -le 23 ]; then
+            echo "⏸️ Training Blackout Active: Kaggle LoRA GPU Training is scheduled around this window (Wed/Sun 2-4 AM IST). Skipping flywheel to prevent database locks."
+            exit 0
+          fi
+
+          LIMIT_ARG=""
+          if [ -n "${{ github.event.inputs.max_cases }}" ]; then
+            LIMIT_ARG="--limit ${{ github.event.inputs.max_cases }}"
+          fi
+          python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" $LIMIT_ARG

@@ -2,8 +2,8 @@ name: Weekly Autonomous LoRA Training
 
 on:
   schedule:
-    # Run every Sunday at 03:00 AM IST (21:30 UTC Saturday)
-    - cron: '30 21 * * 6'
+    # Run every Wednesday & Sunday at 03:00 AM IST (21:30 UTC Tuesday & Saturday)
+    - cron: '30 21 * * 2,6'
   workflow_dispatch:
     inputs:
       force_train:
@@ -28,14 +28,15 @@ jobs:
         id: check_data
         run: |
           API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=500"
-          echo "Fetching verified interactions..."
-          COUNT=$(curl -s "$API_URL" | grep -o '"count":[0-9]*' | cut -d':' -f2 || echo "0")
+          echo "Fetching verified interactions from: $API_URL"
+          COUNT=$(python -c "import urllib.request, json; res = json.loads(urllib.request.urlopen('$API_URL', timeout=15).read()); print(res.get('count', 0))" 2>/dev/null || echo "0")
           echo "Found $COUNT verified elder interactions in database."
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
           
-          FORCE="${{ inputs.force_train }}"
-          if [ "$COUNT" -ge 10 ] || [ "$FORCE" = "true" ]; then
+          FORCE="${{ inputs.force_train || 'false' }}"
+          if [ "$COUNT" -ge 10 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
+            echo "✅ Threshold met ($COUNT samples). Ready for training."
           else
             echo "should_train=false" >> $GITHUB_OUTPUT
             echo "ℹ️ Less than 10 verified samples ($COUNT). Skipping training cycle to save GPU quota."
@@ -59,17 +60,32 @@ jobs:
         if: steps.check_data.outputs.should_train == 'true'
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -z "$KAGGLE_KEY" ] || [ -z "$KAGGLE_USERNAME" ]; then
-            echo "⚠️ KAGGLE_KEY or KAGGLE_USERNAME is empty. Skipping Kaggle run."
+          if [ -z "$KAGGLE_API_TOKEN" ] || [ -z "$KAGGLE_USERNAME" ]; then
+            echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
             exit 0
           fi
           pip install kaggle
-          mkdir -p ~/.kaggle
-          echo "{\"username\":\"$KAGGLE_USERNAME\",\"key\":\"$KAGGLE_KEY\"}" > ~/.kaggle/kaggle.json
-          chmod 600 ~/.kaggle/kaggle.json
+          
+          echo "📦 Isolating Kaggle files..."
+          mkdir -p kaggle_push
+          cp scripts/train_unsloth_lora.py kaggle_push/
+          
+          echo "🔄 Updating kernel-metadata.json with correct Kaggle username..."
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          jq --arg username "$USERNAME_LOWER" '.id = $username + "/saralgati-lora-training"' scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
+          
+          echo "🔑 Auto-injecting Cloudflare deploy credentials..."
+          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            sed -i "s|CLOUDFLARE_ACCOUNT_ID = os.environ.get(\"CLOUDFLARE_ACCOUNT_ID\")|CLOUDFLARE_ACCOUNT_ID = \"$CLOUDFLARE_ACCOUNT_ID\"|" kaggle_push/train_unsloth_lora.py
+            sed -i "s|CLOUDFLARE_API_TOKEN = os.environ.get(\"CLOUDFLARE_API_TOKEN\")|CLOUDFLARE_API_TOKEN = \"$CLOUDFLARE_API_TOKEN\"|" kaggle_push/train_unsloth_lora.py
+            echo "✅ Cloudflare credentials injected into isolated Kaggle script."
+          else
+            echo "⚠️ Cloudflare secrets not set; skipping injection."
+          fi
+          
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
-          kaggle kernels push -p scripts/
+          kaggle kernels push -p kaggle_push/

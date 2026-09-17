@@ -6,6 +6,7 @@ import { matchElderIntent } from '@/lib/intentDictionary';
 import { pruneUITree } from '@/lib/uiPruner';
 import { evaluateMultiStepFlow } from '@/lib/flowEngine';
 import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
+import { validateSemanticTarget } from '@/lib/semanticValidator';
 import { query } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
@@ -275,36 +276,35 @@ ${fewShots}`;
     const rawExplanation = aiResult.text;
 
     const targetMatch = rawExplanation.match(/TARGET:\s*(\d+)/i);
-    let highlightIndex: number | null = null;
+    let rawHighlightIndex: number | null = null;
     let cleanExplanation = rawExplanation;
 
     if (targetMatch) {
-      highlightIndex = parseInt(targetMatch[1], 10);
+      rawHighlightIndex = parseInt(targetMatch[1], 10);
       cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
     }
 
-    // Smart Fallback: If AI model forgot TARGET tag or chose invalid index, match using comprehensive elder intent dictionary
-    if (highlightIndex === null || highlightIndex < 0 || highlightIndex >= ui_elements.length) {
-      const intentMatch = matchElderIntent(question, ui_elements);
-      if (intentMatch.highlightIndex !== null) {
-        highlightIndex = intentMatch.highlightIndex;
-      }
-    }
+    // === METHOD 4: POST-LLM SEMANTIC TARGET VALIDATOR ===
+    // Validates interactive role, filters noise (media/timestamps), and prevents semantic hallucinations
+    const validation = validateSemanticTarget(question, rawHighlightIndex, ui_elements, cleanExplanation);
+    const highlightIndex = validation.validatedIndex;
 
     const resultData = {
       explanation: cleanExplanation,
       highlight_index: highlightIndex,
-      source: aiResult.source,
+      source: validation.status === 'recovered_intent' || validation.status === 'recovered_role' ? 'validated_fallback' : aiResult.source,
       model_used: aiResult.modelUsed
     };
 
-    // Cache successful AI response for 7 days (604,800 seconds)
-    await cacheSet(cacheKey, {
-      explanation: cleanExplanation,
-      highlight_index: highlightIndex
-    }, 7 * 86400);
+    // Cache verified AI response for 7 days (prevents poisoning cache with hallucinations)
+    if (validation.isValid) {
+      await cacheSet(cacheKey, {
+        explanation: cleanExplanation,
+        highlight_index: highlightIndex
+      }, 7 * 86400);
+    }
 
-    await logInteraction(highlightIndex, cleanExplanation, aiResult.source, aiResult.modelUsed);
+    await logInteraction(highlightIndex, cleanExplanation, resultData.source, aiResult.modelUsed);
 
     return NextResponse.json({
       success: true,

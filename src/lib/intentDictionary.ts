@@ -618,61 +618,61 @@ export const ELDER_INTENTS: IntentDefinition[] = [
 ];
 
 export const INTENT_HINDI_EXPLANATIONS: Record<string, string> = {
-  video_call: 'वीडियो कॉल करने के लिए यहाँ दिए गए बटन पर दबाएं।',
-  call: 'कॉल लगाने के लिए यहाँ दबाएं।',
-  chat_message: 'मैसेज या चैट करने के लिए यहाँ दबाएं।',
-  voice_message: 'बोलकर संदेश (वॉइस नोट) भेजने के लिए माइक पर दबाएं।',
-  search: 'खोजने (Search) के लिए यहाँ दबाएं।',
-  camera_photo: 'फोटो खींचने या कैमरा खोलने के लिए यहाँ दबाएं।',
-  gallery_media: 'फोटो या गैलरी देखने के लिए यहाँ दबाएं।',
-  play_video_music: 'चलाने (Play) के लिए यहाँ दबाएं।',
-  pause_stop: 'रोकने (Pause/Stop) के लिए यहाँ दबाएं।',
-  order_food_shopping: 'ऑर्डर करने या खरीदने के लिए यहाँ दबाएं।',
-  payment_upi: 'पैसे भेजने या भुगतान (UPI) के लिए यहाँ दबाएं।',
-  recharge_mobile: 'रिचार्ज या बिल भरने के लिए यहाँ दबाएं।',
-  settings_options: 'सेटिंग्स या अन्य विकल्प देखने के लिए यहाँ दबाएं।',
-  delete_remove: 'हटाने या डिलीट (Delete) करने के लिए यहाँ दबाएं।',
-  share_forward: 'शेयर करने या आगे भेजने के लिए यहाँ दबाएं।',
-  add_new: 'नया जोड़ने के लिए यहाँ प्लस (+) बटन पर दबाएं।',
-  status_story: 'स्टेटस (Status) देखने के लिए यहाँ दबाएं।',
-  mic_voice_search: 'बोलकर आवाज़ से सर्च करने के लिए यहाँ माइक पर दबाएं।',
-  back_close: 'पीछे जाने के लिए यहाँ बैक (Back) बटन दबाएं।',
-  download_save: 'डाउनलोड या सेव करने के लिए यहाँ दबाएं।',
-  help_assistance: 'मदद या सहायता पाने के लिए यहाँ दबाएं।',
-  profile_account: 'अपनी प्रोफाइल या खाता देखने के लिए यहाँ दबाएं।',
-  alarm_clock_time: 'अलार्म या समय सेट करने के लिए यहाँ दबाएं।',
-  weather_mausam: 'मौसम की जानकारी देखने के लिए यहाँ दबाएं।',
-  flashlight_torch: 'टॉर्च या रोशनी चालू/बंद करने के लिए यहाँ दबाएं।',
-  train_railway: 'ट्रेन या टिकट की जानकारी के लिए यहाँ दबाएं।',
-  cab_auto_ride: 'गाड़ी या कैब बुक करने के लिए यहाँ दबाएं।',
-  medicine_health: 'दवा या स्वास्थ्य संबंधी जानकारी के लिए यहाँ दबाएं।',
-  battery_power: 'बैटरी की स्थिति देखने के लिए यहाँ दबाएं।',
-  wifi_internet: 'इंटरनेट या वाई-फाई के लिए यहाँ दबाएं।',
-  bluetooth_connect: 'ब्लूटूथ कनेक्ट करने के लिए यहाँ दबाएं।',
-  calculator_math: 'कैलकुलेटर या हिसाब के लिए यहाँ दबाएं।',
-  notes_reminder: 'नोट्स लिखने या याद रखने के लिए यहाँ दबाएं।',
-  news_samachar: 'ताज़ा समाचार पढ़ने के लिए यहाँ दबाएं।',
-  whatsapp_group: 'ग्रुप देखने या खोलने के लिए यहाँ दबाएं।',
-  read_screen_text: 'स्क्रीन की आवाज़ सुनने के लिए यहाँ दबाएं।',
-  zoom_magnify: 'अक्षर बड़े या ज़ूम करने के लिए यहाँ दबाएं।',
-  volume_sound: 'आवाज़ कम या तेज़ करने के लिए यहाँ दबाएं।',
-  mute_silent: 'फोन को साइलेंट या शांत करने के लिए यहाँ दबाएं।',
-  location_map: 'रास्ता या मैप देखने के लिए यहाँ दबाएं।',
-  otp_verification: 'ओटीपी या कोड देखने के लिए यहाँ दबाएं।',
-  block_spam: 'नंबर ब्लॉक करने के लिए यहाँ दबाएं।',
-  brightness_screen: 'स्क्रीन की चमक (Brightness) के लिए यहाँ दबाएं।',
-  notification_alert: 'नोटिफिकेशन देखने के लिए यहाँ घंटी पर दबाएं।',
-  copy_paste: 'कॉपी या पेस्ट करने के लिए यहाँ दबाएं।',
-  update_app: 'ऐप अपडेट करने के लिए यहाँ दबाएं।',
-  call_history_logs: 'हाल की कॉल लिस्ट देखने के लिए यहाँ दबाएं।',
-  contacts_addressbook: 'संपर्क (Contacts) सूची देखने के लिए यहाँ दबाएं।',
-  screenshot_capture: 'स्क्रीनशॉट लेने के लिए यहाँ दबाएं।',
-  language_hindi: 'भाषा बदलने या हिंदी करने के लिए यहाँ दबाएं।',
+  video_call: 'Video call karne ke liye yahan diye gaye button par dabayein.',
+  call: 'Call lagane ke liye yahan dabayein.',
+  chat_message: 'Message ya chat karne ke liye yahan dabayein.',
+  voice_message: 'Bolkar sandesh (voice note) bhejne ke liye mic par dabayein.',
+  search: 'Khojne (Search) ke liye yahan dabayein.',
+  camera_photo: 'Photo khinchne ya camera kholne ke liye yahan dabayein.',
+  gallery_media: 'Photo ya gallery dekhne ke liye yahan dabayein.',
+  play_video_music: 'Chalane (Play) ke liye yahan dabayein.',
+  pause_stop: 'Rokne (Pause/Stop) ke liye yahan dabayein.',
+  order_food_shopping: 'Order karne ya kharidne ke liye yahan dabayein.',
+  payment_upi: 'Paise bhejne ya bhugtan (UPI) ke liye yahan dabayein.',
+  recharge_mobile: 'Recharge ya bill bharne ke liye yahan dabayein.',
+  settings_options: 'Settings ya anya vikalp dekhne ke liye yahan dabayein.',
+  delete_remove: 'Hatane ya delete karne ke liye yahan dabayein.',
+  share_forward: 'Share karne ya aage bhejne ke liye yahan dabayein.',
+  add_new: 'Naya jodne ke liye yahan plus (+) button par dabayein.',
+  status_story: 'Status dekhne ke liye yahan dabayein.',
+  mic_voice_search: 'Bolkar awaaz se search karne ke liye yahan mic par dabayein.',
+  back_close: 'Peeche jaane ke liye yahan back (Back) button dabayein.',
+  download_save: 'Download ya save karne ke liye yahan dabayein.',
+  help_assistance: 'Madad ya sahayata paane ke liye yahan dabayein.',
+  profile_account: 'Apni profile ya khata dekhne ke liye yahan dabayein.',
+  alarm_clock_time: 'Alarm ya samay set karne ke liye yahan dabayein.',
+  weather_mausam: 'Mausam ki jankari dekhne ke liye yahan dabayein.',
+  flashlight_torch: 'Torch ya roshni chalu/band karne ke liye yahan dabayein.',
+  train_railway: 'Train ya ticket ki jankari ke liye yahan dabayein.',
+  cab_auto_ride: 'Gaadi ya cab book karne ke liye yahan dabayein.',
+  medicine_health: 'Dawa ya swasthya sambandhi jankari ke liye yahan dabayein.',
+  battery_power: 'Battery ki sthiti dekhne ke liye yahan dabayein.',
+  wifi_internet: 'Internet ya Wi-Fi ke liye yahan dabayein.',
+  bluetooth_connect: 'Bluetooth connect karne ke liye yahan dabayein.',
+  calculator_math: 'Calculator ya hisab ke liye yahan dabayein.',
+  notes_reminder: 'Notes likhne ya yaad rakhne ke liye yahan dabayein.',
+  news_samachar: 'Taaza samachar padhne ke liye yahan dabayein.',
+  whatsapp_group: 'Group dekhne ya kholne ke liye yahan dabayein.',
+  read_screen_text: 'Screen ki awaaz sunne ke liye yahan dabayein.',
+  zoom_magnify: 'Akshar bade ya zoom karne ke liye yahan dabayein.',
+  volume_sound: 'Awaaz kam ya tez karne ke liye yahan dabayein.',
+  mute_silent: 'Phone ko silent ya shant karne ke liye yahan dabayein.',
+  location_map: 'Raasta ya map dekhne ke liye yahan dabayein.',
+  otp_verification: 'OTP ya code dekhne ke liye yahan dabayein.',
+  block_spam: 'Number block karne ke liye yahan dabayein.',
+  brightness_screen: 'Screen ki chamak (Brightness) ke liye yahan dabayein.',
+  notification_alert: 'Notification dekhne ke liye yahan ghanti par dabayein.',
+  copy_paste: 'Copy ya paste karne ke liye yahan dabayein.',
+  update_app: 'App update karne ke liye yahan dabayein.',
+  call_history_logs: 'Haal ki call list dekhne ke liye yahan dabayein.',
+  contacts_addressbook: 'Sampark (Contacts) suchi dekhne ke liye yahan dabayein.',
+  screenshot_capture: 'Screenshot lene ke liye yahan dabayein.',
+  language_hindi: 'Bhasha badalne ya Hindi karne ke liye yahan dabayein.',
 };
 
 export function getIntentExplanation(intent: IntentDefinition | null): string {
-  if (!intent) return 'आगे बढ़ने के लिए यहाँ दिए गए बटन पर दबाएं।';
-  return INTENT_HINDI_EXPLANATIONS[intent.id] || `${intent.name} के लिए यहाँ दबाएं।`;
+  if (!intent) return 'Aage badhne ke liye yahan diye gaye button par dabayein.';
+  return INTENT_HINDI_EXPLANATIONS[intent.id] || `${intent.name} ke liye yahan dabayein.`;
 }
 
 /**
@@ -693,24 +693,45 @@ export function matchElderIntent(
            /(?:^|\]\s*)[📹🎥📞📱]\s*/i.test(txt.trim());
   };
 
+  // If the user is asking a question (how, what, where, kaise, kahan), bypass fast-path and let the LLM explain it.
+  const isQuestion = /\b(kaise|kahan|kaha|kya|kyu|kaun|how|what|where|why|who)\b/i.test(qLower);
+  if (isQuestion) {
+    return { highlightIndex: null, matchedIntent: null, explanation: '' };
+  }
+
   // Find all intents triggered by the user's question, sorted by longest matched pattern (most specific wins)
   const matchingIntents = ELDER_INTENTS
     .map((intent) => {
       const longestMatch = intent.queryPatterns
-        .filter((pattern) => qLower.includes(pattern))
+        .filter((pattern) => {
+          const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
+          return regex.test(qLower) || qLower === pattern;
+        })
         .sort((a, b) => b.length - a.length)[0];
-      return { intent, matchLength: longestMatch ? longestMatch.length : 0 };
+      return { intent, matchLength: longestMatch ? longestMatch.length : 0, matchedText: longestMatch || '' };
     })
     .filter((m) => m.matchLength > 0)
-    .sort((a, b) => b.matchLength - a.matchLength)
-    .map((m) => m.intent);
+    .sort((a, b) => b.matchLength - a.matchLength);
 
-  if (matchingIntents.length === 0) {
-    return { highlightIndex: null, matchedIntent: null, explanation: 'स्क्रीन पर दिए गए विकल्पों को ध्यान से देखें।' };
+  // Anti-Overmatching Guard: If the user's query is long (complex) but the best intent match is just a single short word, bypass fast-path.
+  // This prevents "wallpaper par bhagwan ki photo lagao" from triggering camera_photo intent just because of the word "photo".
+  if (matchingIntents.length > 0) {
+    const bestMatch = matchingIntents[0];
+    const wordCount = qLower.split(/[\s,.?!]+/).filter(w => w.length > 0).length;
+    if (wordCount > 4 && bestMatch.matchLength <= 6 && !bestMatch.matchedText.includes(' ')) {
+      return { highlightIndex: null, matchedIntent: null, explanation: '' };
+    }
+  }
+
+  const sortedIntents = matchingIntents.map((m) => m.intent);
+
+  if (sortedIntents.length === 0) {
+    return { highlightIndex: null, matchedIntent: null, explanation: 'Screen par diye gaye vikalpon ko dhyan se dekhein.' };
   }
 
   // Pass 1: Prioritize actionable elements ([BUTTON], [INPUT], [TOGGLE])
-  for (const intent of matchingIntents) {
+  for (const intent of sortedIntents) {
     for (let i = 0; i < uiElements.length; i++) {
       const elLower = uiElements[i].toLowerCase();
       if (isNoise(elLower)) continue;
@@ -730,7 +751,7 @@ export function matchElderIntent(
   }
 
   // Pass 2: Fallback to any element (strictly excluding static [TEXT] if user asked for an action)
-  for (const intent of matchingIntents) {
+  for (const intent of sortedIntents) {
     for (let i = 0; i < uiElements.length; i++) {
       const elLower = uiElements[i].toLowerCase();
       if (isNoise(elLower)) continue;
@@ -748,7 +769,7 @@ export function matchElderIntent(
 
   return {
     highlightIndex: null,
-    matchedIntent: matchingIntents[0],
-    explanation: getIntentExplanation(matchingIntents[0])
+    matchedIntent: sortedIntents[0],
+    explanation: getIntentExplanation(sortedIntents[0])
   };
 }

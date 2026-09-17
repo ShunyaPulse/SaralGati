@@ -20,12 +20,12 @@ The user is currently looking at an app with package name: ${app_package}.
 Here are the text elements visible on their screen:
 ${ui_elements.join(' | ')}
 
-Explain this screen to the elder in 1 or 2 very simple Hindi sentences. 
-Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hindi sentence.`;
+Explain this screen to the elder in 1 or 2 very simple Hinglish (Hindi written in English script) sentences. 
+Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hinglish sentence.`;
 
     const aiResult = await generateAIResponse({
       systemPrompt,
-      userPrompt: 'इस स्क्रीन के बारे में समझाओ और बताओ मुझे क्या करना चाहिए।'
+      userPrompt: 'Is screen ke baare mein samjhao aur batao mujhe kya karna chahiye.'
     });
 
     return NextResponse.json({

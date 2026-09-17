@@ -37,7 +37,10 @@ export async function POST(req: NextRequest) {
     }>(
       `UPDATE model_interactions
        SET feedback_status = $1,
-           actual_tapped_index = $2,
+           actual_tapped_index = CASE 
+               WHEN $1 = 'verified' THEN suggested_index 
+               ELSE COALESCE($2, actual_tapped_index) 
+           END,
            updated_at = NOW()
        WHERE id = $3
        RETURNING id, app_package, screen_hash, question, suggested_index, explanation`,
@@ -99,7 +102,7 @@ export async function POST(req: NextRequest) {
 
         // Immediate Invalidation / Eviction:
         // Evict if 2 consecutive rejections OR negative trust score OR unreconciled rejection
-        if (consecutiveRejections >= 2 || trustScore <= 0 || rejectionCount >= 2) {
+        if (consecutiveRejections >= 2 || trustScore < 0 || rejectionCount >= 2) {
           await redis.del(cacheKey);
           evicted = true;
         } else {

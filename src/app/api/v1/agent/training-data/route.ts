@@ -45,7 +45,7 @@ Here are the numbered interactive elements on their screen:
 ${formattedElements}
 
 Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
+1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
 2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).
 3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] or preview count noise.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end.`;
@@ -136,7 +136,7 @@ Here are the numbered interactive elements on their screen:
 ${formattedElements}
 
 Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
+1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
 2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).
 3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] or preview count noise.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end.`;

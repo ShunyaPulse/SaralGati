@@ -123,14 +123,14 @@ export async function POST(req: NextRequest) {
         let idx = findUIIndex(['video call', 'वीडियो कॉल', 'video_call']);
         if (idx !== -1) {
           fpIndex = idx;
-          fpExplanation = 'वीडियो कॉल करने के लिए यहाँ वीडियो कॉल बटन पर दबाएं।';
+          fpExplanation = 'Video call karne ke liye yahan video call button par dabayein.';
           fpMatch = true;
         } else {
           // 2. On main screen, direct to Calls tab on bottom navigation bar
           idx = findUIIndex(['calls', 'कॉल', 'call']);
           if (idx !== -1) {
             fpIndex = idx;
-            fpExplanation = 'वीडियो या ऑडियो कॉल लगाने के लिए नीचे Calls (कॉल) पर दबाएं, या जिस व्यक्ति से बात करनी है उनकी चैट खोलें।';
+            fpExplanation = 'Video ya audio call lagane ke liye niche Calls par dabayein, ya jis vyakti se baat karni hai unki chat kholein.';
             fpMatch = true;
           }
         }
@@ -138,70 +138,70 @@ export async function POST(req: NextRequest) {
         let idx = findUIIndex(['audio call', 'voice call', 'कॉल']);
         if (idx !== -1) {
           fpIndex = idx;
-          fpExplanation = 'कॉल करने के लिए यहाँ दबाएं।';
+          fpExplanation = 'Call karne ke liye yahan dabayein.';
           fpMatch = true;
         } else {
           idx = findUIIndex(['calls', 'call', 'कॉल']);
           if (idx !== -1) {
             fpIndex = idx;
-            fpExplanation = 'कॉल लगाने के लिए नीचे Calls (कॉल) पर दबाएं, या किसी की चैट खोलें।';
+            fpExplanation = 'Call lagane ke liye niche Calls par dabayein, ya kisi ki chat kholein.';
             fpMatch = true;
           }
         }
       } else if (questionLower.includes('status') || questionLower.includes('स्टेटस') || questionLower.includes('update')) {
         fpIndex = findUIIndex(['updates', 'status', 'स्टेटस', 'update']);
-        if (fpIndex !== -1) { fpExplanation = 'स्टेटस (Updates) देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Status (Updates) dekhne ke liye yahan dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('message') || questionLower.includes('chat') || questionLower.includes('मैसेज') || questionLower.includes('new')) {
         fpIndex = findUIIndex(['message', 'chat', 'new', 'मैसेज', 'नया']);
-        if (fpIndex !== -1) { fpExplanation = 'नया मैसेज भेजने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Naya message bhejne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('dialer')) {
       if (questionLower.includes('call') || questionLower.includes('कॉल') || questionLower.includes('phone') || questionLower.includes('फोन') || questionLower.includes('dial')) {
         fpIndex = findUIIndex(['keypad', 'dialpad', 'dial', 'कॉल', 'key']);
-        if (fpIndex !== -1) { fpExplanation = 'नंबर डायल करने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Number dial karne ke liye yahan dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('contact') || questionLower.includes('संपर्क')) {
         fpIndex = findUIIndex(['contact', 'संपर्क']);
-        if (fpIndex !== -1) { fpExplanation = 'संपर्क देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Sampark (Contacts) dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('facebook') || app_package.includes('katana')) {
       if (questionLower.includes('photo') || questionLower.includes('फोटो') || questionLower.includes('post') || questionLower.includes('पोस्ट') || questionLower.includes('mind')) {
         fpIndex = findUIIndex(['photo', 'फोटो', 'post', 'mind', 'create']);
-        if (fpIndex !== -1) { fpExplanation = 'फोटो या पोस्ट डालने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Photo ya post daalne ke liye yahan dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('video') || questionLower.includes('watch')) {
         fpIndex = findUIIndex(['video', 'watch', 'वीडियो']);
-        if (fpIndex !== -1) { fpExplanation = 'वीडियो देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Video dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('youtube')) {
       if (questionLower.includes('search') || questionLower.includes('खोज') || questionLower.includes('dhoondh')) {
         fpIndex = findUIIndex(['search', 'खोज']);
-        if (fpIndex !== -1) { fpExplanation = 'वीडियो खोजने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Video khojne ke liye yahan dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('shorts')) {
         fpIndex = findUIIndex(['shorts']);
-        if (fpIndex !== -1) { fpExplanation = 'शॉर्ट्स (Shorts) देखने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Shorts dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('photos') || app_package.includes('gallery')) {
       if (questionLower.includes('share') || questionLower.includes('bhejo') || questionLower.includes('शेयर')) {
         fpIndex = findUIIndex(['share', 'शेयर', 'send']);
-        if (fpIndex !== -1) { fpExplanation = 'इस फोटो को किसी को भेजने के लिए यहाँ शेयर दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Is photo ko kisi ko bhejne ke liye yahan share dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('delete') || questionLower.includes('hatao') || questionLower.includes('डिलीट')) {
         fpIndex = findUIIndex(['delete', 'trash', 'डिलीट']);
-        if (fpIndex !== -1) { fpExplanation = 'इस फोटो को डिलीट करने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Is photo ko delete karne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('messaging') || app_package.includes('sms')) {
       if (questionLower.includes('message') || questionLower.includes('sms') || questionLower.includes('मैसेज')) {
         fpIndex = findUIIndex(['start chat', 'new message', 'नया संदेश']);
-        if (fpIndex !== -1) { fpExplanation = 'नया मैसेज भेजने के लिए यहाँ क्लिक करें।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Naya message bhejne ke liye yahan click karein.'; fpMatch = true; }
       } else if (questionLower.includes('otp') || questionLower.includes('code')) {
         fpIndex = findUIIndex(['unread', 'otp', 'message']);
-        if (fpIndex !== -1) { fpExplanation = 'अपना मैसेज या OTP पढ़ने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Apna message ya OTP padhne ke liye yahan dabayein.'; fpMatch = true; }
       }
     } else if (app_package.includes('contacts')) {
       if (questionLower.includes('add') || questionLower.includes('naya') || questionLower.includes('नया')) {
         fpIndex = findUIIndex(['add', 'new', 'create', 'प्लस']);
-        if (fpIndex !== -1) { fpExplanation = 'नया नंबर सेव करने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Naya number save karne ke liye yahan dabayein.'; fpMatch = true; }
       } else if (questionLower.includes('search') || questionLower.includes('khoj')) {
         fpIndex = findUIIndex(['search', 'खोज']);
-        if (fpIndex !== -1) { fpExplanation = 'किसी का नंबर खोजने के लिए यहाँ दबाएं।'; fpMatch = true; }
+        if (fpIndex !== -1) { fpExplanation = 'Kisi ka number khojne ke liye yahan dabayein.'; fpMatch = true; }
       }
     }
 
@@ -264,7 +264,7 @@ Here are the numbered interactive elements on their screen:
 ${formattedElements}
 
 Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.
+1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
 2. Elements on screen are prefixed with their role:
    - [BUTTON]: Clickable button or icon that can be tapped.
    - [INPUT]: Text input box for typing.
@@ -273,7 +273,7 @@ Instructions:
 3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
 5. If no specific element needs to be tapped, do NOT output any TARGET tag.
-6. Do not mention that you are an AI. Only output the Hindi sentence.
+6. Do not mention that you are an AI. Only output the Hinglish sentence.
 
 Few-shot Grounding Examples:
 ${fewShots}`;

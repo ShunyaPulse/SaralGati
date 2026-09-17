@@ -109,7 +109,11 @@ export function validateSemanticTarget(
 
   // 4. Semantic Alignment Check: Match question intent against target element
   const triggeredIntents = ELDER_INTENTS.filter((intent) =>
-    intent.queryPatterns.some((pattern) => qLower.includes(pattern))
+    intent.queryPatterns.some((pattern) => {
+      const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
+      return regex.test(qLower) || qLower === pattern;
+    })
   );
 
   if (triggeredIntents.length > 0) {

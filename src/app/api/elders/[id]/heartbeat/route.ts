@@ -2,12 +2,19 @@ import { NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
 import { invalidatePattern } from '@/lib/redis';
 
+import { validateDeviceToken } from '@/lib/agent-auth';
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await validateDeviceToken(request);
     const { id: elderId } = await params;
+    
+    if (!auth.isAuthenticated || auth.elderId !== elderId) {
+      return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
+    }
     
     // For the mobile companion app, it sends a simple JSON body
     const body = await request.json();

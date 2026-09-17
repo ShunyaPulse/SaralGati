@@ -1,4 +1,4 @@
-﻿import { ELDER_INTENTS } from './intentDictionary';
+import { ELDER_INTENTS } from './intentDictionary';
 import { isNoiseElement } from './semanticValidator';
 
 export interface ConfidenceScore {
@@ -77,7 +77,11 @@ export function scoreOutputConfidence(
     // 4. Intent Semantic Alignment Check
     const qLower = question.toLowerCase();
     const matchingIntents = ELDER_INTENTS.filter((intent) =>
-      intent.queryPatterns.some((p) => qLower.includes(p))
+      intent.queryPatterns.some((pattern) => {
+        const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
+        return regex.test(qLower) || qLower === pattern;
+      })
     );
 
     if (matchingIntents.length > 0) {
@@ -105,7 +109,7 @@ export function scoreOutputConfidence(
     const commonActionVerbs = ['कॉल', 'दबाएं', 'भेजें', 'खोजें', 'पे', 'pay', 'call', 'search'];
     if (commonActionVerbs.some((v) => cleanExplanation.includes(v))) {
       score += 10;
-      reasons.push('Explanation contains clear Hindi action instruction (+10)');
+      reasons.push('Explanation contains clear Hinglish action instruction (+10)');
     }
   } else {
     score = 50;

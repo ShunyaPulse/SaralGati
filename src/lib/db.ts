@@ -24,6 +24,21 @@ export async function queryOne<T = any>(text: string, params?: unknown[]): Promi
   return rows.length > 0 ? rows[0] : null;
 }
 
+export async function transaction<T>(callback: (client: any) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await callback(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function checkConnection(): Promise<boolean> {
   try {
     await query('SELECT 1');

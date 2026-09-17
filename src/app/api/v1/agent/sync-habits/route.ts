@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateDeviceToken } from '@/lib/agent-auth';
-import { query, queryOne } from '@/lib/db';
+import { query, queryOne, transaction } from '@/lib/db';
 import { cacheDelete, invalidatePattern } from '@/lib/redis';
 import { syncHabitsSchema } from '@/lib/validations';
 
@@ -37,24 +37,29 @@ export async function POST(request: Request) {
 
     // Process habits
     let syncedCount = 0;
-    for (const habit of validatedData.habits) {
-      // Extract generic habit type
-      const ruleType = habit.type;
-      
-      // We will just store the entire payload in the rule_payload JSONB field
-      // with a default confidence
-      await queryOne(`
-        INSERT INTO habit_rules (
-          elder_id, rule_type, rule_payload, confidence, updated_at
-        ) VALUES ($1, $2, $3, $4, NOW())
-      `, [
-        elderId,
-        ruleType,
-        habit.payload ? JSON.stringify(habit.payload) : '{}',
-        0.8 // default confidence
-      ]);
-      syncedCount++;
-    }
+    
+    await transaction(async (client) => {
+      // Clear old habits before syncing to prevent duplicate explosion
+      await client.query('DELETE FROM habit_rules WHERE elder_id = $1', [elderId]);
+      for (const habit of validatedData.habits) {
+        // Extract generic habit type
+        const ruleType = habit.type;
+        
+        // We will just store the entire payload in the rule_payload JSONB field
+        // with a default confidence
+        await client.query(`
+          INSERT INTO habit_rules (
+            elder_id, rule_type, rule_payload, confidence, updated_at
+          ) VALUES ($1, $2, $3, $4, NOW())
+        `, [
+          elderId,
+          ruleType,
+          habit.payload ? JSON.stringify(habit.payload) : '{}',
+          0.8 // default confidence
+        ]);
+        syncedCount++;
+      }
+    });
 
     // Update elder profile with battery and heartbeat
     await queryOne(`

@@ -13,7 +13,10 @@ const NOISE_REGEXES = [
   /\b(yesterday|today|tomorrow)\b/i,
   /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i,
   /\b(am|pm)\b/i,
-  /\b(sent|delivered|read)\b/i
+  /\b(sent|delivered|read|typing\.\.\.|online|last seen)\b/i,
+  // Global message preview/subtitle noise (e.g. "📹 Video call", "Missed video call", "Audio call")
+  /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i,
+  /^[📹🎥📞📱]\s*/i
 ];
 
 function cleanElementText(text: string): string {

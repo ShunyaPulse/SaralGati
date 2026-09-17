@@ -35,3 +35,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# IDE
+.idea/
+*.iml
+
+# Python
+__pycache__/
+*.pyc
+
+# Local scripts
+test_batch.js
+qa-test.mjs
+scripts/__pycache__/

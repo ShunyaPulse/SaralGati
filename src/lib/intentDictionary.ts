@@ -688,7 +688,9 @@ export function matchElderIntent(
 
   const isNoise = (txt: string) => {
     return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(txt) ||
-           /\b(yesterday|am|pm|today)\b/i.test(txt);
+           /\b(yesterday|am|pm|today)\b/i.test(txt) ||
+           /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)\s*$/i.test(txt.trim()) ||
+           /^[📹🎥📞📱]\s*/i.test(txt.trim());
   };
 
   // Find all intents triggered by the user's question
@@ -720,13 +722,17 @@ export function matchElderIntent(
     }
   }
 
-  // Pass 2: Fallback to any element including [TEXT] if no actionable button matched
+  // Pass 2: Fallback to any element (strictly excluding static [TEXT] if user asked for an action)
   for (const intent of matchingIntents) {
     for (let i = 0; i < uiElements.length; i++) {
       const elLower = uiElements[i].toLowerCase();
       if (isNoise(elLower)) continue;
 
       const clean = elLower.replace(/^\[below-fold\]\s*/i, '');
+      // Never fallback to [TEXT] for call or action intents to avoid highlighting message snippets!
+      if (clean.startsWith('[text]') && (intent.id === 'call' || intent.id === 'video_call' || intent.id === 'payment_upi')) {
+        continue;
+      }
       if (intent.elementKeywords.some((keyword) => clean.includes(keyword))) {
         return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent) };
       }

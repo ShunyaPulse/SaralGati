@@ -14,7 +14,9 @@ export function isNoiseUIElement(text: string): boolean {
     /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(text) ||
     /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(text) ||
     /\b(\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b/i.test(text) ||
-    /^(am|pm|ok|yes|no)$/i.test(text.trim())
+    /^(am|pm|ok|yes|no)$/i.test(text.trim()) ||
+    /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i.test(text.trim()) ||
+    /^[📹🎥📞📱]\s*/i.test(text.trim())
   );
 }
 

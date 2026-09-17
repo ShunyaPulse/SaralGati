@@ -301,18 +301,25 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                lower.contains("photos")
     }
 
-    private fun findScrollableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+    private fun findScrollableNode(node: AccessibilityNodeInfo?, needBackward: Boolean = false): AccessibilityNodeInfo? {
         if (node == null) return null
         if (node.isScrollable) {
-            val hasForward = node.actionList.any {
-                it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ||
-                it.id == android.R.id.accessibilityActionScrollDown
+            val hasAction = if (needBackward) {
+                node.actionList.any {
+                    it.id == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ||
+                    it.id == android.R.id.accessibilityActionScrollUp
+                }
+            } else {
+                node.actionList.any {
+                    it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ||
+                    it.id == android.R.id.accessibilityActionScrollDown
+                }
             }
-            if (hasForward) return node
+            if (hasAction) return node
         }
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            val found = findScrollableNode(child)
+            val found = findScrollableNode(child, needBackward)
             if (found != null) return found
             child.recycle()
         }
@@ -346,7 +353,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // Guardrail 2: Check if there is an active scrollable container
-        val scrollableNode = findScrollableNode(rootNode) ?: return
+        val scrollableNode = findScrollableNode(rootNode, needBackward = false) ?: return
 
         try {
             // Perform 1 Controlled Peek Scroll
@@ -373,9 +380,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     }
 
                     // IMMEDIATE RESTORE: Scroll back to the top so user's screen is 100% untouched!
-                    val restoreScrollNode = findScrollableNode(freshRoot)
+                    val restoreScrollNode = findScrollableNode(freshRoot, needBackward = true) ?: findScrollableNode(freshRoot, needBackward = false)
                     restoreScrollNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
-                    kotlinx.coroutines.delay(150)
+                    kotlinx.coroutines.delay(200)
                     freshRoot.recycle()
                 }
             }
@@ -478,37 +485,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeAppPackage = appPackage
                         activeWindowClassName = rootNode.className?.toString()
                         activeElementBounds = elementBounds.toList()
-                        
-                        val isBelowFold = highlightIndex in belowFoldFlags.indices && belowFoldFlags[highlightIndex]
-                        if (isBelowFold) {
-                            // Element was detected below the fold: smoothly scroll down so elder can see the highlight box
-                            val curRoot = rootInActiveWindow
-                            val scrollDownNode = findScrollableNode(curRoot)
-                            scrollDownNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
-                            kotlinx.coroutines.delay(250)
-                            curRoot?.recycle()
-
-                            val afterScrollRoot = rootInActiveWindow
-                            if (afterScrollRoot != null) {
-                                val freshElements = mutableListOf<String>()
-                                val freshBounds = mutableListOf<android.graphics.Rect>()
-                                traverseNode(afterScrollRoot, freshElements, freshBounds)
-
-                                val rawTargetLabel = elements.getOrNull(highlightIndex)?.replace(Regex("^\\[BELOW-FOLD\\]\\s*"), "")?.trim()
-                                val matchedIdx = freshElements.indexOfFirst { it.trim() == rawTargetLabel }
-                                val cueBounds = if (matchedIdx != -1 && matchedIdx in freshBounds.indices) {
-                                    freshBounds[matchedIdx]
-                                } else {
-                                    elementBounds[highlightIndex]
-                                }
-                                broadcastVisualCue(cueBounds)
-                                afterScrollRoot.recycle()
-                            } else {
-                                broadcastVisualCue(elementBounds[highlightIndex])
-                            }
-                        } else {
-                            broadcastVisualCue(elementBounds[highlightIndex])
-                        }
+                        // Keep screen rock-solid stable: do not force scroll down on elder's live screen
+                        broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
                         activeInteractionId = null
                         activeHighlightedBounds = null
@@ -597,7 +575,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             className.contains("Switch", ignoreCase = true) ||
             className.contains("RadioButton", ignoreCase = true) -> "[TOGGLE]"
             className.contains("Button", ignoreCase = true) ||
-            (className.contains("ImageView", ignoreCase = true) && isClickable) ||
+            (className.contains("ImageView", ignoreCase = true) && isClickable) -> "[BUTTON]"
+            // If it's a TextView or plain text header, keep it as [TEXT] to prevent targeting section titles
+            className.contains("TextView", ignoreCase = true) -> "[TEXT]"
             isClickable -> "[BUTTON]"
             else -> "[TEXT]"
         }

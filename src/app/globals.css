@@ -39,3 +39,7 @@
     @apply bg-gradient-to-r from-care-500 to-care-700;
   }
 }
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

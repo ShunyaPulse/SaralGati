@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Copy, Check, Download, Smartphone, RefreshCw, AlertCircle } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface PairingModalProps {
   elderId: string;
@@ -79,7 +80,8 @@ export function PairingModal({ elderId, elderName, isOpen, onClose }: PairingMod
     if (!token) return;
     navigator.clipboard.writeText(token);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    toast.success('Token copied to clipboard!');
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Inter, Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/providers/session-provider";
+import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const notoSansDevanagari = Noto_Sans_Devanagari({
@@ -35,10 +37,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${notoSansDevanagari.variable} font-sans`}>
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+      <body className={`${inter.variable} ${notoSansDevanagari.variable} font-sans overflow-x-hidden`}>
+        <SmoothScrollProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </SmoothScrollProvider>
+        <Toaster position="top-center" richColors theme="light" />
       </body>
     </html>
   );

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useElderStore } from '@/stores/elder-store';
 import { Smartphone, Copy, Check, ShieldAlert, Key, User } from 'lucide-react';
+import { toast } from 'sonner';
 
 export default function SettingsPage() {
   const { data: session } = useSession();
@@ -33,12 +34,13 @@ export default function SettingsPage() {
       if (data.success && data.token) {
         setDeviceToken(data.token);
         setCopied(false);
+        toast.success('Device token generated successfully');
       } else {
-        alert(data.error || 'Failed to generate token');
+        toast.error(data.error || 'Failed to generate token');
       }
     } catch (error) {
       console.error('Error generating token:', error);
-      alert('An unexpected error occurred');
+      toast.error('An unexpected error occurred');
     } finally {
       setIsGenerating(false);
     }

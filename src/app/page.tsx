@@ -136,9 +136,10 @@ export default function Home() {
                 </FadeUp>
               </div>
 
-              {/* phone stack */}
-              <FadeIn delay={0.4} className="relative hidden lg:flex items-center justify-center">
-                <div className="relative">
+              {/* Phone Showcase */}
+              <FadeIn delay={0.4} className="relative w-full mt-8 lg:mt-0">
+                {/* Desktop: Overlapping stack */}
+                <div className="hidden lg:flex relative items-center justify-center">
                   <div className="absolute -left-12 top-8 -rotate-6 opacity-70 scale-90">
                     <PhoneFrame src="/images/screenshot-youtube.jpg" alt="YouTube Music screen with SaralGati search highlight" />
                   </div>
@@ -149,11 +150,19 @@ export default function Home() {
                     <PhoneFrame src="/images/screenshot-contacts.jpg" alt="Contacts screen with SaralGati visual highlight on missed call" />
                   </div>
                 </div>
-              </FadeIn>
 
-              {/* mobile: single phone */}
-              <FadeIn delay={0.3} className="flex lg:hidden justify-center">
-                <PhoneFrame src="/images/screenshot-phonepe.jpg" alt="PhonePe with SaralGati overlay" />
+                {/* Mobile: Horizontal scroll snap */}
+                <div className="flex lg:hidden overflow-x-auto snap-x snap-mandatory gap-6 pb-8 pt-4 px-4 -mx-4 no-scrollbar">
+                  <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                    <PhoneFrame src="/images/screenshot-phonepe.jpg" alt="PhonePe with SaralGati overlay" />
+                  </div>
+                  <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                    <PhoneFrame src="/images/screenshot-youtube.jpg" alt="YouTube with SaralGati overlay" />
+                  </div>
+                  <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                    <PhoneFrame src="/images/screenshot-contacts.jpg" alt="Contacts with SaralGati overlay" />
+                  </div>
+                </div>
               </FadeIn>
             </div>
           </div>

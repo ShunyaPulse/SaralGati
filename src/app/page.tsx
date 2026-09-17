@@ -401,7 +401,7 @@ export default function Home() {
                 {
                   icon: EyeOff,
                   title: 'No Screen Recordings',
-                  desc: 'SaralGati never records your screen or saves personal photos and chats. Everything stays on the device.',
+                  desc: 'SaralGati never records your screen or saves personal photos and chats. Only anonymized button labels needed for live guidance are processed securely in real-time.'
                 },
                 {
                   icon: Lock,

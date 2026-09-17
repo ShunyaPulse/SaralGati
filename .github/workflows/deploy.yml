@@ -1,6 +1,17 @@
 name: Deploy to Cloud Run
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.*'
+      - 'Dockerfile'
+      - '.dockerignore'
   workflow_dispatch:
 
 env:

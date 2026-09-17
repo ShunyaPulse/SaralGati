@@ -689,14 +689,21 @@ export function matchElderIntent(
   const isNoise = (txt: string) => {
     return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(txt) ||
            /\b(yesterday|am|pm|today)\b/i.test(txt) ||
-           /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)\s*$/i.test(txt.trim()) ||
-           /^[📹🎥📞📱]\s*/i.test(txt.trim());
+           /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)\s*$/i.test(txt.trim()) ||
+           /(?:^|\]\s*)[📹🎥📞📱]\s*/i.test(txt.trim());
   };
 
-  // Find all intents triggered by the user's question
-  const matchingIntents = ELDER_INTENTS.filter((intent) =>
-    intent.queryPatterns.some((pattern) => qLower.includes(pattern))
-  );
+  // Find all intents triggered by the user's question, sorted by longest matched pattern (most specific wins)
+  const matchingIntents = ELDER_INTENTS
+    .map((intent) => {
+      const longestMatch = intent.queryPatterns
+        .filter((pattern) => qLower.includes(pattern))
+        .sort((a, b) => b.length - a.length)[0];
+      return { intent, matchLength: longestMatch ? longestMatch.length : 0 };
+    })
+    .filter((m) => m.matchLength > 0)
+    .sort((a, b) => b.matchLength - a.matchLength)
+    .map((m) => m.intent);
 
   if (matchingIntents.length === 0) {
     return { highlightIndex: null, matchedIntent: null, explanation: 'स्क्रीन पर दिए गए विकल्पों को ध्यान से देखें।' };

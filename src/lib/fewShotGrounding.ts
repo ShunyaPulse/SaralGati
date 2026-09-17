@@ -1,4 +1,4 @@
-﻿export interface FewShotExample {
+export interface FewShotExample {
   id: number;
   appPackage: string;
   category: string;
@@ -324,16 +324,19 @@ export function formatRelevantFewShots(
   const qLower = (question || '').toLowerCase();
   const pkgLower = (appPackage || '').toLowerCase();
 
+  // Hinglish stop-words to prevent artificial score inflation
+  const STOP_WORDS = new Set(['hai', 'hain', 'karo', 'kaise', 'karni', 'karna', 'mein', 'par', 'aur', 'wala', 'wali', 'kya', 'the', 'for', 'and', 'how', 'this', 'that']);
+
   // Score each few-shot example based on relevance
   const scored = CRISP_FEW_SHOT_EXAMPLES.map((ex) => {
     let score = 0;
     if (pkgLower && (ex.appPackage.includes(pkgLower) || pkgLower.includes(ex.appPackage))) {
       score += 10;
     }
-    // Check keyword overlap
+    // Check keyword overlap (ignoring common stop-words)
     const exWords = ex.question.toLowerCase().split(/\s+/);
     for (const w of exWords) {
-      if (w.length >= 3 && qLower.includes(w)) {
+      if (w.length >= 3 && !STOP_WORDS.has(w) && qLower.includes(w)) {
         score += 3;
       }
     }

@@ -14,9 +14,9 @@ export function isNoiseUIElement(text: string): boolean {
     /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(text) ||
     /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(text) ||
     /\b(\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b/i.test(text) ||
-    /^(am|pm|ok|yes|no)$/i.test(text.trim()) ||
-    /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i.test(text.trim()) ||
-    /^[📹🎥📞📱]\s*/i.test(text.trim())
+    /^(am|pm)$/i.test(text.trim()) ||
+    /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i.test(text.trim()) ||
+    /(?:^|\]\s*)[📹🎥📞📱]\s*/i.test(text.trim())
   );
 }
 
@@ -43,18 +43,13 @@ export function pruneUITree(
     if (!trimmed) return;
 
     const cleanRole = trimmed.replace(/^\[BELOW-FOLD\]\s*/i, '');
-    const isActionable =
-      cleanRole.startsWith('[BUTTON]') ||
-      cleanRole.startsWith('[INPUT]') ||
-      cleanRole.startsWith('[TOGGLE]');
+    const isActionable = /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(cleanRole);
 
     const lower = trimmed.toLowerCase();
 
-    // 1. Actionable buttons, inputs, toggles:
+    // 1. Actionable buttons, inputs, toggles: ALWAYS keep (never prune buttons like OK, Yes, No)
     if (isActionable) {
-      if (!isNoiseUIElement(lower)) {
-        kept.push(`[${idx}] ${trimmed}`);
-      }
+      kept.push(`[${idx}] ${trimmed}`);
       return;
     }
 

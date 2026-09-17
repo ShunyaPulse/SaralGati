@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
     }
 
     const interactionId = crypto.randomUUID();
-    const normalizedElements = ui_elements.map((el: string) => el.trim().toLowerCase()).join('|');
+    const normalizedElements = ui_elements.map((el: string) =>
+      el.trim().toLowerCase().replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, '').replace(/\b\d+%/g, '').replace(/\\(\d+\s*(unread|new)\\)/gi, '').trim()
+    ).join('|');
     const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
 
     const logInteraction = async (suggestedIndex: number | null, explanation: string, source: string, modelUsed?: string) => {
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
     // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
     const flowResult = await evaluateMultiStepFlow(elder_id, question, ui_elements);
     if (flowResult && flowResult.isFlowActive && typeof flowResult.highlightIndex === 'number' && flowResult.highlightIndex >= 0) {
-      await logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId);
+      logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId).catch(() => {});
       return NextResponse.json({
         success: true,
         data: {
@@ -82,7 +84,7 @@ export async function POST(req: NextRequest) {
       // Pass 1: Prioritize interactive elements ([BUTTON], [INPUT], [TOGGLE])
       const interactiveIdx = ui_elements.findIndex((el: string) => {
         const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
-        const isActionable = clean.startsWith('[BUTTON]') || clean.startsWith('[INPUT]') || clean.startsWith('[TOGGLE]');
+        const isActionable = /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(clean);
         if (!isActionable) return false;
         const txt = clean.toLowerCase();
         if (isNoise(txt)) return false;
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
     let fpIndex = -1;
 
     if (app_package === 'com.whatsapp') {
-      if (questionLower.includes('video') || questionLower.includes('वीडियो')) {
+      if (/\bvideo\s*call\b/i.test(questionLower) || questionLower.includes('वीडियो कॉल') || /\bvideo\b/i.test(questionLower) && /\bcall\b|\bkaro\b|\blagao\b|\bkarni\b/i.test(questionLower)) {
         // 1. First check if a dedicated Video Call button is present (inside an active chat)
         let idx = findUIIndex(['video call', 'वीडियो कॉल', 'video_call']);
         if (idx !== -1) {
@@ -124,7 +126,7 @@ export async function POST(req: NextRequest) {
             fpMatch = true;
           }
         }
-      } else if (questionLower.includes('call') || questionLower.includes('कॉल') || questionLower.includes('phone') || questionLower.includes('फोन')) {
+      } else if (questionLower.includes('call') || questionLower.includes('कॉल') || /\bphone\b(?!\s*pe)/i.test(questionLower) || questionLower.includes('फोन')) {
         let idx = findUIIndex(['audio call', 'voice call', 'कॉल']);
         if (idx !== -1) {
           fpIndex = idx;
@@ -206,7 +208,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (fpMatch) {
-      await logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules');
+      logInteraction(fpIndex, fpExplanation, 'fast_path', 'fast_path_rules').catch(() => {});
       return NextResponse.json({
         success: true,
         data: {
@@ -229,7 +231,7 @@ export async function POST(req: NextRequest) {
 
     const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
     if (cached) {
-      await logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache');
+      logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache').catch(() => {});
       return NextResponse.json({
         success: true,
         data: {
@@ -283,7 +285,7 @@ ${fewShots}`;
 
     if (targetMatch) {
       rawHighlightIndex = parseInt(targetMatch[1], 10);
-      cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/i, '').trim();
+      cleanExplanation = rawExplanation.replace(/TARGET:\s*\d+/gi, '').trim();
     }
 
     // === METHOD 4: POST-LLM SEMANTIC TARGET VALIDATOR ===
@@ -308,7 +310,7 @@ ${fewShots}`;
       }, 7 * 86400);
     }
 
-    await logInteraction(highlightIndex, cleanExplanation, resultData.source, aiResult.modelUsed);
+    logInteraction(highlightIndex, cleanExplanation, resultData.source, aiResult.modelUsed).catch(() => {});
 
     return NextResponse.json({
       success: true,

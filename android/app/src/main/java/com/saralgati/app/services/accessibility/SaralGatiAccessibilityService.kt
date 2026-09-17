@@ -17,16 +17,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class SaralGatiAccessibilityService : AccessibilityService() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val stateMutex = Mutex()
     private lateinit var localPrefs: LocalPrefs
 
     // Variables for Rage Tap Detection
     private var lastClickedNodeId: String? = null
-    private var lastClickTime: Long = 0
-    private var clickCount = 0
+    private val recentClickTimes = ArrayDeque<Long>(RAGE_TAP_THRESHOLD)
     private var lastAlertTriggerTime: Long = 0
     private val RAGE_TAP_THRESHOLD = 3
     private val RAGE_TAP_TIME_WINDOW_MS = 2000L // 3 clicks within 2 seconds
@@ -210,20 +212,23 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         val viewId = nodeInfo.viewIdResourceName ?: (event.className?.toString() ?: "unknown_view")
 
-        if (viewId == lastClickedNodeId && (currentTime - lastClickTime) < RAGE_TAP_TIME_WINDOW_MS) {
-            clickCount++
-        } else {
-            // Reset for a new node or if time window expired
+        if (viewId != lastClickedNodeId) {
             lastClickedNodeId = viewId
-            clickCount = 1
+            recentClickTimes.clear()
         }
-        
-        lastClickTime = currentTime
 
-        if (clickCount >= RAGE_TAP_THRESHOLD) {
+        recentClickTimes.addLast(currentTime)
+        // Keep only the last N timestamps
+        while (recentClickTimes.size > RAGE_TAP_THRESHOLD) {
+            recentClickTimes.removeFirst()
+        }
+
+        // Check if N taps happened within the time window (first to last)
+        if (recentClickTimes.size >= RAGE_TAP_THRESHOLD &&
+            (recentClickTimes.last() - recentClickTimes.first()) < RAGE_TAP_TIME_WINDOW_MS) {
             Log.w(TAG, "Rage Tap Detected on node: $viewId")
             lastAlertTriggerTime = currentTime
-            clickCount = 0
+            recentClickTimes.clear()
             lastClickedNodeId = null
 
             triggerRageTapAlert(event.packageName?.toString() ?: "unknown", viewId)
@@ -320,7 +325,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             val found = findScrollableNode(child, needBackward)
-            if (found != null) return found
+            if (found != null) {
+                // Recycle intermediate child if it's not the found node itself
+                if (found != child) child.recycle()
+                return found
+            }
             child.recycle()
         }
         return null
@@ -367,20 +376,24 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     val peekBounds = mutableListOf<android.graphics.Rect>()
                     traverseNode(freshRoot, peekElements, peekBounds)
 
-                    // Identify and add new elements that were not present on the visible screen
-                    val existingLabels = elements.toSet()
+                    // Identify and add new elements not already visible (compare both label AND bounds to avoid dropping duplicate-named buttons)
+                    val existingEntries = elements.zip(elementBounds).toSet()
                     for (idx in peekElements.indices) {
                         val el = peekElements[idx]
-                        if (!existingLabels.contains(el)) {
-                            // Tag with [BELOW-FOLD] so backend and companion know its position
+                        val bounds = peekBounds[idx]
+                        // An element is new if it has a different label OR different bounds from all existing entries
+                        val isDuplicate = existingEntries.any { (existLabel, existBounds) ->
+                            existLabel == el && android.graphics.Rect.intersects(existBounds, bounds)
+                        }
+                        if (!isDuplicate) {
                             elements.add("[BELOW-FOLD] $el")
-                            elementBounds.add(peekBounds[idx])
+                            elementBounds.add(bounds)
                             belowFoldFlags.add(true)
                         }
                     }
 
                     // IMMEDIATE RESTORE: Scroll back to the top so user's screen is 100% untouched!
-                    val restoreScrollNode = findScrollableNode(freshRoot, needBackward = true) ?: findScrollableNode(freshRoot, needBackward = false)
+                    val restoreScrollNode = findScrollableNode(freshRoot, needBackward = true)
                     restoreScrollNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
                     kotlinx.coroutines.delay(200)
                     freshRoot.recycle()
@@ -538,7 +551,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // Only capture elements with reasonable button/icon sizes (avoid full-screen parent containers!)
             val w = rect.width()
             val h = rect.height()
-            val isReasonableButtonSize = (w in 24..900) && (h in 24..500)
+            val density = android.content.res.Resources.getSystem().displayMetrics.density
+            val minPx = (16 * density).toInt()  // 16dp minimum
+            val maxW = (300 * density).toInt()   // 300dp max width
+            val maxH = (180 * density).toInt()   // 180dp max height
+            val isReasonableButtonSize = (w in minPx..maxW) && (h in minPx..maxH)
             
             // Prefer clickable nodes or leaf nodes to prevent selecting massive layout parents
             val isInteractiveOrLeaf = node.isClickable || node.childCount == 0
@@ -576,7 +593,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             className.contains("RadioButton", ignoreCase = true) -> "[TOGGLE]"
             className.contains("Button", ignoreCase = true) ||
             (className.contains("ImageView", ignoreCase = true) && isClickable) -> "[BUTTON]"
-            // If it's a TextView or plain text header, keep it as [TEXT] to prevent targeting section titles
+            // Clickable TextViews are interactive targets (modern apps use clickable TextViews as buttons)
+            className.contains("TextView", ignoreCase = true) && isClickable -> "[BUTTON]"
             className.contains("TextView", ignoreCase = true) -> "[TEXT]"
             isClickable -> "[BUTTON]"
             else -> "[TEXT]"
@@ -594,8 +612,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         val viewId = rawViewId.substringAfterLast(":id/").substringAfterLast("/")
 
         // Filter out single character font-icon glyphs (like '0' or obscure icon codes)
-        val text = if (rawText != null && rawText.length == 1 && (rawText == "0" || !rawText[0].isLetterOrDigit())) null else rawText
-        val desc = if (rawDesc != null && rawDesc.length == 1 && (rawDesc == "0" || !rawDesc[0].isLetterOrDigit())) null else rawDesc
+        val nodeClassName = node.className?.toString() ?: ""
+        val isImageLike = nodeClassName.contains("ImageView", ignoreCase = true) || nodeClassName.contains("ImageButton", ignoreCase = true)
+        val text = if (rawText != null && rawText.length == 1 && ((rawText == "0" && isImageLike) || !rawText[0].isLetterOrDigit())) null else rawText
+        val desc = if (rawDesc != null && rawDesc.length == 1 && ((rawDesc == "0" && isImageLike) || !rawDesc[0].isLetterOrDigit())) null else rawDesc
 
         val combined = "$desc $text $viewId $rawViewId".lowercase()
 
@@ -860,6 +880,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        // Cancel all coroutines to prevent memory leaks and dangling network requests
+        serviceScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         try {
             unregisterReceiver(screenExtractReceiver)
         } catch (e: Exception) {

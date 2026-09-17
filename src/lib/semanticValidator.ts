@@ -15,8 +15,8 @@ const NOISE_REGEXES = [
   /\b(am|pm)\b/i,
   /\b(sent|delivered|read|typing\.\.\.|online|last seen)\b/i,
   // Global message preview/subtitle noise (e.g. "📹 Video call", "Missed video call", "Audio call")
-  /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i,
-  /^[📹🎥📞📱]\s*/i
+  /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i,
+  /(?:^|\]\s*)[📹🎥📞📱]\s*/i
 ];
 
 function cleanElementText(text: string): string {
@@ -129,7 +129,7 @@ export function validateSemanticTarget(
     }
 
     // Check universal action words (e.g. 'Proceed', 'Next', 'Continue')
-    const matchesUniversal = UNIVERSAL_ACTION_KEYWORDS.some((k) => targetClean.includes(k));
+    const matchesUniversal = UNIVERSAL_ACTION_KEYWORDS.some((k) => new RegExp(`\\\b${k}\\\b`, 'i').test(targetClean));
     if (matchesUniversal) {
       return {
         isValid: true,
@@ -142,7 +142,7 @@ export function validateSemanticTarget(
 
     // Check direct word overlap with question (e.g. contact name or specific topic)
     const qWords = qLower.split(/[\s,._\-?!]+/).filter((w) => w.length >= 3);
-    const matchesQuestionWord = qWords.some((w) => targetClean.includes(w));
+    const matchesQuestionWord = qWords.some((w) => new RegExp(`\\\b${w}\\\b`, 'i').test(targetClean));
 
     if (matchesQuestionWord) {
       return {

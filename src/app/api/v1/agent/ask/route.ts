@@ -271,7 +271,8 @@ ${fewShots}`;
     const aiResult = await generateAIResponse({
       systemPrompt,
       userPrompt: question,
-      conversationHistory: conversation_history
+      conversationHistory: conversation_history,
+      uiElements: ui_elements
     });
 
     const rawExplanation = aiResult.text;
@@ -294,7 +295,9 @@ ${fewShots}`;
       explanation: cleanExplanation,
       highlight_index: highlightIndex,
       source: validation.status === 'recovered_intent' || validation.status === 'recovered_role' ? 'validated_fallback' : aiResult.source,
-      model_used: aiResult.modelUsed
+      model_used: aiResult.modelUsed,
+      confidence: aiResult.confidence,
+      arbitration: aiResult.competingResults
     };
 
     // Cache verified AI response for 7 days (prevents poisoning cache with hallucinations)

@@ -7,3 +7,12 @@ README.md
 .git
 .env*
 *.md
+android
+data
+scripts
+.agents
+.idea
+.github
+*.jsonl
+*.ipynb
+

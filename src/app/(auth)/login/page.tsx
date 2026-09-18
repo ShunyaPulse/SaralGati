@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Mail, Lock, AlertCircle, Heart } from 'lucide-react';
+import Image from 'next/image';
+import { Mail, Lock, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -79,9 +80,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-orange-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
-        <div className="bg-orange-100 p-3 rounded-full mb-4">
-          <Heart className="h-10 w-10 text-orange-600" />
-        </div>
+        <Link href="/" className="mb-4">
+          <Image src="/icon.png" alt="SaralGati" width={56} height={56} className="h-14 w-14 object-contain" priority />
+        </Link>
         <h2 className="text-center text-3xl font-extrabold text-gray-900">
           Sign in to SaralGati
         </h2>

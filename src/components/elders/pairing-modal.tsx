@@ -169,9 +169,7 @@ export function PairingModal({ elderId, elderName, isOpen, onClose }: PairingMod
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-slate-100">
           <a
-            href="https://github.com/ShunyaPulse/SaralGati/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/api/download"
             className="w-full sm:flex-1"
           >
             <Button variant="outline" className="w-full gap-2 justify-center text-slate-700">

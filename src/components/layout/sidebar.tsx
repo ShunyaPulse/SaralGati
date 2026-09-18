@@ -2,8 +2,9 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, Bell, Settings, HeartPulse } from 'lucide-react';
+import { LayoutDashboard, Users, Bell, Settings } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 
 const navItems = [
@@ -20,8 +21,9 @@ export function Sidebar() {
   return (
     <aside className={`fixed inset-y-0 left-0 z-40 w-64 transform border-r border-gray-200 bg-white transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
       <div className="flex h-16 items-center px-6 border-b border-gray-100">
-        <HeartPulse className="h-8 w-8 text-[#0074c8] mr-2" />
-        <span className="text-xl font-bold text-gray-900 tracking-tight">SaralGati</span>
+        <Link href="/dashboard" className="flex items-center">
+          <Image src="/images/logo.png" alt="SaralGati" width={120} height={34} className="h-8 w-auto object-contain" priority />
+        </Link>
       </div>
       <div className="flex flex-col py-4">
         <nav className="flex-1 space-y-1 px-4">

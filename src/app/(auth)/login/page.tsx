@@ -13,6 +13,41 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [isOtpMode, setIsOtpMode] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+
+  const handleSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      setError('Please enter your email first');
+      return;
+    }
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, type: 'login' }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send OTP');
+      }
+
+      setOtpSent(true);
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while sending OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -21,12 +56,12 @@ export default function LoginPage() {
     try {
       const res = await signIn('credentials', {
         email,
-        password,
+        ...(isOtpMode ? { otp } : { password }),
         redirect: false,
       });
 
       if (res?.error) {
-        setError('Invalid email or password');
+        setError(res.error || 'Invalid credentials');
       } else {
         router.push('/dashboard');
       }
@@ -60,7 +95,7 @@ export default function LoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-orange-100">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={isOtpMode && !otpSent ? handleSendOtp : handleSubmit}>
             {error && (
               <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
@@ -82,33 +117,76 @@ export default function LoginPage() {
                   type="email"
                   autoComplete="email"
                   required
+                  disabled={otpSent}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
                   placeholder="you@example.com"
                 />
               </div>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+            {!isOtpMode && (
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+                  Password
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                    placeholder="••••••••"
+                  />
                 </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
-                  placeholder="••••••••"
-                />
+              </div>
+            )}
+
+            {isOtpMode && otpSent && (
+              <div>
+                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                  Verification Code (OTP)
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <input
+                    id="otp"
+                    name="otp"
+                    type="text"
+                    required
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg text-center tracking-widest"
+                    placeholder="123456"
+                    maxLength={6}
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-500 text-center">
+                  We sent a 6-digit code to {email}
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <div className="text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsOtpMode(!isOtpMode);
+                    setOtpSent(false);
+                    setError('');
+                  }}
+                  className="font-medium text-orange-600 hover:text-orange-500"
+                >
+                  {isOtpMode ? 'Sign in with Password instead' : 'Sign in with Email OTP Code instead'}
+                </button>
               </div>
             </div>
 
@@ -118,7 +196,9 @@ export default function LoginPage() {
                 disabled={loading}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors"
               >
-                {loading ? 'Signing in...' : 'Sign in'}
+                {loading
+                  ? (isOtpMode && !otpSent ? 'Sending OTP...' : 'Signing in...')
+                  : (isOtpMode && !otpSent ? 'Send OTP' : 'Sign in')}
               </button>
             </div>
           </form>

@@ -5,6 +5,7 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, User, AlertCircle, Heart } from 'lucide-react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,7 +16,12 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileKey, setTurnstileKey] = useState(0);
+
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
@@ -26,11 +32,46 @@ export default function RegisterPage() {
       return;
     }
 
+    if (!turnstileToken) {
+      setError('Please complete the security check');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, type: 'register', turnstileToken }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to send OTP');
+      }
+
+      setOtpSent(true);
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while sending OTP.');
+      setTurnstileToken('');
+      setTurnstileKey(prev => prev + 1);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, otp }),
       });
 
       const data = await res.json();
@@ -81,7 +122,7 @@ export default function RegisterPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-orange-100">
-          <form className="space-y-6" onSubmit={handleSubmit}>
+          <form className="space-y-6" onSubmit={otpSent ? handleRegister : handleSendOtp}>
             {error && (
               <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
@@ -102,9 +143,10 @@ export default function RegisterPage() {
                   name="name"
                   type="text"
                   required
+                  disabled={otpSent}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
                   placeholder="John Doe"
                 />
               </div>
@@ -124,9 +166,10 @@ export default function RegisterPage() {
                   type="email"
                   autoComplete="email"
                   required
+                  disabled={otpSent}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
                   placeholder="you@example.com"
                 />
               </div>
@@ -146,9 +189,10 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   required
+                  disabled={otpSent}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -168,21 +212,59 @@ export default function RegisterPage() {
                   type="password"
                   autoComplete="new-password"
                   required
+                  disabled={otpSent}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
+            {!otpSent && (
+              <div className="flex justify-center">
+                <Turnstile
+                  key={turnstileKey}
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  options={{ theme: 'light' }}
+                />
+              </div>
+            )}
+
+            {otpSent && (
+              <div>
+                <label htmlFor="otp" className="block text-sm font-medium text-gray-700">
+                  Verification Code (OTP)
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <input
+                    id="otp"
+                    name="otp"
+                    type="text"
+                    required
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg text-center tracking-widest"
+                    placeholder="123456"
+                    maxLength={6}
+                  />
+                </div>
+                <p className="mt-2 text-sm text-gray-500 text-center">
+                  We sent a 6-digit code to {email}
+                </p>
+              </div>
+            )}
+
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!otpSent && !turnstileToken)}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors"
               >
-                {loading ? 'Creating account...' : 'Create account'}
+                {loading
+                  ? (otpSent ? 'Registering...' : 'Sending OTP...')
+                  : (otpSent ? 'Verify & Register' : 'Send Verification Code')}
               </button>
             </div>
           </form>
@@ -218,3 +300,4 @@ export default function RegisterPage() {
     </div>
   );
 }
+

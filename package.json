@@ -11,6 +11,7 @@
     "db:seed": "npx tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@marsidev/react-turnstile": "^1.6.1",
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
@@ -20,6 +21,7 @@
     "lucide-react": "^0.460.0",
     "next": "^15.1.0",
     "next-auth": "^4.24.0",
+    "nodemailer": "^7.0.13",
     "pg": "^8.13.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
@@ -33,6 +35,7 @@
     "@tailwindcss/postcss": "^4.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.11.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",

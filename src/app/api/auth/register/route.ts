@@ -2,12 +2,14 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '@/lib/db';
-import { rateLimiter } from '@/lib/redis';
+import { rateLimiter, cacheGet, cacheDelete } from '@/lib/redis';
+import redis from '@/lib/redis';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
+  otp: z.string().min(6, 'OTP must be 6 characters'),
 });
 
 export async function POST(req: Request) {
@@ -32,7 +34,16 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password } = result.data;
+    const { name, email, password, otp } = result.data;
+
+    // Verify OTP
+    const storedOtp = await cacheGet<string>(`otp:register:${email}`);
+    if (!storedOtp || storedOtp !== otp) {
+      return NextResponse.json(
+        { error: 'Invalid or expired OTP' },
+        { status: 400 }
+      );
+    }
 
     // Check if user already exists
     const existingUser = await queryOne<{ id: string }>(
@@ -63,6 +74,9 @@ export async function POST(req: Request) {
     if (!newUser) {
       throw new Error('Failed to create user');
     }
+
+    // Clear OTP
+    await cacheDelete(`otp:register:${email}`);
 
     return NextResponse.json(
       { success: true, user: newUser },

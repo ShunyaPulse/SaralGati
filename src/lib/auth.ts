@@ -22,10 +22,11 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
+        otp: { label: 'OTP', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error('Invalid credentials');
+        if (!credentials?.email) {
+          throw new Error('Email is required');
         }
 
         const user = await queryOne<{
@@ -37,17 +38,31 @@ export const authOptions: NextAuthOptions = {
           image: string;
         }>('SELECT * FROM users WHERE email = $1', [credentials.email]);
 
-        if (!user || !user.password_hash) {
+        if (!user) {
           throw new Error('User not found');
         }
 
-        const isValidPassword = await bcrypt.compare(
-          credentials.password,
-          user.password_hash
-        );
-
-        if (!isValidPassword) {
-          throw new Error('Invalid password');
+        if (credentials.otp) {
+          const { cacheGet, cacheDelete } = await import('@/lib/redis');
+          const storedOtp = await cacheGet<string>(`otp:login:${credentials.email}`);
+          
+          if (!storedOtp || storedOtp !== credentials.otp) {
+            throw new Error('Invalid or expired OTP');
+          }
+          await cacheDelete(`otp:login:${credentials.email}`);
+        } else if (credentials.password) {
+          if (!user.password_hash) {
+            throw new Error('User has no password, please login with Google or OTP');
+          }
+          const isValidPassword = await bcrypt.compare(
+            credentials.password,
+            user.password_hash
+          );
+          if (!isValidPassword) {
+            throw new Error('Invalid password');
+          }
+        } else {
+          throw new Error('Password or OTP is required');
         }
 
         return {

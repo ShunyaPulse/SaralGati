@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.saralgati.app.data.local.LocalPrefs
+import com.saralgati.app.data.api.NetworkModule
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 @Composable
@@ -26,7 +28,9 @@ fun PairingScreen(
     var elderIdInput by remember { mutableStateOf("") }
     var isScanning by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -98,7 +102,8 @@ fun PairingScreen(
                     cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(64.dp).padding(bottom = 16.dp)
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(bottom = 16.dp),
+            enabled = !isLoading
         ) {
             Text("Scan QR Code to Pair", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
@@ -110,7 +115,8 @@ fun PairingScreen(
             onValueChange = { elderIdInput = it },
             label = { Text("Elder ID (from Dashboard URL)") },
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
-            singleLine = true
+            singleLine = true,
+            enabled = !isLoading
         )
 
         if (errorMessage != null) {
@@ -129,12 +135,33 @@ fun PairingScreen(
                     return@OutlinedButton
                 }
 
-                localPrefs.savePairingInfo(cleanId, "caregiver_live")
-                onPairedSuccess()
+                scope.launch {
+                    isLoading = true
+                    errorMessage = null
+                    try {
+                        val response = NetworkModule.eldersApi.getElderStatus(cleanId)
+                        if (response.isSuccessful && response.body()?.success == true) {
+                            localPrefs.savePairingInfo(cleanId, "caregiver_live")
+                            onPairedSuccess()
+                        } else {
+                            errorMessage = "Elder ID not found. Please create one on saralgati.com first."
+                        }
+                    } catch (e: Exception) {
+                        errorMessage = "Network error. Please check internet connection."
+                    } finally {
+                        isLoading = false
+                    }
+                }
             },
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            enabled = !isLoading
         ) {
-            Text("Link Device Manually", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
+            } else {
+                Text("Link Device Manually", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
+

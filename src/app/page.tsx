@@ -115,7 +115,7 @@ export default function Home() {
                 <FadeUp delay={0.3}>
                   <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                     <a
-                      href="/downloads/saralgati.apk"
+                      href="/api/download"
                       className="group inline-flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-2xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all duration-300 hover:-translate-y-0.5"
                     >
                       <Download className="w-5 h-5 shrink-0" />
@@ -451,7 +451,7 @@ export default function Home() {
                 One install. Zero learning curve. The next time they call you, it'll be to share a funny video — not to ask for help.
               </p>
               <a
-                href="/downloads/saralgati.apk"
+                href="/api/download"
                 className="group inline-flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-lg px-10 py-5 rounded-2xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all duration-300 hover:-translate-y-0.5"
               >
                 <Download className="w-6 h-6" />
@@ -470,7 +470,7 @@ export default function Home() {
       <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
         <div className="bg-slate-900/95 backdrop-blur-lg border-t border-white/10 px-4 py-3">
           <a
-            href="/downloads/saralgati.apk"
+            href="/api/download"
             className="flex items-center justify-center gap-2 w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl shadow-lg transition-colors"
           >
             <Download className="w-5 h-5" />

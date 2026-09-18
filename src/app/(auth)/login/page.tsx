@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -20,6 +20,22 @@ export default function LoginPage() {
   const [otp, setOtp] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileKey, setTurnstileKey] = useState(0);
+  const [siteKey, setSiteKey] = useState(
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
+    process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY ||
+    ''
+  );
+
+  useEffect(() => {
+    fetch('/api/auth/turnstile-config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.siteKey) {
+          setSiteKey(data.siteKey);
+        }
+      })
+      .catch((err) => console.error('Turnstile config error:', err));
+  }, []);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,12 +219,18 @@ export default function LoginPage() {
 
             {isOtpMode && !otpSent && (
               <div className="flex justify-center min-h-[65px] my-2">
-                <Turnstile
-                  key={turnstileKey}
-                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY || ''}
-                  onSuccess={(token) => setTurnstileToken(token)}
-                  options={{ theme: 'light' }}
-                />
+                {siteKey ? (
+                  <Turnstile
+                    key={`${turnstileKey}-${siteKey}`}
+                    siteKey={siteKey}
+                    onSuccess={(token) => setTurnstileToken(token)}
+                    options={{ theme: 'light' }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center text-sm text-gray-400">
+                    Loading security check...
+                  </div>
+                )}
               </div>
             )}
 

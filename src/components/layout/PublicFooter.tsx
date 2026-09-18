@@ -1,11 +1,15 @@
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function PublicFooter() {
   return (
     <footer className="bg-gray-900 text-gray-300 py-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-4 gap-8">
         <div className="col-span-1 md:col-span-2">
-          <span className="text-2xl font-bold text-white tracking-wide">SaralGati</span>
+          <div className="flex items-center gap-2">
+            <Image src="/icon.png" alt="SaralGati Logo" width={30} height={30} className="rounded-lg" />
+            <span className="text-2xl font-bold text-white tracking-wide">SaralGati</span>
+          </div>
           <p className="mt-4 text-sm text-gray-400 max-w-sm">
             Empowering Elders, Supporting Families. Building accessible technology for the elderly in India to ensure they are safe, connected, and independent.
           </p>

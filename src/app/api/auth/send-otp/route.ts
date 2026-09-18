@@ -12,7 +12,11 @@ const sendOtpSchema = z.object({
 });
 
 async function verifyTurnstile(token: string) {
-  const secret = process.env.TURNSTILE_SECRET_KEY || '1x0000000000000000000000000000000AA';
+  const secret = process.env.TURNSTILE_SECRET_KEY || process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
+  if (!secret) {
+    console.error('Turnstile secret key is not configured in environment variables');
+    return false;
+  }
   try {
     const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',

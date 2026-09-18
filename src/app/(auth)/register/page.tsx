@@ -226,7 +226,7 @@ export default function RegisterPage() {
               <div className="flex justify-center min-h-[65px] my-2">
                 <Turnstile
                   key={turnstileKey}
-                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY || ''}
                   onSuccess={(token) => setTurnstileToken(token)}
                   options={{ theme: 'light' }}
                 />

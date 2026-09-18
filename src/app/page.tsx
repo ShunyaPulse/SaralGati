@@ -89,7 +89,7 @@ export default function Home() {
                 <FadeUp>
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm text-emerald-300 mb-6">
                     <Sparkles className="w-4 h-4" />
-                    <span>On-device AI · No cloud dependency</span>
+                    <span>Cloud-Powered AI · Lightweight Native Companion</span>
                   </div>
                 </FadeUp>
 
@@ -105,7 +105,7 @@ export default function Home() {
 
                 <FadeUp delay={0.2}>
                   <p className="text-lg sm:text-xl text-slate-300 leading-relaxed max-w-xl mx-auto lg:mx-0 mb-4">
-                    A patient, on-device AI companion that speaks in Hindi, guides with visual spotlights, and brings them back when they get lost.
+                    A patient AI companion that speaks in Hindi, guides with visual spotlights, and brings them back when they get lost.
                   </p>
                   <p className="text-base text-slate-400 max-w-xl mx-auto lg:mx-0 mb-8">
                     No confusion. No panic. No missed video calls.

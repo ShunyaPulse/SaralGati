@@ -223,7 +223,7 @@ export default function RegisterPage() {
             </div>
 
             {!otpSent && (
-              <div className="flex justify-center">
+              <div className="flex justify-center min-h-[65px] my-2">
                 <Turnstile
                   key={turnstileKey}
                   siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || '1x00000000000000000000AA'}
@@ -260,8 +260,8 @@ export default function RegisterPage() {
             <div>
               <button
                 type="submit"
-                disabled={loading || (!otpSent && !turnstileToken)}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors"
+                disabled={loading}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {loading
                   ? (otpSent ? 'Registering...' : 'Sending OTP...')

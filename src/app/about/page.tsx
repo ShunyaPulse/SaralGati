@@ -78,7 +78,7 @@ export default function About() {
                 <section>
                   <h2 className="text-2xl font-bold text-slate-900 mb-4">The Team Behind SaralGati</h2>
                   <p className="leading-relaxed">
-                    We are engineers, researchers, and devoted children building the solution we needed for our own families. Operating out of Bengaluru, we are committed to making India's digital revolution truly inclusive for every senior citizen.
+                    We are building the solution we needed for our own families. Operating out of Lucknow, we are committed to making India's digital revolution truly inclusive for every senior citizen.
                   </p>
                 </section>
               </div>

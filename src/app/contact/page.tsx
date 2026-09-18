@@ -54,7 +54,7 @@ export default function Contact() {
                         </div>
                         <div>
                           <h3 className="font-bold text-slate-900 mb-1">Office</h3>
-                          <p className="text-slate-500">Bengaluru, Karnataka, India</p>
+                          <p className="text-slate-500">Lucknow, Uttar Pradesh, India</p>
                         </div>
                       </div>
                     </div>

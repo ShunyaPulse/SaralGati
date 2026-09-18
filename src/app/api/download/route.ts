@@ -30,8 +30,8 @@ export async function GET() {
         'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error serving APK:', error);
-    return new NextResponse('File not found or server error', { status: 500 });
+    return new NextResponse(error.message + " | path: " + join(process.cwd(), 'public', 'downloads', 'saralgati.apk'), { status: 500 });
   }
 }

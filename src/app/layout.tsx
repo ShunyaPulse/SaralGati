@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   verification: {
-    google: "YOUR_GOOGLE_VERIFICATION_CODE",
+    google: "dzEaDDFxL3oKEeOZkQJfq_g51jRyDFwH_Ou2XGkx_0Q",
   }
 };
 

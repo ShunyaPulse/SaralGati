@@ -73,7 +73,7 @@ export default function Home() {
     <div className="min-h-screen flex flex-col bg-white">
       <PublicHeader />
 
-      <main className="flex-grow">
+      <main className="flex-grow pb-20 lg:pb-0">
         {/* ════════════ HERO ════════════ */}
         <section className="relative overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
           {/* bg grain */}
@@ -316,15 +316,29 @@ export default function Home() {
             </FadeUp>
 
             <FadeIn delay={0.2}>
-              <div className="flex items-end justify-center gap-6 sm:gap-10">
-                <div className="-rotate-6 translate-y-4">
+              {/* Desktop Showcase */}
+              <div className="hidden md:flex items-end justify-center gap-6 lg:gap-10">
+                <div className="-rotate-6 translate-y-4 transition-transform hover:rotate-0 hover:translate-y-0 duration-500">
                   <PhoneFrame src="/images/screenshot-youtube.jpg" alt="YouTube Music with SaralGati search icon highlight" />
                 </div>
-                <div className="scale-110 z-10">
+                <div className="scale-110 z-10 transition-transform hover:scale-125 duration-500">
                   <PhoneFrame src="/images/screenshot-phonepe.jpg" alt="PhonePe with SaralGati Hindi guidance overlay" />
                 </div>
-                <div className="rotate-6 translate-y-4">
+                <div className="rotate-6 translate-y-4 transition-transform hover:rotate-0 hover:translate-y-0 duration-500">
                   <PhoneFrame src="/images/screenshot-contacts.jpg" alt="Phone Contacts with SaralGati missed call highlight" />
+                </div>
+              </div>
+
+              {/* Mobile Showcase (Horizontal Scroll) */}
+              <div className="flex md:hidden overflow-x-auto snap-x snap-mandatory gap-6 pb-8 pt-8 px-4 -mx-4 no-scrollbar">
+                <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                  <PhoneFrame src="/images/screenshot-youtube.jpg" alt="YouTube Music with SaralGati overlay" />
+                </div>
+                <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                  <PhoneFrame src="/images/screenshot-phonepe.jpg" alt="PhonePe with SaralGati overlay" />
+                </div>
+                <div className="snap-center shrink-0 w-[85vw] flex justify-center">
+                  <PhoneFrame src="/images/screenshot-contacts.jpg" alt="Phone Contacts with SaralGati overlay" />
                 </div>
               </div>
             </FadeIn>

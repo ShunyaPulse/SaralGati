@@ -50,12 +50,23 @@ class TelemetryService : Service() {
                         val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                         val batteryPct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
                         
+                        val manufacturer = Build.MANUFACTURER.replaceFirstChar { 
+                            if (it.isLowerCase()) it.titlecase() else it.toString() 
+                        }
+                        val model = Build.MODEL
+                        val phoneModel = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+                        val osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+
                         val response = NetworkModule.eldersApi.updateHeartbeat(
                             elderId, 
-                            mapOf("battery_level" to batteryPct)
+                            mapOf(
+                                "battery_level" to batteryPct,
+                                "phone_model" to phoneModel,
+                                "os_version" to osVersion
+                            )
                         )
                         if (response.isSuccessful) {
-                            Log.d(TAG, "Heartbeat sent successfully. Battery: $batteryPct%")
+                            Log.d(TAG, "Heartbeat sent successfully. Battery: $batteryPct%, Device: $phoneModel")
                         } else {
                             Log.w(TAG, "Heartbeat failed: ${response.code()}")
                         }

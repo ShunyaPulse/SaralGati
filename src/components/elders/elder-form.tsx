@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ElderProfile } from '@/types';
 import { elderProfileSchema } from '@/lib/validations';
+import { Smartphone } from 'lucide-react';
 
 type ElderFormData = z.infer<typeof elderProfileSchema>;
 
@@ -67,23 +68,19 @@ export function ElderForm({ initialData, onSubmit, onCancel }: ElderFormProps) {
         placeholder="e.g. Ramesh Kumar"
       />
       
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="Phone Model"
-          name="phone_model"
-          value={formData.phone_model}
-          onChange={handleChange}
-          error={errors.phone_model}
-          placeholder="e.g. Samsung Galaxy M12"
-        />
-        <Input
-          label="OS Version"
-          name="os_version"
-          value={formData.os_version}
-          onChange={handleChange}
-          error={errors.os_version}
-          placeholder="e.g. Android 13"
-        />
+      <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-xs text-emerald-800 flex items-start gap-2.5">
+        <Smartphone className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+        <div>
+          <p className="font-semibold text-emerald-900">Automatic Device Detection</p>
+          <p className="text-emerald-700 mt-0.5">
+            Phone model & Android OS version will automatically be detected and updated as soon as the elder's smartphone pairs with this profile.
+          </p>
+          {formData.phone_model && (
+            <p className="mt-1 font-medium text-emerald-900">
+              Paired: {formData.phone_model} {formData.os_version ? `(${formData.os_version})` : ''}
+            </p>
+          )}
+        </div>
       </div>
 
       <Input

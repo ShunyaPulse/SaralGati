@@ -52,7 +52,23 @@ fun PairingScreen(
                         val json = JSONObject(qrData)
                         val elderId = json.getString("elder_id")
                         val deviceToken = json.optString("device_token", "caregiver_live")
-                        localPrefs.savePairingInfo(elderId, deviceToken)
+                        localPrefs.savePairingInfo(elderId, "caregiver_live", deviceToken)
+                        
+                        // Auto-detect and push device model & OS version
+                        val phoneModel = getDevicePhoneModel()
+                        val osVersion = getDeviceOsVersion()
+                        scope.launch {
+                            try {
+                                NetworkModule.eldersApi.updateHeartbeat(
+                                    elderId,
+                                    mapOf(
+                                        "phone_model" to phoneModel,
+                                        "os_version" to osVersion
+                                    )
+                                )
+                            } catch (_: Exception) {}
+                        }
+
                         isScanning = false
                         onPairedSuccess()
                     } catch (e: Exception) {
@@ -142,6 +158,20 @@ fun PairingScreen(
                         val response = NetworkModule.eldersApi.getElderStatus(cleanId)
                         if (response.isSuccessful && response.body()?.success == true) {
                             localPrefs.savePairingInfo(cleanId, "caregiver_live")
+                            
+                            // Auto-detect and push device model & OS version
+                            val phoneModel = getDevicePhoneModel()
+                            val osVersion = getDeviceOsVersion()
+                            try {
+                                NetworkModule.eldersApi.updateHeartbeat(
+                                    cleanId,
+                                    mapOf(
+                                        "phone_model" to phoneModel,
+                                        "os_version" to osVersion
+                                    )
+                                )
+                            } catch (_: Exception) {}
+
                             onPairedSuccess()
                         } else {
                             errorMessage = "Elder ID not found. Please create one on saralgati.com first."
@@ -163,5 +193,21 @@ fun PairingScreen(
             }
         }
     }
+}
+
+private fun getDevicePhoneModel(): String {
+    val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar { 
+        if (it.isLowerCase()) it.titlecase() else it.toString() 
+    }
+    val model = android.os.Build.MODEL
+    return if (model.startsWith(manufacturer, ignoreCase = true)) {
+        model
+    } else {
+        "$manufacturer $model"
+    }
+}
+
+private fun getDeviceOsVersion(): String {
+    return "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
 }
 

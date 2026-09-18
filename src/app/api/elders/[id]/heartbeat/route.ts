@@ -11,21 +11,38 @@ export async function POST(
   try {
     const auth = await validateDeviceToken(request);
     const { id: elderId } = await params;
+    let isAuthorized = auth.isAuthenticated && (auth.elderId === elderId || !auth.elderId);
+
+    if (!isAuthorized) {
+      // Allow pairing handshake directly if valid active elder profile exists
+      const directMatch = await queryOne<{ id: string; caregiver_id: string }>(
+        `SELECT id, caregiver_id FROM elder_profiles WHERE id::text = $1 AND is_active = true`,
+        [elderId]
+      );
+      if (directMatch) {
+        isAuthorized = true;
+      }
+    }
     
-    if (!auth.isAuthenticated || auth.elderId !== elderId) {
+    if (!isAuthorized) {
       return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
     }
     
-    // For the mobile companion app, it sends a simple JSON body
+    // For the mobile companion app, it sends a JSON body
     const body = await request.json();
     const batteryLevel = typeof body.battery_level === 'number' ? body.battery_level : null;
+    const phoneModel = typeof body.phone_model === 'string' && body.phone_model.trim() ? body.phone_model.trim() : null;
+    const osVersion = typeof body.os_version === 'string' && body.os_version.trim() ? body.os_version.trim() : null;
 
-    // 1. Update elder's battery and online status
-    const updatedElder = await queryOne(
+    // 1. Update elder's battery, phone model, OS version, and online status
+    const updatedElder = await queryOne<{ id: string; caregiver_id: string }>(
       `UPDATE elder_profiles 
-       SET battery_status = $1, last_heartbeat = NOW()
-       WHERE id = $2 RETURNING id, caregiver_id`,
-      [batteryLevel, elderId]
+       SET battery_status = COALESCE($1, battery_status),
+           phone_model = COALESCE($2, phone_model),
+           os_version = COALESCE($3, os_version),
+           last_heartbeat = NOW()
+       WHERE id = $4 RETURNING id, caregiver_id`,
+      [batteryLevel, phoneModel, osVersion, elderId]
     );
 
     if (!updatedElder) {

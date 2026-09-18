@@ -55,7 +55,9 @@ export function ElderStatusList({ elders, loading }: ElderStatusListProps) {
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-semibold text-slate-900 truncate">{elder.elder_name}</h3>
                 <div className="flex items-center text-xs text-slate-500 mt-0.5">
-                  <span className="truncate">{elder.phone_model || 'Unknown Device'}</span>
+                  <span className="truncate">
+                    {elder.phone_model ? elder.phone_model : <span className="text-slate-400 italic">Waiting for pairing...</span>}
+                  </span>
                 </div>
               </div>
               

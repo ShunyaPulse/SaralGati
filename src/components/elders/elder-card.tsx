@@ -46,7 +46,13 @@ export function ElderCard({ elder }: ElderCardProps) {
         <div className="space-y-3 mt-2 flex-1">
           <div className="flex items-center text-sm text-gray-600">
             <Smartphone className="h-4 w-4 mr-2 text-gray-400" />
-            <span className="truncate">{elder.phone_model || 'Unknown Device'} {elder.os_version ? `(${elder.os_version})` : ''}</span>
+            <span className="truncate">
+              {elder.phone_model ? (
+                `${elder.phone_model} ${elder.os_version ? `(${elder.os_version})` : ''}`
+              ) : (
+                <span className="text-gray-400 italic">Waiting for device pairing...</span>
+              )}
+            </span>
           </div>
           
           <div className="flex items-center text-sm text-gray-600">

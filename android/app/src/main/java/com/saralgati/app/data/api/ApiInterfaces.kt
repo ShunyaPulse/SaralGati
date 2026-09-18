@@ -18,9 +18,9 @@ interface EldersApi {
     @GET("api/elders/{id}")
     suspend fun getElderStatus(@Path("id") elderId: String): Response<ApiResponse<ElderProfile>>
     
-    // Additional endpoint for heartbeat updates
+    // Additional endpoint for heartbeat and device metadata updates
     @POST("api/elders/{id}/heartbeat")
-    suspend fun updateHeartbeat(@Path("id") elderId: String, @Body batteryStatus: Map<String, Int>): Response<ApiResponse<Any>>
+    suspend fun updateHeartbeat(@Path("id") elderId: String, @Body status: Map<String, @JvmSuppressWildcards Any>): Response<ApiResponse<Any>>
 }
 
 interface AlertsApi {

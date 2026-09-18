@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { cacheDelete, invalidatePattern } from '@/lib/redis';
+import { validateDeviceToken } from '@/lib/agent-auth';
 import { elderProfileSchema } from '@/lib/validations';
 import { ElderProfile, ApiResponse } from '@/types';
 
@@ -12,22 +13,44 @@ export async function GET(
   try {
     const { id: elderId } = await params;
     const session = await getAuthSession();
-    if (!session?.user?.id) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    
+    if (session?.user?.id) {
+      const userId = session.user.id;
+      const elder = await queryOne<ElderProfile>(
+        `SELECT * FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`,
+        [elderId, userId]
+      );
+
+      if (!elder) {
+        return NextResponse.json({ success: false, error: 'Not Found' }, { status: 404 });
+      }
+
+      return NextResponse.json({ success: true, data: elder });
     }
 
-    const userId = session.user.id;
+    // Companion app / device token check
+    const auth = await validateDeviceToken(request);
+    if (auth.isAuthenticated) {
+      const elder = await queryOne<ElderProfile>(
+        `SELECT * FROM elder_profiles WHERE id = $1 AND is_active = true`,
+        [elderId]
+      );
+      if (elder) {
+        return NextResponse.json({ success: true, data: elder });
+      }
+    }
 
-    const elder = await queryOne<ElderProfile>(
-      `SELECT * FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`,
-      [elderId, userId]
+    // Public existence check for initial pairing handshake
+    const existingElder = await queryOne<{ id: string; elder_name: string; is_active: boolean }>(
+      `SELECT id, elder_name, is_active FROM elder_profiles WHERE id::text = $1 AND is_active = true`,
+      [elderId]
     );
 
-    if (!elder) {
-      return NextResponse.json({ success: false, error: 'Not Found' }, { status: 404 });
+    if (existingElder) {
+      return NextResponse.json({ success: true, data: existingElder as any });
     }
 
-    return NextResponse.json({ success: true, data: elder });
+    return NextResponse.json({ success: false, error: 'Elder not found' }, { status: 404 });
   } catch (error) {
     console.error('Error fetching elder:', error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });

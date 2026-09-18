@@ -184,6 +184,11 @@ export default function RegisterPage() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-orange-100">
           <form className="space-y-6" onSubmit={otpSent ? handleRegister : handleSendOtp}>
+            {/* Honeypot trap — invisible to humans, auto-filled by bots */}
+            <div className="absolute" style={{ left: '-9999px', position: 'absolute' }} aria-hidden="true">
+              <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+            </div>
+
             {error && (
               <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md flex items-center">
                 <AlertCircle className="h-5 w-5 text-red-400 mr-2" />

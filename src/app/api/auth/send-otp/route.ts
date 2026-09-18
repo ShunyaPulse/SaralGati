@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter, cacheSet } from '@/lib/redis';
+import { rateLimiter, cacheSet, cacheGet } from '@/lib/redis';
 import nodemailer from 'nodemailer';
 import { queryOne } from '@/lib/db';
 import { verifyTurnstile } from '@/lib/turnstile';
+import crypto from 'crypto';
 
 const sendOtpSchema = z.object({
   email: z.string().email('Invalid email address'),
   type: z.enum(['register', 'login']),
   turnstileToken: z.string().min(1, 'Security check (Turnstile) is required'),
+  website: z.string().optional(), // Honeypot field — must be empty
 });
 
 export async function POST(req: Request) {
@@ -33,8 +35,25 @@ export async function POST(req: Request) {
       );
     }
 
-    const { email, type, turnstileToken } = result.data;
+    const { email, type, turnstileToken, website } = result.data;
+
+    // Honeypot trap: if hidden field is filled, silently reject (bot detected)
+    if (website) {
+      // Return fake success so bot doesn't know it was caught
+      return NextResponse.json({ success: true, message: 'OTP sent successfully' });
+    }
+
     const cleanEmail = email.trim().toLowerCase();
+
+    // 60-second resend cooldown per email
+    const cooldownKey = `otp_cooldown:${type}:${cleanEmail}`;
+    const isOnCooldown = await cacheGet<string>(cooldownKey);
+    if (isOnCooldown) {
+      return NextResponse.json(
+        { error: 'Please wait 60 seconds before requesting a new OTP.' },
+        { status: 429 }
+      );
+    }
 
     // Enforce Turnstile verification at OTP request level
     const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
@@ -63,14 +82,18 @@ export async function POST(req: Request) {
       }
     }
 
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate 6-digit OTP using CSPRNG (hardware entropy)
+    const otp = crypto.randomInt(100000, 1000000).toString();
 
-    // Save to Redis (expires in 10 minutes)
+    // Save OTP to Redis (expires in 10 minutes)
     await cacheSet(`otp:${type}:${cleanEmail}`, otp, 600);
+    // Reset attempt counter on new OTP
+    await cacheSet(`otp_attempts:${type}:${cleanEmail}`, 0, 600);
+    // Set 60-second cooldown
+    await cacheSet(cooldownKey, 'true', 60);
 
     // Send Email
-    console.log(`[OTP] Generated ${otp} for ${cleanEmail} (${type})`);
+    console.log(`[OTP] Generated CSPRNG OTP for ${cleanEmail} (${type})`);
 
     const port = Number(process.env.SMTP_PORT) || 465;
     const transporter = nodemailer.createTransport({

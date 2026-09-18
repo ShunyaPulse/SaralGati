@@ -45,13 +45,25 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (credentials.otp) {
-          const { cacheGet, cacheDelete } = await import('@/lib/redis');
+          const { cacheGet, cacheDelete, cacheSet } = await import('@/lib/redis');
+
+          // OTP attempt capping: max 5 invalid attempts before auto-wipe
+          const attemptKey = `otp_attempts:login:${cleanEmail}`;
+          const attempts = await cacheGet<number>(attemptKey) || 0;
+          if (attempts >= 5) {
+            await cacheDelete(`otp:login:${cleanEmail}`);
+            await cacheDelete(attemptKey);
+            throw new Error('Too many invalid OTP attempts. Please request a new code.');
+          }
+
           const storedOtp = await cacheGet<string>(`otp:login:${cleanEmail}`);
           
           if (!storedOtp || storedOtp !== credentials.otp) {
-            throw new Error('Invalid or expired OTP');
+            await cacheSet(attemptKey, (attempts + 1), 600);
+            throw new Error(`Invalid or expired OTP. ${4 - attempts} attempts remaining.`);
           }
           await cacheDelete(`otp:login:${cleanEmail}`);
+          await cacheDelete(attemptKey);
         } else if (credentials.password) {
           if (!user.password_hash) {
             throw new Error('User has no password, please login with Google or OTP');

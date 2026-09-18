@@ -118,8 +118,8 @@ function TextReveal({ text, className = '' }: { text: string; className?: string
       {words.map((word, i) => (
         <motion.span
           key={i}
-          initial={{ opacity: 0, y: 20, filter: 'blur(8px)' }}
-          whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: '-100px' }}
           transition={{ duration: 0.8, delay: i * 0.1, ease: [0.2, 0.65, 0.3, 0.9] }}
           className="inline-block mr-[0.25em]"
@@ -283,8 +283,8 @@ export default function Home() {
                     It silently learns their daily routines—who they call, when they watch YouTube—and anticipates their needs before they even ask.
                   </p>
                 </div>
-                <div className="flex-1 w-full flex justify-center">
-                  <div className="relative w-full max-w-sm h-32 bg-white/5 border border-white/10 rounded-2xl overflow-hidden p-6 flex items-center justify-center">
+                <div className="flex-1 w-full flex justify-center mt-6 md:mt-0">
+                  <div className="relative w-full max-w-sm py-8 bg-white/5 border border-white/10 rounded-2xl overflow-hidden px-6 flex items-center justify-center">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center animate-pulse">
                         <Activity className="w-6 h-6 text-emerald-400" />

@@ -9,6 +9,7 @@ import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
 import { validateSemanticTarget } from '@/lib/semanticValidator';
 import { query } from '@/lib/db';
 import { validateDeviceToken } from '@/lib/agent-auth';
+import { rateLimiter } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
   try {
@@ -24,6 +25,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
     }
     const effectiveElderId = auth.elderId || elder_id || null;
+
+    // Apply strict AI processing rate limit (30 requests per minute per device/IP) to prevent LLM abuse
+    const rateLimitId = auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`;
+    const rateLimit = await rateLimiter(rateLimitId, 30, 60);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Too many queries. Please wait a moment.' }, { status: 429 });
+    }
 
     const interactionId = crypto.randomUUID();
     const normalizedElements = ui_elements.map((el: string) =>

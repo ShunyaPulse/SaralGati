@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '@/lib/db';
+import { rateLimiter } from '@/lib/redis';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -11,6 +12,16 @@ const registerSchema = z.object({
 
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const rateLimit = await rateLimiter(`register:${ip}`, 5, 3600); // 5 accounts per hour per IP
+    
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many registration attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const result = registerSchema.safeParse(body);
 

@@ -85,7 +85,7 @@ export default function Home() {
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24 lg:pt-32 lg:pb-36">
             <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
               {/* copy */}
-              <div className="text-center lg:text-left">
+              <div className="text-center lg:text-left min-w-0">
                 <FadeUp>
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 text-sm text-emerald-300 mb-6">
                     <Sparkles className="w-4 h-4" />
@@ -94,7 +94,7 @@ export default function Home() {
                 </FadeUp>
 
                 <FadeUp delay={0.1}>
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6">
+                  <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] mb-6">
                     Make Smartphones{' '}
                     <span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
                       Simple
@@ -116,18 +116,18 @@ export default function Home() {
                   <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                     <a
                       href="/downloads/saralgati.apk"
-                      className="group inline-flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-lg px-8 py-4 rounded-2xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all duration-300 hover:-translate-y-0.5"
+                      className="group inline-flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-2xl shadow-lg shadow-emerald-500/25 hover:shadow-emerald-400/30 transition-all duration-300 hover:-translate-y-0.5"
                     >
-                      <Download className="w-5 h-5" />
-                      Download for Android
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      <Download className="w-5 h-5 shrink-0" />
+                      <span>Download for Android</span>
+                      <ArrowRight className="w-4 h-4 shrink-0 group-hover:translate-x-1 transition-transform" />
                     </a>
                     <Link
                       href="/register"
-                      className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 border border-white/20 text-white font-semibold text-lg px-8 py-4 rounded-2xl transition-all duration-300"
+                      className="inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur-sm hover:bg-white/20 border border-white/20 text-white font-semibold text-base sm:text-lg px-6 sm:px-8 py-3 sm:py-4 rounded-2xl transition-all duration-300"
                     >
-                      Caregiver Dashboard
-                      <ChevronRight className="w-4 h-4" />
+                      <span>Caregiver Dashboard</span>
+                      <ChevronRight className="w-4 h-4 shrink-0" />
                     </Link>
                   </div>
                   <p className="text-sm text-slate-500 mt-4 text-center lg:text-left">
@@ -137,7 +137,7 @@ export default function Home() {
               </div>
 
               {/* Phone Showcase */}
-              <FadeIn delay={0.4} className="relative w-full mt-8 lg:mt-0">
+              <FadeIn delay={0.4} className="relative w-full mt-8 lg:mt-0 min-w-0">
                 {/* Desktop: Overlapping stack */}
                 <div className="hidden lg:flex relative items-center justify-center">
                   <div className="absolute -left-12 top-8 -rotate-6 opacity-70 scale-90">

@@ -3,13 +3,14 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { query, queryOne } from '@/lib/db';
 import { rateLimiter, cacheGet, cacheDelete } from '@/lib/redis';
-import redis from '@/lib/redis';
+import { verifyTurnstile } from '@/lib/turnstile';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   otp: z.string().min(6, 'OTP must be 6 characters'),
+  turnstileToken: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -34,7 +35,20 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, email, password, otp } = result.data;
+    const { name, email, password, otp, turnstileToken } = result.data;
+
+    // Enforce Turnstile verification at Sign Up level
+    if (turnstileToken) {
+      const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
+      if (!isTurnstileValid) {
+        return NextResponse.json({ error: 'Turnstile security check failed' }, { status: 400 });
+      }
+    } else {
+      const wasTurnstileVerified = await cacheGet<string>(`turnstile_verified:${email}`);
+      if (!wasTurnstileVerified) {
+        return NextResponse.json({ error: 'Security verification required before registration' }, { status: 400 });
+      }
+    }
 
     // Verify OTP
     const storedOtp = await cacheGet<string>(`otp:register:${email}`);
@@ -75,8 +89,9 @@ export async function POST(req: Request) {
       throw new Error('Failed to create user');
     }
 
-    // Clear OTP
+    // Clear OTP & Turnstile verification
     await cacheDelete(`otp:register:${email}`);
+    await cacheDelete(`turnstile_verified:${email}`);
 
     return NextResponse.json(
       { success: true, user: newUser },

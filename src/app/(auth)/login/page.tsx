@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
+import { Turnstile } from '@marsidev/react-turnstile';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -17,11 +18,17 @@ export default function LoginPage() {
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileKey, setTurnstileKey] = useState(0);
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) {
       setError('Please enter your email first');
+      return;
+    }
+    if (!turnstileToken) {
+      setError('Please complete the security check');
       return;
     }
     setLoading(true);
@@ -31,7 +38,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, type: 'login' }),
+        body: JSON.stringify({ email, type: 'login', turnstileToken }),
       });
 
       const data = await res.json();
@@ -44,6 +51,8 @@ export default function LoginPage() {
       setError('');
     } catch (err: any) {
       setError(err.message || 'An error occurred while sending OTP.');
+      setTurnstileToken('');
+      setTurnstileKey(prev => prev + 1);
     } finally {
       setLoading(false);
     }
@@ -183,6 +192,7 @@ export default function LoginPage() {
                     setIsOtpMode(!isOtpMode);
                     setOtpSent(false);
                     setError('');
+                    setTurnstileToken('');
                   }}
                   className="font-medium text-orange-600 hover:text-orange-500"
                 >
@@ -190,6 +200,17 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            {isOtpMode && !otpSent && (
+              <div className="flex justify-center min-h-[65px] my-2">
+                <Turnstile
+                  key={turnstileKey}
+                  siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY || ''}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  options={{ theme: 'light' }}
+                />
+              </div>
+            )}
 
             <div>
               <button

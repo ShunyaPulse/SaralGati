@@ -1,35 +1,15 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter } from '@/lib/redis';
-import { cacheSet } from '@/lib/redis';
+import { rateLimiter, cacheSet } from '@/lib/redis';
 import nodemailer from 'nodemailer';
 import { queryOne } from '@/lib/db';
+import { verifyTurnstile } from '@/lib/turnstile';
 
 const sendOtpSchema = z.object({
   email: z.string().email('Invalid email address'),
   type: z.enum(['register', 'login']),
-  turnstileToken: z.string().optional(),
+  turnstileToken: z.string().min(1, 'Security check (Turnstile) is required'),
 });
-
-async function verifyTurnstile(token: string) {
-  const secret = process.env.TURNSTILE_SECRET_KEY || process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY;
-  if (!secret) {
-    console.error('Turnstile secret key is not configured in environment variables');
-    return false;
-  }
-  try {
-    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `secret=${secret}&response=${token}`,
-    });
-    const data = await res.json();
-    return data.success;
-  } catch (error) {
-    console.error('Turnstile verification failed', error);
-    return false;
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -55,14 +35,16 @@ export async function POST(req: Request) {
 
     const { email, type, turnstileToken } = result.data;
 
+    // Enforce Turnstile verification at OTP request level
+    const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
+    if (!isTurnstileValid) {
+      return NextResponse.json({ error: 'Security verification failed. Please try again.' }, { status: 400 });
+    }
+
+    // Store successful Turnstile verification in Redis (expires in 10 minutes)
+    await cacheSet(`turnstile_verified:${email}`, 'true', 600);
+
     if (type === 'register') {
-      if (!turnstileToken) {
-        return NextResponse.json({ error: 'Turnstile token required' }, { status: 400 });
-      }
-      const isTurnstileValid = await verifyTurnstile(turnstileToken);
-      if (!isTurnstileValid) {
-        return NextResponse.json({ error: 'Invalid Turnstile token' }, { status: 400 });
-      }
       
       const existingUser = await queryOne<{ id: string }>(
         'SELECT id FROM users WHERE email = $1',

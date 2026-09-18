@@ -1,4 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+
+export const viewport: Viewport = {
+  themeColor: '#0074c8',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 import { Inter, Noto_Sans_Devanagari } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/providers/session-provider";

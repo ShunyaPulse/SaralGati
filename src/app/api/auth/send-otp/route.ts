@@ -34,6 +34,7 @@ export async function POST(req: Request) {
     }
 
     const { email, type, turnstileToken } = result.data;
+    const cleanEmail = email.trim().toLowerCase();
 
     // Enforce Turnstile verification at OTP request level
     const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
@@ -42,24 +43,23 @@ export async function POST(req: Request) {
     }
 
     // Store successful Turnstile verification in Redis (expires in 10 minutes)
-    await cacheSet(`turnstile_verified:${email}`, 'true', 600);
+    await cacheSet(`turnstile_verified:${cleanEmail}`, 'true', 600);
 
     if (type === 'register') {
-      
       const existingUser = await queryOne<{ id: string }>(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
+        'SELECT id FROM users WHERE LOWER(TRIM(email)) = $1',
+        [cleanEmail]
       );
       if (existingUser) {
-        return NextResponse.json({ error: 'User with this email already exists' }, { status: 400 });
+        return NextResponse.json({ error: 'An account with this email already exists. Please sign in instead.' }, { status: 400 });
       }
     } else if (type === 'login') {
       const existingUser = await queryOne<{ id: string }>(
-        'SELECT id FROM users WHERE email = $1',
-        [email]
+        'SELECT id FROM users WHERE LOWER(TRIM(email)) = $1',
+        [cleanEmail]
       );
       if (!existingUser) {
-        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+        return NextResponse.json({ error: 'No account found with this email address.' }, { status: 404 });
       }
     }
 
@@ -67,10 +67,10 @@ export async function POST(req: Request) {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
     // Save to Redis (expires in 10 minutes)
-    await cacheSet(`otp:${type}:${email}`, otp, 600);
+    await cacheSet(`otp:${type}:${cleanEmail}`, otp, 600);
 
     // Send Email
-    console.log(`[OTP] Generated ${otp} for ${email} (${type})`);
+    console.log(`[OTP] Generated ${otp} for ${cleanEmail} (${type})`);
 
     const port = Number(process.env.SMTP_PORT) || 465;
     const transporter = nodemailer.createTransport({
@@ -89,7 +89,7 @@ export async function POST(req: Request) {
     if (process.env.SMTP_USER && process.env.SMTP_PASS) {
       await transporter.sendMail({
         from: process.env.SMTP_FROM || 'noreply@saralgati.com',
-        to: email,
+        to: cleanEmail,
         subject: `Your ${type === 'register' ? 'Registration' : 'Login'} OTP - SaralGati`,
         text: `Your OTP is ${otp}. It will expire in 10 minutes.`,
       });

@@ -36,6 +36,7 @@ export async function POST(req: Request) {
     }
 
     const { name, email, password, otp, turnstileToken } = result.data;
+    const cleanEmail = email.trim().toLowerCase();
 
     // Enforce Turnstile verification at Sign Up level
     if (turnstileToken) {
@@ -44,14 +45,14 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Turnstile security check failed' }, { status: 400 });
       }
     } else {
-      const wasTurnstileVerified = await cacheGet<string>(`turnstile_verified:${email}`);
+      const wasTurnstileVerified = await cacheGet<string>(`turnstile_verified:${cleanEmail}`);
       if (!wasTurnstileVerified) {
         return NextResponse.json({ error: 'Security verification required before registration' }, { status: 400 });
       }
     }
 
     // Verify OTP
-    const storedOtp = await cacheGet<string>(`otp:register:${email}`);
+    const storedOtp = await cacheGet<string>(`otp:register:${cleanEmail}`);
     if (!storedOtp || storedOtp !== otp) {
       return NextResponse.json(
         { error: 'Invalid or expired OTP' },
@@ -61,13 +62,13 @@ export async function POST(req: Request) {
 
     // Check if user already exists
     const existingUser = await queryOne<{ id: string }>(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+      'SELECT id FROM users WHERE LOWER(TRIM(email)) = $1',
+      [cleanEmail]
     );
 
     if (existingUser) {
       return NextResponse.json(
-        { error: 'User with this email already exists' },
+        { error: 'An account with this email already exists. Please sign in instead.' },
         { status: 400 }
       );
     }
@@ -82,7 +83,7 @@ export async function POST(req: Request) {
       VALUES ($1, $2, $3, 'caregiver')
       RETURNING id, email, name
       `,
-      [name, email, hashedPassword]
+      [name.trim(), cleanEmail, hashedPassword]
     );
 
     if (!newUser) {
@@ -90,8 +91,8 @@ export async function POST(req: Request) {
     }
 
     // Clear OTP & Turnstile verification
-    await cacheDelete(`otp:register:${email}`);
-    await cacheDelete(`turnstile_verified:${email}`);
+    await cacheDelete(`otp:register:${cleanEmail}`);
+    await cacheDelete(`turnstile_verified:${cleanEmail}`);
 
     return NextResponse.json(
       { success: true, user: newUser },

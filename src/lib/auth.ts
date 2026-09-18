@@ -29,6 +29,8 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Email is required');
         }
 
+        const cleanEmail = (credentials.email || '').trim().toLowerCase();
+
         const user = await queryOne<{
           id: string;
           email: string;
@@ -36,7 +38,7 @@ export const authOptions: NextAuthOptions = {
           password_hash: string;
           role: string;
           image: string;
-        }>('SELECT * FROM users WHERE email = $1', [credentials.email]);
+        }>('SELECT * FROM users WHERE LOWER(TRIM(email)) = $1', [cleanEmail]);
 
         if (!user) {
           throw new Error('User not found');
@@ -44,12 +46,12 @@ export const authOptions: NextAuthOptions = {
 
         if (credentials.otp) {
           const { cacheGet, cacheDelete } = await import('@/lib/redis');
-          const storedOtp = await cacheGet<string>(`otp:login:${credentials.email}`);
+          const storedOtp = await cacheGet<string>(`otp:login:${cleanEmail}`);
           
           if (!storedOtp || storedOtp !== credentials.otp) {
             throw new Error('Invalid or expired OTP');
           }
-          await cacheDelete(`otp:login:${credentials.email}`);
+          await cacheDelete(`otp:login:${cleanEmail}`);
         } else if (credentials.password) {
           if (!user.password_hash) {
             throw new Error('User has no password, please login with Google or OTP');

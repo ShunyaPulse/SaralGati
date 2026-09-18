@@ -16,6 +16,8 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailExists, setEmailExists] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
 
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -38,10 +40,45 @@ export default function RegisterPage() {
       .catch((err) => console.error('Turnstile config error:', err));
   }, []);
 
+  const checkEmailAvailability = async (emailToCheck: string) => {
+    const cleanEmail = emailToCheck.trim().toLowerCase();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      setEmailExists(false);
+      return;
+    }
+
+    try {
+      setCheckingEmail(true);
+      const res = await fetch(`/api/auth/check-email?email=${encodeURIComponent(cleanEmail)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.exists) {
+          setEmailExists(true);
+          setError('An account with this email already exists.');
+        } else {
+          setEmailExists(false);
+          if (error === 'An account with this email already exists.') {
+            setError('');
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Email check failed:', err);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (emailExists) {
+      setError('An account with this email already exists. Please sign in instead.');
+      setLoading(false);
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -55,16 +92,21 @@ export default function RegisterPage() {
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, type: 'register', turnstileToken }),
+        body: JSON.stringify({ email: cleanEmail, type: 'register', turnstileToken }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        if (data.error?.toLowerCase().includes('already exists')) {
+          setEmailExists(true);
+        }
         throw new Error(data.error || 'Failed to send OTP');
       }
 
@@ -84,11 +126,13 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
 
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, otp }),
+        body: JSON.stringify({ name: name.trim(), email: cleanEmail, password, otp: otp.trim() }),
       });
 
       const data = await res.json();
@@ -99,7 +143,7 @@ export default function RegisterPage() {
 
       // Auto login after successful registration
       const signInRes = await signIn('credentials', {
-        email,
+        email: cleanEmail,
         password,
         redirect: false,
       });
@@ -185,11 +229,30 @@ export default function RegisterPage() {
                   required
                   disabled={otpSent}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (emailExists) setEmailExists(false);
+                  }}
+                  onBlur={(e) => checkEmailAvailability(e.target.value)}
+                  className={`block w-full pl-10 sm:text-sm rounded-md py-3 border text-lg disabled:opacity-50 ${
+                    emailExists
+                      ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50/30'
+                      : 'border-gray-300 focus:ring-orange-500 focus:border-orange-500'
+                  }`}
                   placeholder="you@example.com"
                 />
               </div>
+              {checkingEmail && (
+                <p className="mt-1 text-xs text-gray-500">Checking email availability...</p>
+              )}
+              {emailExists && (
+                <div className="mt-2 text-sm text-red-600 flex items-center justify-between bg-red-50 p-2.5 rounded-md border border-red-200">
+                  <span>An account with this email already exists.</span>
+                  <Link href="/login" className="font-semibold text-orange-600 hover:text-orange-700 underline ml-2 whitespace-nowrap">
+                    Sign in &rarr;
+                  </Link>
+                </div>
+              )}
             </div>
 
             <div>
@@ -282,11 +345,13 @@ export default function RegisterPage() {
             <div>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (!otpSent && (emailExists || checkingEmail || !turnstileToken))}
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {loading
                   ? (otpSent ? 'Registering...' : 'Sending OTP...')
+                  : emailExists
+                  ? 'Account Already Exists'
                   : (otpSent ? 'Verify & Register' : 'Send Verification Code')}
               </button>
             </div>

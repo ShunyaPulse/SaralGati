@@ -64,16 +64,28 @@ export default function Contact() {
                     <h2 className="text-2xl font-bold text-slate-900 mb-8">Frequently Asked Questions</h2>
                     <div className="space-y-6">
                       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 mb-2">Is the companion app available on iOS?</h3>
-                        <p className="text-slate-600 leading-relaxed">Currently, the companion app is only available for Android devices due to advanced accessibility requirements. The caregiver dashboard works on all devices.</p>
+                        <h3 className="font-bold text-slate-900 mb-2">Why does Android show "Restricted setting" during setup?</h3>
+                        <p className="text-slate-600 leading-relaxed text-sm">
+                          On Android 13 and newer, sideloaded apps require explicit confirmation before activating Accessibility. Simply go to <strong>Settings &rarr; Apps &rarr; SaralGati &rarr; tap the 3 dots (⋮) in the top-right corner &rarr; select "Allow restricted settings"</strong>. Then return to Accessibility to turn it on.
+                        </p>
                       </div>
                       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 mb-2">How does the SOS feature work?</h3>
-                        <p className="text-slate-600 leading-relaxed">When triggered, it immediately sends a high-priority alert with location data to all designated family members through the dashboard and SMS.</p>
+                        <h3 className="font-bold text-slate-900 mb-2">Do my parents need to create an account or remember passwords?</h3>
+                        <p className="text-slate-600 leading-relaxed text-sm">
+                          No. We built SaralGati to be zero-friction for elders. Caregivers manage the account from their dashboard and connect the parent's phone using a simple one-time pairing code.
+                        </p>
                       </div>
                       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                        <h3 className="font-bold text-slate-900 mb-2">Does it require an internet connection?</h3>
-                        <p className="text-slate-600 leading-relaxed">Core accessibility features work offline. Alerts and dashboard syncing require an active internet connection.</p>
+                        <h3 className="font-bold text-slate-900 mb-2">Does SaralGati record my parents' screen or read their chats?</h3>
+                        <p className="text-slate-600 leading-relaxed text-sm">
+                          Never. All UI inspection for button spotlights happens 100% locally on the device. Sensitive data like passwords, OTPs, and bank balances are strictly masked and never transmitted anywhere.
+                        </p>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <h3 className="font-bold text-slate-900 mb-2">Which languages are supported?</h3>
+                        <p className="text-slate-600 leading-relaxed text-sm">
+                          SaralGati provides voice and visual guidance in Hindi and English, with support for more Indian regional languages rolling out soon.
+                        </p>
                       </div>
                     </div>
                   </div>

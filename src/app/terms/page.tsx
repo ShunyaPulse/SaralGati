@@ -26,44 +26,57 @@ export default function TermsOfService() {
                 <section>
                   <h2 className="text-2xl font-bold text-slate-900 mb-4">1. Acceptance of Terms</h2>
                   <p>
-                    By accessing and using the SaralGati application ("Service"), you accept and agree to be bound by the terms and provision of this agreement.
+                    By downloading the SaralGati companion application or creating an account on the Caregiver Dashboard, you agree to comply with and be bound by these Terms of Service. If you disagree with any part of these terms, you must not use our software or services.
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">2. Description of Service</h2>
-                  <p>
-                    SaralGati provides accessibility tools and companion software for elderly users, alongside a monitoring dashboard for their caregivers. The Service includes software installed on mobile devices and a web-based dashboard.
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">2. Description of the Service</h2>
+                  <p className="mb-3">
+                    SaralGati provides an on-device digital companion designed to assist senior citizens in operating modern smartphone apps through vocal instructions, visual spotlight overlays, and scam detection warnings. The Service consists of:
                   </p>
-                </section>
-
-                <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">3. User Responsibilities</h2>
-                  <ul className="list-disc pl-6 space-y-3">
-                    <li>Caregivers must have explicit consent from the elder (or legal authority) before installing the SaralGati companion app on the elder's device.</li>
-                    <li>You are responsible for maintaining the confidentiality of your account and password.</li>
-                    <li>You agree to notify us immediately of any unauthorized use of your account.</li>
+                  <ul className="list-disc pl-6 space-y-2">
+                    <li>The <strong>SaralGati Android Companion App</strong>, which utilizes Android Accessibility Services to detect UI states and assist the user locally.</li>
+                    <li>The <strong>Caregiver Web Dashboard</strong>, enabling designated family members to view battery/connectivity status, configure habit preferences, and receive critical alerts.</li>
                   </ul>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">4. Elder Data Handling</h2>
-                  <p>
-                    As detailed in our Privacy Policy, you acknowledge that SaralGati relies on on-device processing to protect elder privacy. You agree not to attempt to reverse-engineer or extract raw usage data from the application.
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">3. Consent & Family Relationship</h2>
+                  <ul className="list-disc pl-6 space-y-3">
+                    <li>You warrant that you have discussed and obtained clear, voluntary consent from your parent or elder family member prior to installing and enabling the accessibility service on their smartphone.</li>
+                    <li>SaralGati must never be installed covertly or used as spyware against an individual's knowledge or will.</li>
+                  </ul>
+                </section>
+
+                <section>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">4. Device Requirements & Permissions</h2>
+                  <p className="leading-relaxed mb-3">
+                    To deliver real-time visual spotlights and audio guidance, the companion app requires Android 8.0 or higher and explicit activation of Android Accessibility Services. On modern Android versions (Android 13+), users may need to allow "Restricted Settings" under system application settings to complete sideloaded setup.
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">5. Limitation of Liability</h2>
-                  <p>
-                    SaralGati is designed as an assistive tool, not a medical or emergency life-saving device. We are not liable for any damages, injury, or loss of life resulting from reliance on our alerts or guidance. Always use traditional emergency services (like 112 in India) for critical medical emergencies.
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">5. Assistive Nature & Emergency Disclaimer</h2>
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-base mb-3">
+                    <strong>Important Safety Notice:</strong> SaralGati is an assistive smartphone tool and is NOT a medical device, life-support monitor, or emergency response dispatch system.
+                  </div>
+                  <p className="leading-relaxed">
+                    While SaralGati provides SOS notification features to designated family members, network delays or battery depletion may impede delivery. In the event of an urgent medical or physical emergency, users and caregivers must immediately contact local authorities (such as dialing 112 in India).
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">6. Termination</h2>
-                  <p>
-                    We may terminate or suspend access to our Service immediately, without prior notice or liability, for any reason whatsoever, including without limitation if you breach the Terms.
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">6. Third-Party App Compatibility</h2>
+                  <p className="leading-relaxed">
+                    SaralGati interacts with third-party Android apps (such as WhatsApp, YouTube, and UPI platforms). While our guidance algorithms adapt dynamically, subsequent updates made by third-party developers to their app layouts may temporarily impact the accuracy of visual spotlights until our companion adapts.
+                  </p>
+                </section>
+
+                <section>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">7. Scam Shield Advisory</h2>
+                  <p className="leading-relaxed">
+                    Our Scam Shield feature utilizes heuristic indicators to flag suspicious prompts, unverified payment requests, and deceptive APKs. It serves as an assistive advisory barrier; users must continue to exercise personal caution when making payments or authorizing banking transactions.
                   </p>
                 </section>
               </div>

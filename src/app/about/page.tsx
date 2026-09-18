@@ -29,31 +29,56 @@ export default function About() {
                 <section>
                   <h2 className="text-2xl font-bold text-slate-900 mb-4">Our Mission</h2>
                   <p className="leading-relaxed">
-                    Making technology accessible for every elder in India. We believe that age should not be a barrier to independence, connectivity, or safety. SaralGati bridges the digital divide for the elderly through compassionate AI and seamless family integration.
+                    SaralGati was born out of a universal reality in Indian homes: our parents and grandparents want to be digitally independent, but modern apps—with endless updates, confusing menus, and lurking online scams—are often overwhelming. We are building technology that empowers seniors to navigate their smartphones with absolute confidence and self-reliance, while giving families complete peace of mind.
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">Our Vision</h2>
-                  <p className="leading-relaxed">
-                    To create a world where every senior citizen can confidently navigate the digital landscape, while their families enjoy complete peace of mind knowing their loved ones are safe and supported.
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">How SaralGati Works</h2>
+                  <p className="leading-relaxed mb-6">
+                    Unlike conventional remote-control or invasive surveillance tools, SaralGati is designed as a respectful, intelligent on-device companion:
                   </p>
+                  <div className="grid sm:grid-cols-2 gap-6 not-prose">
+                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                      <h3 className="font-bold text-slate-900 mb-2 text-base">Dynamic Visual Spotlights</h3>
+                      <p className="text-slate-600 text-sm leading-relaxed">
+                        Instead of trying to explain where a button is over a phone call, SaralGati dims the screen and highlights the exact button with an animated halo right when they get stuck.
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                      <h3 className="font-bold text-slate-900 mb-2 text-base">Patience Voice Guidance</h3>
+                      <p className="text-slate-600 text-sm leading-relaxed">
+                        Speaks calm, clear Hindi and regional instructions. It explains steps simply, never gets frustrated, and repeats as many times as needed.
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                      <h3 className="font-bold text-slate-900 mb-2 text-base">Proactive Scam Shield</h3>
+                      <p className="text-slate-600 text-sm leading-relaxed">
+                        Actively alerts and intercepts suspicious payment requests, deceptive lottery notifications, and dangerous app installations before any harm is done.
+                      </p>
+                    </div>
+                    <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
+                      <h3 className="font-bold text-slate-900 mb-2 text-base">Zero-Friction Elder Setup</h3>
+                      <p className="text-slate-600 text-sm leading-relaxed">
+                        No logins, passwords, or emails for elders to remember. One tap install, simple pairing with the caregiver, and it runs silently in the background.
+                      </p>
+                    </div>
+                  </div>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">Our Core Values</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">Our Core Pillars</h2>
                   <ul className="list-disc pl-6 space-y-3">
-                    <li><strong className="text-slate-900">Empathy First:</strong> Every feature we build starts with understanding the struggles of our elderly users.</li>
-                    <li><strong className="text-slate-900">Privacy by Design:</strong> We respect user data. All sensitive processing happens on-device.</li>
-                    <li><strong className="text-slate-900">Simplicity:</strong> No jargon, no complex menus. Just intuitive, culturally-aware interfaces.</li>
-                    <li><strong className="text-slate-900">Family Bond:</strong> Technology should connect families, not isolate them.</li>
+                    <li><strong className="text-slate-900">Dignity, Not Surveillance:</strong> We believe in enabling independence. We do not stream screens or snoop on conversations—all assistive AI runs strictly on the elder's smartphone.</li>
+                    <li><strong className="text-slate-900">Zero Cloud Dependency for Core Guidance:</strong> Navigation and spotlight prompts execute locally without lag or privacy leakage.</li>
+                    <li><strong className="text-slate-900">Bridging the Generational Gap:</strong> Helping families spend phone calls sharing love and stories rather than troubleshooting tech issues.</li>
                   </ul>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">The Team</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">The Team Behind SaralGati</h2>
                   <p className="leading-relaxed">
-                    We are a dedicated group of engineers, designers, and caregivers who have firsthand experience with the challenges of elder care in modern India. SaralGati was born from our own struggles to help our parents and grandparents use smartphones safely.
+                    We are engineers, researchers, and devoted children building the solution we needed for our own families. Operating out of Bengaluru, we are committed to making India's digital revolution truly inclusive for every senior citizen.
                   </p>
                 </section>
               </div>

@@ -191,7 +191,7 @@ export default function Home() {
                   </div>
                   <ul className="space-y-4">
                     {[
-                      'Accidentally taps ads and gets redirected to scam pages',
+                      'Gets confused by unknown popups and unexpected app screens',
                       'Changes settings by mistake, breaks Wi-Fi or volume',
                       '"Mujhe kuch dikh nahi raha" — screen too small, text too confusing',
                       'Missed video calls because they can\'t find the green button',
@@ -216,7 +216,7 @@ export default function Home() {
                     {[
                       'Visual finger pointer highlights the exact button to tap',
                       'Gentle Hindi voice: "Papa, yahan green button dabayein"',
-                      'Scam screens get auto-blocked before they cause damage',
+                      'Guides them step-by-step when they get stuck on unfamiliar screens',
                       'Learns their habits — no interrogation, no setup fatigue',
                       'You get a calm notification only when they actually need help'
                     ].map((item, i) => (

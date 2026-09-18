@@ -45,7 +45,7 @@ export default function Contact() {
                         </div>
                         <div>
                           <h3 className="font-bold text-slate-900 mb-1">Email Support</h3>
-                          <p className="text-slate-500">support@saralgati.in</p>
+                          <p className="text-slate-500">techanics6174@gmail.com</p>
                         </div>
                       </div>
                       <div className="flex items-start bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
@@ -78,13 +78,13 @@ export default function Contact() {
                       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                         <h3 className="font-bold text-slate-900 mb-2">Does SaralGati record my parents' screen or read their chats?</h3>
                         <p className="text-slate-600 leading-relaxed text-sm">
-                          Never. All UI inspection for button spotlights happens 100% locally on the device. Sensitive data like passwords, OTPs, and bank balances are strictly masked and never transmitted anywhere.
+                          No. We never take screenshots, record video, or access personal chat conversations or photo galleries. The app only inspects button and control labels on the screen to provide step-by-step guidance.
                         </p>
                       </div>
                       <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                         <h3 className="font-bold text-slate-900 mb-2">Which languages are supported?</h3>
                         <p className="text-slate-600 leading-relaxed text-sm">
-                          SaralGati provides voice and visual guidance in Hindi and English, with support for more Indian regional languages rolling out soon.
+                          SaralGati currently provides voice guidance and visual cues in Hindi.
                         </p>
                       </div>
                     </div>

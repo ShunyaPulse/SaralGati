@@ -25,74 +25,59 @@ export default function PrivacyPolicy() {
             <FadeUp delay={0.1}>
               <div className="space-y-10 text-lg text-slate-600 bg-white p-8 sm:p-12 rounded-3xl shadow-sm border border-slate-100 leading-relaxed">
                 <section className="bg-emerald-50 border-l-4 border-emerald-500 p-6 rounded-r-2xl">
-                  <h2 className="text-xl font-bold text-emerald-900 mb-2">Our Fundamental Privacy Commitment</h2>
+                  <h2 className="text-xl font-bold text-emerald-900 mb-2">Our Privacy Commitment</h2>
                   <p className="font-medium text-emerald-950 mb-2">
-                    SaralGati is designed with a strict "Zero-Surveillance" architecture. We assist your parents by giving them visual and vocal guidance on their own phone—we never turn their phone into a surveillance camera.
+                    SaralGati is designed to guide and assist senior citizens with patience and care. We treat personal data with strict responsibility and transparency.
                   </p>
                   <p className="text-emerald-900 text-sm">
-                    All screen parsing and guidance generation occurs 100% locally on the device using on-device processing. No screen recordings, personal messages, or photos are ever sent to our servers.
+                    We do NOT record screens, stream video, or capture photos from your parents' phone. Only the text labels of on-screen buttons required to guide them are processed.
                   </p>
                 </section>
 
                 <section>
                   <h2 className="text-2xl font-bold text-slate-900 mb-4">1. Use of Android Accessibility Service API</h2>
                   <p className="mb-4">
-                    The SaralGati Android companion app requires the <strong>Accessibility Service API</strong>. We use this API exclusively for the following assistive purposes:
+                    The SaralGati Android companion app requires the <strong>Accessibility Service API</strong>. This permission is used strictly for assistive navigation:
                   </p>
                   <ul className="list-disc pl-6 space-y-3">
-                    <li><strong className="text-slate-900">Identifying Interactive Elements:</strong> To detect on-screen buttons, text fields, and icons so that we can draw dynamic visual halos and spotlight the exact step to take next.</li>
-                    <li><strong className="text-slate-900">Detecting Confusion & Getting Stuck:</strong> To recognize when a user is repeatedly tapping the wrong area or looping between screens, prompting gentle Hindi voice assistance.</li>
-                    <li><strong className="text-slate-900">Preventing Fraud & Scams:</strong> To identify suspicious phishing prompts, fake lottery dialogs, or unauthorized APK install attempts and show immediate warning overlays.</li>
+                    <li><strong className="text-slate-900">Identifying On-Screen Controls:</strong> To locate buttons, input fields, and menus so the app can draw a visual spotlight on the exact button the elder needs to press.</li>
+                    <li><strong className="text-slate-900">Detecting When an Elder is Stuck:</strong> To recognize repetitive tapping or confusion on a screen and trigger helpful Hindi voice guidance.</li>
                   </ul>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">2. Strict Exclusion of Sensitive Data</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">2. What Information Leaves the Phone</h2>
                   <p className="mb-4">
-                    Our system is hardcoded to completely ignore and redact sensitive fields before any processing occurs:
+                    To provide accurate step-by-step guidance, the following information is sent securely to our backend server:
                   </p>
                   <ul className="list-disc pl-6 space-y-2">
-                    <li><strong className="text-slate-900">Passwords & PINs:</strong> Password fields, UPI PIN keyboards, and numeric authentication prompts are automatically bypassed and masked.</li>
-                    <li><strong className="text-slate-900">OTPs & Banking Credentials:</strong> SMS one-time passwords and secure banking interfaces are strictly excluded.</li>
-                    <li><strong className="text-slate-900">Private Chats & Photos:</strong> We do not inspect, log, or transmit personal gallery photos, personal messages, or private media.</li>
+                    <li><strong className="text-slate-900">Pruned UI Button Labels:</strong> The names and types of interactive elements on the current screen (e.g., "[BUTTON] Call", "[INPUT] Search") needed by our AI engine to identify the next step.</li>
+                    <li><strong className="text-slate-900">App Package Name:</strong> The identifier of the app currently in use (e.g., WhatsApp, Phone dialer).</li>
+                    <li><strong className="text-slate-900">Elder's Question & Spoken Help:</strong> The question asked or the guidance context, to generate the appropriate Hindi explanation.</li>
+                    <li><strong className="text-slate-900">Device Heartbeat:</strong> Basic status indicators (battery percentage and online/offline status) sent to the caregiver dashboard.</li>
                   </ul>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">3. Data Boundaries: What Stays Local vs What Syncs</h2>
-                  <div className="grid sm:grid-cols-2 gap-4 not-prose my-4">
-                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                      <h3 className="font-bold text-slate-900 text-base mb-2">Processed 100% On-Device (Never Leaves Phone)</h3>
-                      <ul className="text-sm space-y-1.5 text-slate-600 list-disc pl-4">
-                        <li>Raw screen text & UI node trees</li>
-                        <li>Microphone voice command recognition</li>
-                        <li>Detailed app interaction logs</li>
-                        <li>Personal contact names and numbers</li>
-                      </ul>
-                    </div>
-                    <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-100">
-                      <h3 className="font-bold text-[#0074c8] text-base mb-2">Synced to Caregiver Cloud</h3>
-                      <ul className="text-sm space-y-1.5 text-slate-600 list-disc pl-4">
-                        <li>Device heartbeat (battery level, network status)</li>
-                        <li>Critical safety alerts (SOS pressed, repeated scams)</li>
-                        <li>High-level habit summary (e.g., active hours)</li>
-                        <li>Caregiver account credentials & paired device IDs</li>
-                      </ul>
-                    </div>
-                  </div>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">3. What We Never Collect or Record</h2>
+                  <ul className="list-disc pl-6 space-y-2">
+                    <li><strong>No Screen Recordings or Screenshots:</strong> We do not take video captures, screenshots, or stream the visual display.</li>
+                    <li><strong>No Photos or Personal Media:</strong> Gallery photos, videos, and personal files are never accessed or collected.</li>
+                    <li><strong>No Covert Eavesdropping:</strong> Microphone audio is only processed when the elder asks for voice help.</li>
+                  </ul>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">4. Caregiver Visibility & Control</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">4. Caregiver Dashboard Scope</h2>
                   <p className="leading-relaxed">
-                    Caregivers cannot remotely control the device screen or view what their parents are typing or watching. The Caregiver Dashboard displays only high-level reassurance indicators (e.g., "Phone active 10 mins ago", "Battery 72%", or "SOS Triggered").
+                    The caregiver dashboard provides high-level reassurance (such as active connectivity status and battery level). Caregivers cannot view private chats, read messages, or watch the elder's screen remotely.
                   </p>
                 </section>
 
                 <section>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-4">5. Data Deletion & Account Erasure</h2>
+                  <h2 className="text-2xl font-bold text-slate-900 mb-4">5. Data Retention & Deletion</h2>
                   <p className="leading-relaxed">
-                    You have complete ownership over your family's data. If you delete an elder profile or your caregiver account from the dashboard settings, all associated cloud records and telemetry are immediately and permanently erased from our production databases.
+                    Interaction records are stored securely for service operation and model quality. Caregivers can delete elder profiles or their account directly from the dashboard settings, which purges associated records from our active databases.
                   </p>
                 </section>
               </div>

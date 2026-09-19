@@ -1,34 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateAIResponse } from '@/lib/aiFallback';
 import { validateDeviceToken } from '@/lib/agent-auth';
 
-function sanitizePackageName(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
-  const cleaned = raw.trim().slice(0, 200);
-  return /^[a-zA-Z][a-zA-Z0-9._]*$/.test(cleaned) ? cleaned : null;
-}
-function sanitizeUIElements(raw: unknown): string[] | null {
-  if (!Array.isArray(raw)) return null;
-  if (raw.length === 0 || raw.length > 500) return null;
-  const result: string[] = [];
-  for (const el of raw) {
-    if (typeof el !== 'string') return null;
-    result.push(el.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 1000));
-  }
-  return result;
-}
+const explainRequestSchema = z.object({
+  app_package: z.string().min(1, 'app_package is required').max(200).regex(/^[a-zA-Z][a-zA-Z0-9._]*$/),
+  ui_elements: z.array(z.string().max(1000)).min(1).max(500)
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-
-    const safeAppPackage = sanitizePackageName(body.app_package);
-    const safeUIElements = sanitizeUIElements(body.ui_elements);
-
-    if (!safeAppPackage || !safeUIElements) {
-      return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
-    }
-
+    // 1. Authenticate first
     const flywheelSecret = req.headers.get('x-flywheel-secret');
     const authHeader = req.headers.get('authorization');
     const expectedSecret = process.env.FLYWHEEL_SECRET || process.env.API_SECRET || 'saralgati_super_secret_key_2024';
@@ -48,6 +30,16 @@ export async function POST(req: NextRequest) {
         }
       });
     }
+
+    // 2. Validate payload with Zod
+    const rawBody = await req.json();
+    const parseResult = explainRequestSchema.safeParse(rawBody);
+
+    if (!parseResult.success) {
+      return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+    }
+
+    const { app_package: safeAppPackage, ui_elements: safeUIElements } = parseResult.data;
 
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
 The user is currently looking at an app with package name: ${safeAppPackage}.

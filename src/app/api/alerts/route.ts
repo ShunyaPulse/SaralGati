@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
+import { verifyAndroidHmac } from '@/lib/hmac';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog[]>>> {
   try {
@@ -66,6 +67,9 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
 
 export async function POST(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog>>> {
   try {
+    if (!verifyAndroidHmac(request)) {
+      return NextResponse.json({ success: false, error: 'Invalid app signature' }, { status: 403 });
+    }
     const body = await request.json();
     const { elder_id, event_type, description, severity, screenshot_url, screen_name, app_package } = body;
 

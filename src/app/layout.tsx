@@ -4,6 +4,7 @@ import "./globals.css";
 import AuthProvider from "@/components/providers/session-provider";
 import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
 import { Toaster } from "sonner";
+import { headers } from 'next/headers';
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const notoSansDevanagari = Noto_Sans_Devanagari({
@@ -34,14 +35,17 @@ export const metadata: Metadata = {
   }
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const nonce = headersList.get('x-nonce') || undefined;
+
   return (
-    <html lang="en">
-      <body className={`${inter.variable} ${notoSansDevanagari.variable} font-sans overflow-x-hidden`}>
+    <html lang="en" nonce={nonce}>
+      <body className={`${inter.variable} ${notoSansDevanagari.variable} font-sans overflow-x-hidden`} nonce={nonce}>
         <SmoothScrollProvider>
           <AuthProvider>
             {children}

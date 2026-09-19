@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { queryOne } from '@/lib/db';
-import { rateLimiter } from '@/lib/redis';
+import { rateLimiter, getSubnet } from '@/lib/redis';
+import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +24,25 @@ export async function GET(req: Request) {
 
     // Rate limit check requests per IP: 60 checks per minute
     const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const subnet = getSubnet(ip);
+    const cookieStore = await cookies();
+    const devId = cookieStore.get('__sg_dev_id')?.value;
+
     const rateLimit = await rateLimiter(`check-email:${ip}`, 60, 60);
     if (!rateLimit.allowed) {
       return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+    }
+
+    const subnetLimit = await rateLimiter(`check-email_subnet:${subnet}`, 300, 60);
+    if (!subnetLimit.allowed) {
+      return NextResponse.json({ error: 'Too many requests from this network. Please try again later.' }, { status: 429 });
+    }
+
+    if (devId) {
+      const devLimit = await rateLimiter(`check-email_dev:${devId}`, 60, 60);
+      if (!devLimit.allowed) {
+        return NextResponse.json({ error: 'Too many requests from this device. Please try again later.' }, { status: 429 });
+      }
     }
 
     const existingUser = await queryOne<{ id: string }>(

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter } from '@/lib/redis';
+import { rateLimiter, getSubnet } from '@/lib/redis';
+import { cookies } from 'next/headers';
 import nodemailer from 'nodemailer';
 
 const contactSchema = z.object({
@@ -14,13 +15,34 @@ const contactSchema = z.object({
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for') || 'anonymous';
-    const rateLimit = await rateLimiter(`contact:${ip}`, 3, 3600); // 3 requests per hour
+    const subnet = getSubnet(ip);
+    const cookieStore = await cookies();
+    const devId = cookieStore.get('__sg_dev_id')?.value;
     
+    const rateLimit = await rateLimiter(`contact:${ip}`, 3, 3600); // 3 requests per hour
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.' },
         { status: 429 }
       );
+    }
+
+    const subnetLimit = await rateLimiter(`contact_subnet:${subnet}`, 10, 3600);
+    if (!subnetLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests from this network. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    if (devId) {
+      const devLimit = await rateLimiter(`contact_dev:${devId}`, 3, 3600);
+      if (!devLimit.allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests from this device. Please try again later.' },
+          { status: 429 }
+        );
+      }
     }
 
     const body = await req.json();

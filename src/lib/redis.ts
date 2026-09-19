@@ -61,16 +61,46 @@ export async function invalidatePattern(pattern: string): Promise<void> {
   }
 }
 
+export function getSubnet(ip: string): string {
+  if (!ip || ip === 'anonymous' || ip === '::1' || ip === '127.0.0.1') return 'local';
+  if (ip.includes(':')) {
+    // IPv6: use first 4 blocks (/64 subnet)
+    const blocks = ip.split(':');
+    return blocks.slice(0, Math.min(4, blocks.length)).join(':') + '::/64';
+  } else {
+    // IPv4: use first 3 octets (/24 subnet)
+    const octets = ip.split('.');
+    if (octets.length === 4) {
+      return octets.slice(0, 3).join('.') + '.0/24';
+    }
+    return ip;
+  }
+}
+
 export async function rateLimiter(identifier: string, limit: number, windowSeconds: number): Promise<{ allowed: boolean; remaining: number }> {
   try {
     const key = `ratelimit:${identifier}`;
-    const current = await redis.incr(key);
-    if (current === 1) {
-      await redis.expire(key, windowSeconds);
+    const now = Date.now();
+    const windowStart = now - windowSeconds * 1000;
+
+    const pipeline = redis.pipeline();
+    pipeline.zremrangebyscore(key, '-inf', windowStart);
+    const member = `${now}-${Math.random().toString(36).substring(2)}`;
+    pipeline.zadd(key, now, member);
+    pipeline.zcard(key);
+    pipeline.expire(key, windowSeconds);
+
+    const results = await pipeline.exec();
+
+    if (!results) {
+      return { allowed: true, remaining: 1 };
     }
+
+    const requestCount = results[2][1] as number;
+
     return {
-      allowed: current <= limit,
-      remaining: Math.max(0, limit - current)
+      allowed: requestCount <= limit,
+      remaining: Math.max(0, limit - requestCount)
     };
   } catch (error) {
     console.error(`Redis rateLimiter Error for identifier ${identifier}:`, error);

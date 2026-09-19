@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter, cacheSet, cacheGet } from '@/lib/redis';
+import { rateLimiter, cacheSet, cacheGet, getSubnet } from '@/lib/redis';
+import { cookies } from 'next/headers';
 import nodemailer from 'nodemailer';
 import { queryOne } from '@/lib/db';
 import { verifyTurnstile } from '@/lib/turnstile';
@@ -16,13 +17,34 @@ const sendOtpSchema = z.object({
 export async function POST(req: Request) {
   try {
     const ip = req.headers.get('x-forwarded-for') || 'anonymous';
-    const rateLimit = await rateLimiter(`send-otp:${ip}`, 5, 3600);
+    const subnet = getSubnet(ip);
+    const cookieStore = await cookies();
+    const devId = cookieStore.get('__sg_dev_id')?.value;
     
+    const rateLimit = await rateLimiter(`send-otp:${ip}`, 5, 3600);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { error: 'Too many requests. Please try again later.' },
         { status: 429 }
       );
+    }
+
+    const subnetLimit = await rateLimiter(`send-otp_subnet:${subnet}`, 20, 3600);
+    if (!subnetLimit.allowed) {
+      return NextResponse.json(
+        { error: 'Too many requests from this network. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    if (devId) {
+      const devLimit = await rateLimiter(`send-otp_dev:${devId}`, 3, 3600);
+      if (!devLimit.allowed) {
+        return NextResponse.json(
+          { error: 'Too many requests from this device. Please try again later.' },
+          { status: 429 }
+        );
+      }
     }
 
     const body = await req.json();

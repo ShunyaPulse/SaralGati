@@ -9,7 +9,8 @@ import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
 import { validateSemanticTarget } from '@/lib/semanticValidator';
 import { query, queryOne } from '@/lib/db';
 import { validateDeviceToken } from '@/lib/agent-auth';
-import { rateLimiter } from '@/lib/redis';
+import { rateLimiter, getSubnet } from '@/lib/redis';
+import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {

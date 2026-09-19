@@ -6,6 +6,10 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import java.security.MessageDigest
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+import android.util.Base64
 
 object NetworkModule {
     private const val BASE_URL = "https://saralgati-685823552970.asia-south1.run.app/"
@@ -20,17 +24,34 @@ object NetworkModule {
         level = HttpLoggingInterceptor.Level.BODY
     }
 
+    // In a real app this should be obfuscated or fetched from native C++,
+    // but for the purpose of the prototype we use a hardcoded fallback or BuildConfig variable.
+    private const val API_SECRET = "saralgati_super_secret_key_2024"
+
     private val authInterceptor = okhttp3.Interceptor { chain ->
         val original = chain.request()
         val token = tokenProvider?.invoke()
-        val request = if (!token.isNullOrBlank() && original.header("Authorization") == null) {
-            original.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        } else {
-            original
+
+        val timestamp = System.currentTimeMillis().toString()
+        val path = original.url.encodedPath
+        val method = original.method
+        val message = "$method$path$timestamp"
+
+        val mac = Mac.getInstance("HmacSHA256")
+        val secretKey = SecretKeySpec(API_SECRET.toByteArray(Charsets.UTF_8), "HmacSHA256")
+        mac.init(secretKey)
+        val signatureBytes = mac.doFinal(message.toByteArray(Charsets.UTF_8))
+        val signature = Base64.encodeToString(signatureBytes, Base64.NO_WRAP)
+
+        val requestBuilder = original.newBuilder()
+            .header("X-App-Timestamp", timestamp)
+            .header("X-App-Signature", signature)
+
+        if (!token.isNullOrBlank() && original.header("Authorization") == null) {
+            requestBuilder.header("Authorization", "Bearer $token")
         }
-        chain.proceed(request)
+
+        chain.proceed(requestBuilder.build())
     }
 
     private val okHttpClient = OkHttpClient.Builder()

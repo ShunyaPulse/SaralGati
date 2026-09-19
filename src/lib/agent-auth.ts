@@ -1,6 +1,7 @@
 import { getDeviceSession, setDeviceSession } from './redis';
 import { queryOne } from './db';
 import crypto from 'crypto';
+import { verifyAndroidHmac } from './hmac';
 
 export interface DeviceAuthResult {
   elderId?: string;
@@ -9,6 +10,10 @@ export interface DeviceAuthResult {
 }
 
 export async function validateDeviceToken(request: Request): Promise<DeviceAuthResult> {
+  if (!verifyAndroidHmac(request)) {
+    return { isAuthenticated: false };
+  }
+
   const authHeader = request.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return { isAuthenticated: false };

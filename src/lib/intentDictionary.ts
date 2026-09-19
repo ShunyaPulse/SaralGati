@@ -687,10 +687,11 @@ export function matchElderIntent(
   const qLower = question.toLowerCase();
 
   const isNoise = (txt: string) => {
-    return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(txt) ||
-           /\b(yesterday|am|pm|today)\b/i.test(txt) ||
-           /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)\s*$/i.test(txt.trim()) ||
-           /(?:^|\]\s*)[📹🎥📞📱]\s*/i.test(txt.trim());
+    const clean = txt.replace(/^\[.*?\]\s*/g, '').trim();
+    return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
+           /\b(yesterday|am|pm|today)\b/i.test(clean) ||
+           /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)$/i.test(clean) ||
+           /^[📹🎥📞📱]\s*$/i.test(clean);
   };
 
   // If the user is asking a question (how, what, where, kaise, kahan), bypass fast-path and let the LLM explain it.

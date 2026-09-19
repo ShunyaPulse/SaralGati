@@ -123,8 +123,8 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     candidate_models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 
     for model_name in candidate_models:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={gemini_api_key}"
-        headers = {"Content-Type": "application/json"}
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        headers = {"Content-Type": "application/json", "x-goog-api-key": gemini_api_key}
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
         try:
@@ -134,8 +134,24 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
             # Clean any accidental markdown backticks
             clean_json = re.sub(r"^```(?:json)?", "", raw_text, flags=re.MULTILINE)
             clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
-            screens = json.loads(clean_json)
-            if isinstance(screens, list) and len(screens) > 0:
+            parsed_data = json.loads(clean_json)
+            if isinstance(parsed_data, list) and len(parsed_data) > 0:
+                screens = [
+                    {
+                        "app_package": str(s.get("app_package", "")),
+                        "elements": [str(el) for el in s.get("elements", [])],
+                        "scenarios": [
+                            {
+                                "query": str(sc.get("query", "")),
+                                "expected": int(sc.get("expected", 0)),
+                                "intent": str(sc.get("intent", "general"))
+                            }
+                            for sc in s.get("scenarios", [])
+                        ]
+                    }
+                    for s in parsed_data
+                    if isinstance(s, dict)
+                ]
                 print(f"✨ Successfully synthesized {len(screens)} fresh, unseen app screens via {model_name}!")
                 return screens
         except Exception as e:
@@ -236,7 +252,6 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
             interaction_id = result.get("interaction_id")
             predicted_index = result.get("highlight_index")
             source = result.get("source")
-            explanation = result.get("explanation")
 
             print(f"    🎯 SaralGati Pick: [{predicted_index}] (Expected: [{expected_index}]) | {latency}ms | Source: {source}")
 
@@ -295,6 +310,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
         train_count = train_res.json().get("count", 0)
         print(f" Flywheel Verified Pool    : {train_count} verified samples ready in Neon DB.")
     except Exception:
+        # Ignore network errors or database connection drops during offline checks
         pass
 
     print("\n🎯 Pipeline completed cleanly. No local devices or battery consumed.\n")

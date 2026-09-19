@@ -59,10 +59,9 @@ export async function POST(req: Request) {
 
     const { email, type, turnstileToken, website } = result.data;
 
-    // Honeypot trap: if hidden field is filled, silently reject (bot detected)
+    // Honeypot trap: if hidden field is filled, reject (bot detected)
     if (website) {
-      // Return fake success so bot doesn't know it was caught
-      return NextResponse.json({ success: true, message: 'OTP sent successfully' });
+      return NextResponse.json({ error: 'Invalid submission' }, { status: 400 });
     }
 
     const cleanEmail = email.trim().toLowerCase();

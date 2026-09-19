@@ -30,20 +30,8 @@ export async function POST(req: NextRequest) {
       (authHeader && authHeader === `Bearer ${expectedSecret}`));
 
     const auth = isFlywheel ? { isAuthenticated: true, elderId: undefined } : await validateDeviceToken(req);
-    const candidateElderId = auth.elderId || elder_id || null;
 
-    let isAuthorizedElder = isFlywheel || auth.isAuthenticated;
-    if (!isAuthorizedElder && candidateElderId) {
-      const elderInDb = await queryOne<{ id: string }>(
-        `SELECT id FROM elder_profiles WHERE (id::text = $1 OR device_token = $1) AND is_active = true`,
-        [candidateElderId]
-      );
-      if (elderInDb) {
-        isAuthorizedElder = true;
-      }
-    }
-
-    if (!isAuthorizedElder) {
+    if (!auth.isAuthenticated) {
       return NextResponse.json({
         success: true,
         data: {
@@ -54,7 +42,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const effectiveElderId = candidateElderId;
+    const effectiveElderId = auth.elderId || (isFlywheel ? null : elder_id) || null;
 
     // Apply strict AI processing rate limit (30 requests per minute per device/IP, 120 for flywheel)
     const rateLimitId = isFlywheel ? `ask:flywheel` : (auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`);

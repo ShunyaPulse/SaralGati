@@ -10,13 +10,14 @@
  */
 
 export function isNoiseUIElement(text: string): boolean {
+  const clean = text.replace(/^\[.*?\]\s*/g, '').trim();
   return (
-    /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(text) ||
-    /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(text) ||
-    /\b(\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b/i.test(text) ||
-    /^(am|pm)$/i.test(text.trim()) ||
-    /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i.test(text.trim()) ||
-    /(?:^|\]\s*)[📹🎥📞📱]\s*/i.test(text.trim())
+    /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
+    /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(clean) ||
+    /\b(\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b/i.test(clean) ||
+    /^(am|pm)$/i.test(clean) ||
+    /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/i.test(clean) ||
+    /^[📹🎥📞📱]\s*$/i.test(clean)
   );
 }
 

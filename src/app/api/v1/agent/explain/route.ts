@@ -11,8 +11,15 @@ export async function POST(req: NextRequest) {
     }
 
     const auth = await validateDeviceToken(req);
-    if (!auth.isAuthenticated && process.env.ENFORCE_DEVICE_AUTH === 'true') {
-      return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
+    if (!auth.isAuthenticated) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          explanation: 'Aapki Elder ID invalid hai. Kripya SaralGati website se naya app download karke sahi Elder ID dalein.',
+          source: 'security_gate',
+          model_used: 'none'
+        }
+      });
     }
 
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.

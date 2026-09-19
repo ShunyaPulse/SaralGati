@@ -7,7 +7,7 @@ import { pruneUITree } from '@/lib/uiPruner';
 import { evaluateMultiStepFlow } from '@/lib/flowEngine';
 import { formatRelevantFewShots } from '@/lib/fewShotGrounding';
 import { validateSemanticTarget } from '@/lib/semanticValidator';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { rateLimiter } from '@/lib/redis';
 
@@ -21,10 +21,31 @@ export async function POST(req: NextRequest) {
 
     // Validate device session via Redis/DB
     const auth = await validateDeviceToken(req);
-    if (!auth.isAuthenticated && process.env.ENFORCE_DEVICE_AUTH === 'true') {
-      return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
+    const candidateElderId = auth.elderId || elder_id || null;
+
+    let isAuthorizedElder = auth.isAuthenticated;
+    if (!isAuthorizedElder && candidateElderId) {
+      const elderInDb = await queryOne<{ id: string }>(
+        `SELECT id FROM elder_profiles WHERE (id::text = $1 OR device_token = $1) AND is_active = true`,
+        [candidateElderId]
+      );
+      if (elderInDb) {
+        isAuthorizedElder = true;
+      }
     }
-    const effectiveElderId = auth.elderId || elder_id || null;
+
+    if (!isAuthorizedElder) {
+      return NextResponse.json({
+        success: true,
+        data: {
+          explanation: 'Aapki Elder ID invalid hai. Kripya SaralGati website se naya app download karke sahi Elder ID dalein.',
+          source: 'security_gate',
+          model_used: 'none'
+        }
+      });
+    }
+
+    const effectiveElderId = candidateElderId;
 
     // Apply strict AI processing rate limit (30 requests per minute per device/IP) to prevent LLM abuse
     const rateLimitId = auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`;

@@ -9,12 +9,25 @@ android {
         version = release(37)
     }
 
+    val versionFile = rootProject.file("../version.json")
+    val (parsedVersionCode, parsedVersionName) = if (versionFile.exists()) {
+        val text = versionFile.readText()
+        val codeMatch = Regex("\"version_code\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toIntOrNull() ?: 2
+        val nameMatch = Regex("\"version_name\"\\s*:\\s*\"([^\"]+)\"").find(text)?.groupValues?.get(1) ?: "1.1"
+        Pair(codeMatch, nameMatch)
+    } else {
+        Pair(2, "1.1")
+    }
+
+    val vCode = System.getenv("BUILD_NUMBER")?.toIntOrNull() ?: parsedVersionCode
+    val vName = System.getenv("BUILD_VERSION") ?: parsedVersionName
+
     defaultConfig {
         applicationId = "com.saralgati.app"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = vCode
+        versionName = vName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,16 +1,11 @@
 import { NextResponse } from 'next/server';
+import versionData from '../../../../../../version.json';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   return NextResponse.json({
     success: true,
-    data: {
-      version_code: 2,
-      version_name: '1.1',
-      download_url: 'https://saralgati-685823552970.asia-south1.run.app/api/download',
-      force_update: false,
-      changelog: 'Automatic Elder ID detection, enhanced security, and bug fixes.'
-    }
+    data: versionData
   });
 }

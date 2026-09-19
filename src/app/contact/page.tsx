@@ -39,7 +39,7 @@ export default function Contact() {
                   <div>
                     <h2 className="text-2xl font-bold text-slate-900 mb-8">Get in Touch</h2>
                     <div className="space-y-6">
-                      <div className="flex items-start bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                      <a href="mailto:techanics6174@gmail.com" className="flex items-start bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
                         <div className="bg-blue-50 p-3 rounded-xl mr-5">
                           <Mail className="w-6 h-6 text-[#0074c8]" />
                         </div>
@@ -47,7 +47,7 @@ export default function Contact() {
                           <h3 className="font-bold text-slate-900 mb-1">Email Support</h3>
                           <p className="text-slate-500">techanics6174@gmail.com</p>
                         </div>
-                      </div>
+                      </a>
                     </div>
                   </div>
 

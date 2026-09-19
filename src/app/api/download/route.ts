@@ -3,7 +3,7 @@ import { createReadStream } from 'fs';
 import { stat } from 'fs/promises';
 import { join } from 'path';
 
-const GITHUB_RELEASE_APK_URL = 'https://github.com/ShunyaPulse/SaralGati/releases/download/android-latest/app-debug.apk';
+const GITHUB_RELEASE_APK_URL = 'https://github.com/ShunyaPulse/SaralGati/releases/download/android-latest/SaralGati.apk';
 
 export async function GET() {
   try {
@@ -35,7 +35,7 @@ export async function GET() {
       return new NextResponse(readableWebStream, {
         headers: {
           'Content-Type': 'application/vnd.android.package-archive',
-          'Content-Disposition': 'attachment; filename="saralgati.apk"',
+          'Content-Disposition': 'attachment; filename="SaralGati.apk"',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
       });

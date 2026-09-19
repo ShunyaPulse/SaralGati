@@ -26,6 +26,10 @@ export async function POST(req: NextRequest) {
 
     const newStatus = statusMapping[feedback] || 'pending';
 
+    const sanitizedIndex = (typeof actual_tapped_index === 'number' && Number.isInteger(actual_tapped_index) && actual_tapped_index >= 0 && actual_tapped_index <= 100)
+      ? actual_tapped_index
+      : null;
+
     // 1. Update the interaction record in PostgreSQL
     const updatedRow = await queryOne<{
       id: string;
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
            updated_at = NOW()
        WHERE id = $3
        RETURNING id, app_package, screen_hash, question, suggested_index, explanation`,
-      [newStatus, actual_tapped_index ?? null, interaction_id]
+      [newStatus, sanitizedIndex, interaction_id]
     );
 
     if (!updatedRow) {
@@ -112,8 +116,8 @@ export async function POST(req: NextRequest) {
         }
 
         // 2C. User Correction Flywheel (if elder tapped an alternative button)
-        if (feedback === 'tapped_other' && actual_tapped_index !== undefined && actual_tapped_index !== null) {
-          const correctionKey = `correction:${actual_tapped_index}`;
+        if (feedback === 'tapped_other' && sanitizedIndex !== null) {
+          const correctionKey = `correction:${sanitizedIndex}`;
           const correctionVotes = await redis.hincrby(statsKey, correctionKey, 1);
 
           // Auto-Correction Promotion: If 2 or more users independently tap this corrected index
@@ -122,7 +126,7 @@ export async function POST(req: NextRequest) {
               cacheKey,
               {
                 explanation: updatedRow.explanation,
-                highlight_index: actual_tapped_index,
+                highlight_index: sanitizedIndex,
               },
               30 * 86400 // 30-day extended TTL for corrected golden answer
             );

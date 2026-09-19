@@ -66,7 +66,13 @@ export async function POST(req: Request) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 60-second resend cooldown per email
+    // 1. Enforce Turnstile verification at OTP request level FIRST
+    const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
+    if (!isTurnstileValid) {
+      return NextResponse.json({ error: 'Security verification failed. Please try again.' }, { status: 400 });
+    }
+
+    // 2. 60-second resend cooldown per email
     const cooldownKey = `otp_cooldown:${type}:${cleanEmail}`;
     const isOnCooldown = await cacheGet<string>(cooldownKey);
     if (isOnCooldown) {
@@ -74,12 +80,6 @@ export async function POST(req: Request) {
         { error: 'Please wait 60 seconds before requesting a new OTP.' },
         { status: 429 }
       );
-    }
-
-    // Enforce Turnstile verification at OTP request level
-    const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
-    if (!isTurnstileValid) {
-      return NextResponse.json({ error: 'Security verification failed. Please try again.' }, { status: 400 });
     }
 
     // Store successful Turnstile verification in Redis (expires in 10 minutes)

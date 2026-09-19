@@ -14,7 +14,7 @@ import { cookies } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {
-    const { app_package, ui_elements, question, conversation_history = [], elder_id } = await req.json();
+    const { app_package, ui_elements, question, conversation_history = [] } = await req.json();
 
     if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const effectiveElderId = auth.elderId || (isFlywheel ? null : elder_id) || null;
+    const effectiveElderId = auth.elderId || null;
 
     // Apply strict AI processing rate limit (30 requests per minute per device/IP, 120 for flywheel)
     const rateLimitId = isFlywheel ? `ask:flywheel` : (auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`);
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
     };
 
     // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
-    const flowResult = await evaluateMultiStepFlow(effectiveElderId, question, ui_elements);
+    const flowResult = await evaluateMultiStepFlow(effectiveElderId || undefined, question, ui_elements);
     if (flowResult && flowResult.isFlowActive && typeof flowResult.highlightIndex === 'number' && flowResult.highlightIndex >= 0) {
       logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId).catch(() => {});
       return NextResponse.json({
@@ -264,7 +264,7 @@ export async function POST(req: NextRequest) {
     const cacheKey = `screen_cache:${app_package}:${screenHash}:${normalizedQuestion}${historyHash}`;
 
     const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
-    if (cached) {
+    if (cached && typeof cached.explanation === 'string' && (cached.highlight_index === null || typeof cached.highlight_index === 'number')) {
       logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache').catch(() => {});
       return NextResponse.json({
         success: true,

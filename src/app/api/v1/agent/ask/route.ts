@@ -12,11 +12,53 @@ import { validateDeviceToken } from '@/lib/agent-auth';
 import { rateLimiter, getSubnet } from '@/lib/redis';
 import { cookies } from 'next/headers';
 
+// Strict input sanitization to break taint chains from user-controlled request body
+function sanitizePackageName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  // Only allow valid Android package names (letters, digits, dots, underscores)
+  const cleaned = raw.trim().slice(0, 200);
+  return /^[a-zA-Z][a-zA-Z0-9._]*$/.test(cleaned) ? cleaned : null;
+}
+function sanitizeQuestion(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  // Strip control characters, limit length
+  const cleaned = raw.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 2000);
+  return cleaned.length > 0 ? cleaned : null;
+}
+function sanitizeUIElements(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length === 0 || raw.length > 500) return null;
+  const result: string[] = [];
+  for (const el of raw) {
+    if (typeof el !== 'string') return null;
+    result.push(el.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 1000));
+  }
+  return result;
+}
+
+function sanitizeConversationHistory(raw: unknown): { role: string; content: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const result: { role: string; content: string }[] = [];
+  for (const item of raw.slice(-10)) {
+    if (item && typeof item === 'object' && typeof (item as any).role === 'string' && typeof (item as any).content === 'string') {
+      const role = (item as any).role === 'user' || (item as any).role === 'assistant' ? (item as any).role : 'user';
+      const content = (item as any).content.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 2000);
+      result.push({ role, content });
+    }
+  }
+  return result;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { app_package, ui_elements, question, conversation_history = [] } = await req.json();
+    const body = await req.json();
 
-    if (!app_package || !ui_elements || !Array.isArray(ui_elements) || !question) {
+    const safeAppPackage = sanitizePackageName(body.app_package);
+    const safeQuestion = sanitizeQuestion(body.question);
+    const safeUIElements = sanitizeUIElements(body.ui_elements);
+    const safeConversationHistory = sanitizeConversationHistory(body.conversation_history);
+
+    if (!safeAppPackage || !safeQuestion || !safeUIElements) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -52,7 +94,7 @@ export async function POST(req: NextRequest) {
     }
 
     const interactionId = crypto.randomUUID();
-    const normalizedElements = ui_elements.map((el: string) =>
+    const normalizedElements = safeUIElements.map((el: string) =>
       el.trim().toLowerCase().replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, '').replace(/\b\d+%/g, '').replace(/\\(\d+\s*(unread|new)\\)/gi, '').trim()
     ).join('|');
     const screenHash = crypto.createHash('sha256').update(normalizedElements).digest('hex').slice(0, 16);
@@ -67,10 +109,10 @@ export async function POST(req: NextRequest) {
           [
             interactionId,
             effectiveElderId,
-            app_package,
+            safeAppPackage,
             screenHash,
-            question,
-            JSON.stringify(ui_elements),
+            safeQuestion,
+            JSON.stringify(safeUIElements),
             suggestedIndex,
             explanation,
             source,
@@ -83,7 +125,7 @@ export async function POST(req: NextRequest) {
     };
 
     // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
-    const flowResult = await evaluateMultiStepFlow(effectiveElderId || undefined, question, ui_elements);
+    const flowResult = await evaluateMultiStepFlow(effectiveElderId || undefined, safeQuestion, safeUIElements);
     if (flowResult && flowResult.isFlowActive && typeof flowResult.highlightIndex === 'number' && flowResult.highlightIndex >= 0) {
       logInteraction(flowResult.highlightIndex, flowResult.explanation || '', 'multi_step_flow', flowResult.flowId).catch(() => {});
       return NextResponse.json({
@@ -105,7 +147,7 @@ export async function POST(req: NextRequest) {
     }
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
-    const questionLower = question.toLowerCase();
+    const questionLower = safeQuestion.toLowerCase();
 
     // Role-aware UI finder: strictly prioritizes interactive elements ([BUTTON], [INPUT], [TOGGLE])
     // and ignores subtitle/message preview noise (e.g. "3 videos", "2 photos", timestamps)
@@ -116,7 +158,7 @@ export async function POST(req: NextRequest) {
       };
 
       // Pass 1: Prioritize interactive elements ([BUTTON], [INPUT], [TOGGLE])
-      const interactiveIdx = ui_elements.findIndex((el: string) => {
+      const interactiveIdx = safeUIElements.findIndex((el: string) => {
         const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
         const isActionable = /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(clean);
         if (!isActionable) return false;
@@ -129,7 +171,7 @@ export async function POST(req: NextRequest) {
 
       // Pass 2: Fallback only if requireActionable is false
       if (!requireActionable) {
-        return ui_elements.findIndex((el: string) => {
+        return safeUIElements.findIndex((el: string) => {
           const txt = el.toLowerCase();
           if (isNoise(txt)) return false;
           return keywords.some(k => txt.includes(k.toLowerCase()));
@@ -143,8 +185,8 @@ export async function POST(req: NextRequest) {
     let fpExplanation = "";
     let fpIndex = -1;
 
-    if (app_package === 'com.whatsapp') {
-      if (/\bvideo\s*call\b/i.test(questionLower) || questionLower.includes('वीडियो कॉल') || /\bvideo\b/i.test(questionLower) && /\bcall\b|\bkaro\b|\blagao\b|\bkarni\b/i.test(questionLower)) {
+    if (safeAppPackage === 'com.whatsapp') {
+      if (/\bvideo\s*call\b/i.test(questionLower) || questionLower.includes('वीडियो कॉल') || (/\bvideo\b/i.test(questionLower) && /\bcall\b|\bkaro\b|\blagao\b|\bkarni\b/i.test(questionLower))) {
         // 1. First check if a dedicated Video Call button is present (inside an active chat)
         let idx = findUIIndex(['video call', 'वीडियो कॉल', 'video_call']);
         if (idx !== -1) {
@@ -181,7 +223,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['message', 'chat', 'new', 'मैसेज', 'नया']);
         if (fpIndex !== -1) { fpExplanation = 'Naya message bhejne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('dialer')) {
+    } else if (safeAppPackage.includes('dialer')) {
       if (questionLower.includes('call') || questionLower.includes('कॉल') || questionLower.includes('phone') || questionLower.includes('फोन') || questionLower.includes('dial')) {
         fpIndex = findUIIndex(['keypad', 'dialpad', 'dial', 'कॉल', 'key']);
         if (fpIndex !== -1) { fpExplanation = 'Number dial karne ke liye yahan dabayein.'; fpMatch = true; }
@@ -189,7 +231,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['contact', 'संपर्क']);
         if (fpIndex !== -1) { fpExplanation = 'Sampark (Contacts) dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('facebook') || app_package.includes('katana')) {
+    } else if (safeAppPackage.includes('facebook') || safeAppPackage.includes('katana')) {
       if (questionLower.includes('photo') || questionLower.includes('फोटो') || questionLower.includes('post') || questionLower.includes('पोस्ट') || questionLower.includes('mind')) {
         fpIndex = findUIIndex(['photo', 'फोटो', 'post', 'mind', 'create']);
         if (fpIndex !== -1) { fpExplanation = 'Photo ya post daalne ke liye yahan dabayein.'; fpMatch = true; }
@@ -197,7 +239,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['video', 'watch', 'वीडियो']);
         if (fpIndex !== -1) { fpExplanation = 'Video dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('youtube')) {
+    } else if (safeAppPackage.includes('youtube')) {
       if (questionLower.includes('search') || questionLower.includes('खोज') || questionLower.includes('dhoondh')) {
         fpIndex = findUIIndex(['search', 'खोज']);
         if (fpIndex !== -1) { fpExplanation = 'Video khojne ke liye yahan dabayein.'; fpMatch = true; }
@@ -205,7 +247,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['shorts']);
         if (fpIndex !== -1) { fpExplanation = 'Shorts dekhne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('photos') || app_package.includes('gallery')) {
+    } else if (safeAppPackage.includes('photos') || safeAppPackage.includes('gallery')) {
       if (questionLower.includes('share') || questionLower.includes('bhejo') || questionLower.includes('शेयर')) {
         fpIndex = findUIIndex(['share', 'शेयर', 'send']);
         if (fpIndex !== -1) { fpExplanation = 'Is photo ko kisi ko bhejne ke liye yahan share dabayein.'; fpMatch = true; }
@@ -213,7 +255,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['delete', 'trash', 'डिलीट']);
         if (fpIndex !== -1) { fpExplanation = 'Is photo ko delete karne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('messaging') || app_package.includes('sms')) {
+    } else if (safeAppPackage.includes('messaging') || safeAppPackage.includes('sms')) {
       if (questionLower.includes('message') || questionLower.includes('sms') || questionLower.includes('मैसेज')) {
         fpIndex = findUIIndex(['start chat', 'new message', 'नया संदेश']);
         if (fpIndex !== -1) { fpExplanation = 'Naya message bhejne ke liye yahan click karein.'; fpMatch = true; }
@@ -221,7 +263,7 @@ export async function POST(req: NextRequest) {
         fpIndex = findUIIndex(['unread', 'otp', 'message']);
         if (fpIndex !== -1) { fpExplanation = 'Apna message ya OTP padhne ke liye yahan dabayein.'; fpMatch = true; }
       }
-    } else if (app_package.includes('contacts')) {
+    } else if (safeAppPackage.includes('contacts')) {
       if (questionLower.includes('add') || questionLower.includes('naya') || questionLower.includes('नया')) {
         fpIndex = findUIIndex(['add', 'new', 'create', 'प्लस']);
         if (fpIndex !== -1) { fpExplanation = 'Naya number save karne ke liye yahan dabayein.'; fpMatch = true; }
@@ -233,7 +275,7 @@ export async function POST(req: NextRequest) {
 
     // General Elder Intent Fast-Path: If app-specific rules didn't hit, check 50-category dictionary
     if (!fpMatch) {
-      const intentFastMatch = matchElderIntent(question, ui_elements);
+      const intentFastMatch = matchElderIntent(safeQuestion, safeUIElements);
       if (intentFastMatch.highlightIndex !== null && intentFastMatch.matchedIntent !== null) {
         fpIndex = intentFastMatch.highlightIndex;
         fpExplanation = intentFastMatch.explanation;
@@ -257,21 +299,28 @@ export async function POST(req: NextRequest) {
     // === END FAST-PATH ENGINE ===
 
     // === METHOD 2: REDIS GLOBAL SCREEN CACHE ===
-    const normalizedQuestion = question.trim().toLowerCase().replace(/[^\w\s\u0900-\u097F]/g, '').replace(/\s+/g, ' ');
-    const historyHash = conversation_history.length > 0
-      ? `:${crypto.createHash('sha256').update(JSON.stringify(conversation_history)).digest('hex').slice(0, 8)}`
+    const normalizedQuestion = safeQuestion.trim().toLowerCase().replace(/[^\w\s\u0900-\u097F]/g, '').replace(/\s+/g, ' ');
+    const historyHash = safeConversationHistory.length > 0
+      ? `:${crypto.createHash('sha256').update(JSON.stringify(safeConversationHistory)).digest('hex').slice(0, 8)}`
       : '';
-    const cacheKey = `screen_cache:${app_package}:${screenHash}:${normalizedQuestion}${historyHash}`;
+    const cacheKeyRaw = `${safeAppPackage}:${screenHash}:${normalizedQuestion}${historyHash}`;
+    const cacheKeyHash = crypto.createHash('sha256').update(cacheKeyRaw).digest('hex');
+    const cacheKey = `screen_cache:${cacheKeyHash}`;
 
     const cached = await cacheGet<{ explanation: string; highlight_index: number | null }>(cacheKey);
-    if (cached && typeof cached.explanation === 'string' && (cached.highlight_index === null || typeof cached.highlight_index === 'number')) {
-      logInteraction(cached.highlight_index, cached.explanation, 'redis_cache', 'global_screen_cache').catch(() => {});
+    const cachedExplanation = typeof cached?.explanation === 'string' ? cached.explanation.slice(0, 2000) : null;
+    const cachedIndex = typeof cached?.highlight_index === 'number' && Number.isInteger(cached.highlight_index) && cached.highlight_index >= -1 && cached.highlight_index < 500
+      ? cached.highlight_index
+      : (cached?.highlight_index === null ? null : undefined);
+
+    if (cachedExplanation && cachedIndex !== undefined) {
+      logInteraction(cachedIndex, cachedExplanation, 'redis_cache', 'global_screen_cache').catch(() => {});
       return NextResponse.json({
         success: true,
         data: {
           interaction_id: interactionId,
-          explanation: cached.explanation,
-          highlight_index: cached.highlight_index,
+          explanation: cachedExplanation,
+          highlight_index: cachedIndex,
           source: 'redis_cache',
           model_used: 'global_screen_cache'
         }
@@ -280,12 +329,12 @@ export async function POST(req: NextRequest) {
     // === END REDIS GLOBAL SCREEN CACHE ===
 
     // Prune UI Tree: filter preview noise and static boilerplate while preserving original client indices
-    const { formattedString: formattedElements } = pruneUITree(ui_elements, question);
+    const { formattedString: formattedElements } = pruneUITree(safeUIElements, safeQuestion);
 
-    const fewShots = formatRelevantFewShots(app_package, question, 4);
+    const fewShots = formatRelevantFewShots(safeAppPackage, safeQuestion, 4);
 
     const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
-The user is looking at an Android app: ${app_package}.
+The user is looking at an Android app: ${safeAppPackage}.
 Here are the numbered interactive elements on their screen:
 ${formattedElements}
 
@@ -306,9 +355,9 @@ ${fewShots}`;
 
     const aiResult = await generateAIResponse({
       systemPrompt,
-      userPrompt: question,
-      conversationHistory: conversation_history,
-      uiElements: ui_elements
+      userPrompt: safeQuestion,
+      conversationHistory: safeConversationHistory,
+      uiElements: safeUIElements
     });
 
     const rawExplanation = aiResult.text;
@@ -324,7 +373,7 @@ ${fewShots}`;
 
     // === METHOD 4: POST-LLM SEMANTIC TARGET VALIDATOR ===
     // Validates interactive role, filters noise (media/timestamps), and prevents semantic hallucinations
-    const validation = validateSemanticTarget(question, rawHighlightIndex, ui_elements, cleanExplanation);
+    const validation = validateSemanticTarget(safeQuestion, rawHighlightIndex, safeUIElements, cleanExplanation);
     const highlightIndex = validation.validatedIndex;
 
     const resultData = {

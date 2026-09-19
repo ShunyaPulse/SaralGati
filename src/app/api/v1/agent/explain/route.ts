@@ -2,11 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateAIResponse } from '@/lib/aiFallback';
 import { validateDeviceToken } from '@/lib/agent-auth';
 
+function sanitizePackageName(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const cleaned = raw.trim().slice(0, 200);
+  return /^[a-zA-Z][a-zA-Z0-9._]*$/.test(cleaned) ? cleaned : null;
+}
+function sanitizeUIElements(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length === 0 || raw.length > 500) return null;
+  const result: string[] = [];
+  for (const el of raw) {
+    if (typeof el !== 'string') return null;
+    result.push(el.replace(/[\x00-\x1f\x7f]/g, '').trim().slice(0, 1000));
+  }
+  return result;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { app_package, ui_elements } = await req.json();
+    const body = await req.json();
 
-    if (!app_package || !ui_elements || !Array.isArray(ui_elements)) {
+    const safeAppPackage = sanitizePackageName(body.app_package);
+    const safeUIElements = sanitizeUIElements(body.ui_elements);
+
+    if (!safeAppPackage || !safeUIElements) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -31,9 +50,9 @@ export async function POST(req: NextRequest) {
     }
 
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
-The user is currently looking at an app with package name: ${app_package}.
+The user is currently looking at an app with package name: ${safeAppPackage}.
 Here are the text elements visible on their screen:
-${ui_elements.join(' | ')}
+${safeUIElements.join(' | ')}
 
 Explain this screen to the elder in 1 or 2 very simple Hinglish (Hindi written in English script) sentences. 
 Tell them where they are and what they can do next. Be comforting and respectful. Do not mention that you are an AI. Only output the Hinglish sentence.`;

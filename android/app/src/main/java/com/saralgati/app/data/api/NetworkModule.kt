@@ -59,4 +59,8 @@ object NetworkModule {
     val agentApi: AgentApi by lazy {
         retrofit.create(AgentApi::class.java)
     }
+
+    val appApi: AppApi by lazy {
+        retrofit.create(AppApi::class.java)
+    }
 }

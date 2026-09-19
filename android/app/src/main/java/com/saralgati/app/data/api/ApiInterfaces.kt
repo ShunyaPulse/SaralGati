@@ -43,3 +43,8 @@ interface AgentApi {
     @POST("api/v1/agent/feedback")
     suspend fun sendFeedback(@Body request: com.saralgati.app.data.model.FeedbackRequest): Response<ApiResponse<Map<String, Any>>>
 }
+
+interface AppApi {
+    @GET("api/v1/app/version")
+    suspend fun getLatestVersion(): Response<ApiResponse<com.saralgati.app.data.model.AppVersionInfo>>
+}

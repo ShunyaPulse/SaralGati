@@ -55,4 +55,12 @@ class LocalPrefs(context: Context) {
     fun getString(key: String, defaultValue: String): String {
         return prefs.getString(key, defaultValue) ?: defaultValue
     }
+
+    fun incrementAppOpenCount(): Int {
+        val count = prefs.getInt("app_open_count", 0) + 1
+        prefs.edit().putInt("app_open_count", count).apply()
+        return count
+    }
+
+    fun getAppOpenCount(): Int = prefs.getInt("app_open_count", 0)
 }

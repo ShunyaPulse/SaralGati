@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import PublicHeader from '@/components/layout/PublicHeader';
 import PublicFooter from '@/components/layout/PublicFooter';
-import { Mail, MapPin } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { FadeUp } from '@/components/ui/FadeUp';
 import { ContactForm } from '@/components/contact/ContactForm';
 
@@ -46,15 +46,6 @@ export default function Contact() {
                         <div>
                           <h3 className="font-bold text-slate-900 mb-1">Email Support</h3>
                           <p className="text-slate-500">techanics6174@gmail.com</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
-                        <div className="bg-blue-50 p-3 rounded-xl mr-5">
-                          <MapPin className="w-6 h-6 text-[#0074c8]" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 mb-1">Office</h3>
-                          <p className="text-slate-500">Lucknow, Uttar Pradesh, India</p>
                         </div>
                       </div>
                     </div>

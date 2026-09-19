@@ -26,6 +26,8 @@ jobs:
 
       - name: Check Training Data Availability
         id: check_data
+        env:
+          INPUT_FORCE_TRAIN: ${{ inputs.force_train || 'false' }}
         run: |
           API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=500"
           echo "Fetching verified interactions from: $API_URL"
@@ -33,7 +35,7 @@ jobs:
           echo "Found $COUNT verified elder interactions in database."
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
           
-          FORCE="${{ inputs.force_train || 'false' }}"
+          FORCE="$INPUT_FORCE_TRAIN"
           if [ "$COUNT" -ge 10 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
             echo "✅ Threshold met ($COUNT samples). Ready for training."

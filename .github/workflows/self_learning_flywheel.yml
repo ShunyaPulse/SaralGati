@@ -37,9 +37,14 @@ jobs:
           SARALGATI_API_URL: ${{ vars.SARALGATI_API_URL || 'https://saralgati-685823552970.asia-south1.run.app' }}
           DEVICE_TOKEN: ${{ secrets.DEVICE_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MAX_CASES: ${{ github.event.inputs.max_cases }}
         run: |
           # Guard: Blackout window during scheduled GPU Training (Wed & Sun 1:30 AM - 4:30 AM IST / 20:00 - 23:00 UTC Tue & Sat)
-          IS_MANUAL="${{ github.event_name == 'workflow_dispatch' }}"
+          IS_MANUAL="false"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            IS_MANUAL="true"
+          fi
           DOW=$(date -u +%u)
           HOUR=$(date -u +%H)
           if [ "$IS_MANUAL" != "true" ] && ([ "$DOW" = "2" ] || [ "$DOW" = "6" ]) && [ "$HOUR" -ge 20 ] && [ "$HOUR" -le 23 ]; then
@@ -48,7 +53,7 @@ jobs:
           fi
 
           LIMIT_ARG=""
-          if [ -n "${{ github.event.inputs.max_cases }}" ]; then
-            LIMIT_ARG="--limit ${{ github.event.inputs.max_cases }}"
+          if [ -n "$INPUT_MAX_CASES" ]; then
+            LIMIT_ARG="--limit $INPUT_MAX_CASES"
           fi
           python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" --gemini-key "$GEMINI_API_KEY" $LIMIT_ARG

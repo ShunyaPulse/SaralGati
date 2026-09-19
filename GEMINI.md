@@ -21,3 +21,10 @@
 - **Cache**: Redis Global Screen Cache on Oracle VM.
 - **Database**: Neon PostgreSQL for model interactions, implicit user feedback, and training data flywheel.
 - **Training Pipeline**: Single T4 GPU (`CUDA_VISIBLE_DEVICES=0`), native Unsloth fast kernels (`use_gradient_checkpointing="unsloth"`), auto-deployed to Cloudflare Workers AI under `@cf/meta/llama-3.1-8b-instruct-fast`.
+
+## 5. Security & Workflow Invariants
+- **GitHub Actions Shell Injection Prevention**: Never interpolate `${{ ... }}` context expressions (such as `github.event.*`, `inputs.*`, `vars.*`) directly inside `run:` inline bash scripts in `.github/workflows/`. Always map them to intermediate environment variables in `env:` and access them via `"$ENV_VAR"` in shell scripts.
+- **Nested Dependency CVE Fixes**: When fixing vulnerabilities in indirect/nested dependencies (e.g., `postcss` under `next` or `nodemailer` under `next-auth`), prefer `package.json` `"overrides"` combined with `npm install --legacy-peer-deps` instead of breaking framework upgrades.
+- **No PWA Web Manifest**: Do NOT add `manifest.json` or PWA installation prompts to the website. The user must be guided to download and use the native Android companion APK (`SaralGati.apk`) rather than installing the caregiver dashboard web app as a PWA.
+- **PowerShell Command Separator**: In Windows terminal commands, always use `;` (semicolon) to chain sequential commands instead of `&&`.
+

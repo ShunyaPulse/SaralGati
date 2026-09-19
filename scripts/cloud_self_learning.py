@@ -155,9 +155,12 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
     print(f" Device Dependency : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 
-    headers = {"Content-Type": "application/json"}
-    if auth_token:
-        headers["Authorization"] = f"Bearer {auth_token}"
+    flywheel_secret = auth_token or os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET") or "saralgati_super_secret_key_2024"
+    headers = {
+        "Content-Type": "application/json",
+        "X-Flywheel-Secret": flywheel_secret,
+        "Authorization": f"Bearer {flywheel_secret}"
+    }
 
     # Generate screens in 2 batches for maximum yield while respecting 15 RPM
     active_screens = []

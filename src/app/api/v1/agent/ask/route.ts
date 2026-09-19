@@ -20,11 +20,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
     }
 
-    // Validate device session via Redis/DB
-    const auth = await validateDeviceToken(req);
+    // Validate device session via Redis/DB or internal Flywheel secret
+    const flywheelSecret = req.headers.get('x-flywheel-secret');
+    const authHeader = req.headers.get('authorization');
+    const expectedSecret = process.env.FLYWHEEL_SECRET || process.env.API_SECRET || 'saralgati_super_secret_key_2024';
+    
+    const isFlywheel = 
+      Boolean((flywheelSecret && flywheelSecret === expectedSecret) ||
+      (authHeader && authHeader === `Bearer ${expectedSecret}`));
+
+    const auth = isFlywheel ? { isAuthenticated: true, elderId: undefined } : await validateDeviceToken(req);
     const candidateElderId = auth.elderId || elder_id || null;
 
-    let isAuthorizedElder = auth.isAuthenticated;
+    let isAuthorizedElder = isFlywheel || auth.isAuthenticated;
     if (!isAuthorizedElder && candidateElderId) {
       const elderInDb = await queryOne<{ id: string }>(
         `SELECT id FROM elder_profiles WHERE (id::text = $1 OR device_token = $1) AND is_active = true`,
@@ -48,9 +56,9 @@ export async function POST(req: NextRequest) {
 
     const effectiveElderId = candidateElderId;
 
-    // Apply strict AI processing rate limit (30 requests per minute per device/IP) to prevent LLM abuse
-    const rateLimitId = auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`;
-    const rateLimit = await rateLimiter(rateLimitId, 30, 60);
+    // Apply strict AI processing rate limit (30 requests per minute per device/IP, 120 for flywheel)
+    const rateLimitId = isFlywheel ? `ask:flywheel` : (auth.isAuthenticated ? `ask:token:${auth.elderId}` : `ask:ip:${req.headers.get('x-forwarded-for') || 'anon'}`);
+    const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 120 : 30, 60);
     if (!rateLimit.allowed) {
       return NextResponse.json({ success: false, error: 'Too many queries. Please wait a moment.' }, { status: 429 });
     }

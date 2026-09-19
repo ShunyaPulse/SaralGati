@@ -36,6 +36,8 @@ jobs:
         env:
           SARALGATI_API_URL: ${{ vars.SARALGATI_API_URL || 'https://saralgati-685823552970.asia-south1.run.app' }}
           DEVICE_TOKEN: ${{ secrets.DEVICE_TOKEN }}
+          API_SECRET: ${{ secrets.API_SECRET }}
+          FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MAX_CASES: ${{ github.event.inputs.max_cases }}

@@ -42,32 +42,31 @@ class MainActivity : ComponentActivity() {
                     var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
                     var availableUpdate by remember { mutableStateOf<AppVersionInfo?>(null) }
 
-                    // Check for App Updates: runs on every app launch now
+                    // Check for App Updates: prompts every 3rd time the app is opened
                     LaunchedEffect(Unit) {
-                        localPrefs.incrementAppOpenCount()
-                        try {
-                            val res = withContext(Dispatchers.IO) {
-                                NetworkModule.appApi.getLatestVersion()
-                            }
-                            if (res.isSuccessful && res.body()?.success == true) {
-                                val versionInfo = res.body()?.data
-                                if (versionInfo != null) {
-                                    val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                        packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        packageManager.getPackageInfo(packageName, 0).versionCode
-                                    }
-                                    // FORCE CHECK FOR TESTING: Log current vs fetched
-                                    android.util.Log.d("UpdateCheck", "Current: $currentVersionCode, Remote: ${versionInfo.versionCode}")
-                                    if (versionInfo.versionCode > currentVersionCode || versionInfo.forceUpdate) {
-                                        availableUpdate = versionInfo
+                        val openCount = localPrefs.incrementAppOpenCount()
+                        if (openCount % 3 == 0) {
+                            try {
+                                val res = withContext(Dispatchers.IO) {
+                                    NetworkModule.appApi.getLatestVersion()
+                                }
+                                if (res.isSuccessful && res.body()?.success == true) {
+                                    val versionInfo = res.body()?.data
+                                    if (versionInfo != null) {
+                                        val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                            packageManager.getPackageInfo(packageName, 0).longVersionCode.toInt()
+                                        } else {
+                                            @Suppress("DEPRECATION")
+                                            packageManager.getPackageInfo(packageName, 0).versionCode
+                                        }
+                                        if (versionInfo.versionCode > currentVersionCode) {
+                                            availableUpdate = versionInfo
+                                        }
                                     }
                                 }
+                            } catch (e: Exception) {
+                                // Network offline, skip update check
                             }
-                        } catch (e: Exception) {
-                            // Network offline, skip update check
-                            android.util.Log.e("UpdateCheck", "Failed to check update", e)
                         }
                     }
 

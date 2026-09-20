@@ -97,7 +97,7 @@ async function fetchCloudflareLoRA(options: GenerateOptions): Promise<AIResponse
         }
       }
     } catch (cfErr) {
-      console.warn(`[LoRA] Error on attempt ${attempt}:`, cfErr);
+      console.warn('[LoRA] Error on attempt:', attempt, cfErr);
       if (attempt === MAX_LORA_RETRIES) break;
     }
   }

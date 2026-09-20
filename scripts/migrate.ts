@@ -4,9 +4,7 @@ import { Pool } from 'pg';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false,
-  },
+  ssl: true,
 });
 
 async function runMigrations() {
@@ -45,7 +43,7 @@ async function runMigrations() {
           console.log(`Successfully applied: ${file}`);
         } catch (err) {
           await client.query('ROLLBACK');
-          console.error(`Error applying migration ${file}:`, err);
+          console.error('Error applying migration:', file, err);
           throw err;
         }
       } else {

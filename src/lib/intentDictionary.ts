@@ -680,6 +680,13 @@ export function getIntentExplanation(intent: IntentDefinition | null): string {
  * Prioritizes actionable elements ([BUTTON], [INPUT], [TOGGLE]) over static [TEXT],
  * and filters media/preview noise (e.g., '3 videos', timestamps).
  */
+export function matchQueryPattern(qLower: string, pattern: string): boolean {
+  const p = pattern.toLowerCase().trim();
+  if (qLower === p) return true;
+  const normalizedQ = ' ' + qLower.replace(/[\s,.\-?!]+/g, ' ').trim() + ' ';
+  return normalizedQ.includes(' ' + p + ' ');
+}
+
 export function matchElderIntent(
   question: string,
   uiElements: string[]
@@ -700,15 +707,16 @@ export function matchElderIntent(
     return { highlightIndex: null, matchedIntent: null, explanation: '' };
   }
 
+  // Safety check: Avoid fast-path false positives on long, conversational questions
+  if (qLower.split(' ').length > 18) {
+    return { highlightIndex: null, matchedIntent: null, explanation: '' };
+  }
+
   // Find all intents triggered by the user's question, sorted by longest matched pattern (most specific wins)
   const matchingIntents = ELDER_INTENTS
     .map((intent) => {
       const longestMatch = intent.queryPatterns
-        .filter((pattern) => {
-          const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
-          return regex.test(qLower) || qLower === pattern;
-        })
+        .filter((pattern) => matchQueryPattern(qLower, pattern))
         .sort((a, b) => b.length - a.length)[0];
       return { intent, matchLength: longestMatch ? longestMatch.length : 0, matchedText: longestMatch || '' };
     })

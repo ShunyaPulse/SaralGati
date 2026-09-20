@@ -366,15 +366,6 @@ ${fewShots}`;
       }
     }
 
-    if (!finalResult) {
-      finalResult = {
-        explanation: 'Kripya thodi der baad dubara koshish karein.',
-        highlightIndex: null,
-        source: 'error_fallback',
-        modelUsed: 'fallback'
-      };
-    }
-
     // 4. Log interaction asynchronously (single unconditioned call point at end of request)
     recordModelInteraction({
       interactionId,

@@ -1,4 +1,4 @@
-import { FlowStep, MultiStepFlowDefinition } from './types';
+import { MultiStepFlowDefinition } from './types';
 import { COMMUNICATION_PLAYBOOKS } from './communication';
 import { FINANCE_UPI_PLAYBOOKS } from './finance_upi';
 import { HEALTH_MEDICAL_PLAYBOOKS } from './health_medical';

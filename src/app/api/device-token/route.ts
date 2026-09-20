@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {

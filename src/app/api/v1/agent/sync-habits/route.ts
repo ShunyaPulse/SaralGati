@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateDeviceToken } from '@/lib/agent-auth';
-import { query, queryOne, transaction } from '@/lib/db';
+import { queryOne, transaction } from '@/lib/db';
 import { cacheDelete, invalidatePattern } from '@/lib/redis';
 import { syncHabitsSchema } from '@/lib/validations';
 

@@ -1,4 +1,4 @@
-import { ELDER_INTENTS, matchElderIntent } from './intentDictionary';
+import { ELDER_INTENTS, matchElderIntent, matchQueryPattern } from './intentDictionary';
 
 export interface SemanticValidationResult {
   isValid: boolean;
@@ -109,11 +109,7 @@ export function validateSemanticTarget(
 
   // 4. Semantic Alignment Check: Match question intent against target element
   const triggeredIntents = ELDER_INTENTS.filter((intent) =>
-    intent.queryPatterns.some((pattern) => {
-      const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
-      return regex.test(qLower) || qLower === pattern;
-    })
+    intent.queryPatterns.some((pattern) => matchQueryPattern(qLower, pattern))
   );
 
   if (triggeredIntents.length > 0) {

@@ -3,7 +3,6 @@ import React from 'react';
 import { AssistanceLog } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
 
 export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loading: boolean }) {
   if (loading) {

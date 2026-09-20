@@ -12,6 +12,7 @@ on:
       - 'next.config.*'
       - 'Dockerfile'
       - '.dockerignore'
+      - 'version.json'
   workflow_dispatch:
 
 env:

@@ -57,12 +57,24 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
 
+      - name: Determine Version
+        id: version
+        env:
+          INPUT_CODE: ${{ inputs.version_code }}
+          INPUT_NAME: ${{ inputs.version_name }}
+          RUN_NUM: ${{ github.run_number }}
+        run: |
+          CODE="${INPUT_CODE:-$RUN_NUM}"
+          NAME="${INPUT_NAME:-1.1.$RUN_NUM}"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
       - name: Build Hardened Release APK
         run: ./gradlew assembleRelease --no-daemon
         working-directory: android
         env:
-          BUILD_NUMBER: ${{ inputs.version_code }}
-          BUILD_VERSION: ${{ inputs.version_name }}
+          BUILD_NUMBER: ${{ steps.version.outputs.code }}
+          BUILD_VERSION: ${{ steps.version.outputs.name }}
           KEYSTORE_PATH: keystore.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
@@ -80,9 +92,12 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: android-latest
-          name: "SaralGati Android App (Latest)"
+          name: "SaralGati Android App (v${{ steps.version.outputs.name }})"
+          body: |
+            {"version_code": ${{ steps.version.outputs.code }}, "version_name": "${{ steps.version.outputs.name }}", "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download", "force_update": false, "changelog": "SaralGati native client update with latest improvements."}
           draft: false
           prerelease: false
           files: android/app/build/outputs/apk/release/SaralGati.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

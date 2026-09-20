@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
                                             @Suppress("DEPRECATION")
                                             packageManager.getPackageInfo(packageName, 0).versionCode
                                         }
-                                        if (versionInfo.versionCode > currentVersionCode) {
+                                        if (versionInfo.versionCode > currentVersionCode || versionInfo.forceUpdate) {
                                             availableUpdate = versionInfo
                                         }
                                     }

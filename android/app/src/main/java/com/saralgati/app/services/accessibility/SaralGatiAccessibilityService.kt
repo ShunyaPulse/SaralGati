@@ -37,6 +37,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var activeHighlightTime: Long = 0L
     private var activeAppPackage: String? = null
     private var activeWindowClassName: String? = null
+    private var activeFlowGoal: String? = null
     private var activeElementBounds: List<android.graphics.Rect> = emptyList()
 
     companion object {
@@ -127,11 +128,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 Log.i(TAG, "Window transition detected ($pkg / $cls). Auto-verifying interaction: $interactionId")
 
                 // Clear immediately to prevent duplicate feedback
+                val currentFlowGoal = activeFlowGoal
                 activeInteractionId = null
                 activeHighlightedBounds = null
                 activeAppPackage = null
                 activeWindowClassName = null
                 activeElementBounds = emptyList()
+                activeFlowGoal = null
 
                 // Dismiss visual cue overlay
                 clearVisualCue()
@@ -144,6 +147,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         )
                         NetworkModule.agentApi.sendFeedback(req)
                         Log.d(TAG, "Sent window-transition auto-verification for: $interactionId")
+                        
+                        // Auto-advance multi-step flow
+                        if (currentFlowGoal != null) {
+                            kotlinx.coroutines.delay(1000) // Wait for screen to fully render
+                            extractAndAskScreen(currentFlowGoal)
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to send window-transition feedback: ${e.message}")
                     }
@@ -178,11 +187,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 }
 
                 // Clear immediately to prevent duplicate feedback calls
+                val currentFlowGoal = activeFlowGoal
                 activeInteractionId = null
                 activeHighlightedBounds = null
                 activeAppPackage = null
                 activeWindowClassName = null
                 activeElementBounds = emptyList()
+                activeFlowGoal = null
                 clearVisualCue()
 
                 serviceScope.launch {
@@ -194,6 +205,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         )
                         NetworkModule.agentApi.sendFeedback(req)
                         Log.d(TAG, "Sent implicit feedback: $feedbackType (actualIndex: $actualIndex) for interaction: $interactionId")
+                        
+                        // Auto-advance multi-step flow if they tapped the correct target
+                        if (currentFlowGoal != null && isTargetTapped) {
+                            kotlinx.coroutines.delay(1000) // Wait for content change
+                            extractAndAskScreen(currentFlowGoal)
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to send implicit feedback: ${e.message}")
                     }
@@ -204,6 +221,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 activeAppPackage = null
                 activeWindowClassName = null
                 activeElementBounds = emptyList()
+                activeFlowGoal = null
             }
         }
 
@@ -501,6 +519,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeAppPackage = appPackage
                         activeWindowClassName = rootNode.className?.toString()
                         activeElementBounds = elementBounds.toList()
+                        activeFlowGoal = if (data?.flow != null) question else null
+                        
                         // Keep screen rock-solid stable: do not force scroll down on elder's live screen
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
@@ -509,6 +529,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeAppPackage = null
                         activeWindowClassName = null
                         activeElementBounds = emptyList()
+                        activeFlowGoal = null
                     }
                 } else {
                     broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")

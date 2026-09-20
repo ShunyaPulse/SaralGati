@@ -45,7 +45,7 @@ export function ElderForm({ initialData, onSubmit, onCancel }: ElderFormProps) {
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: Partial<Record<keyof ElderFormData, string>> = {};
-        error.issues.forEach((err: { path: (string | number)[]; message: string }) => {
+        error.issues.forEach((err) => {
           if (err.path[0]) {
             fieldErrors[err.path[0] as keyof ElderFormData] = err.message;
           }

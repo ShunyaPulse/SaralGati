@@ -43,9 +43,16 @@ jobs:
         run: chmod +x ./gradlew
         working-directory: android
 
-      - name: Decode Release Keystore (if present)
-        if: env.HAS_KEYSTORE == 'true'
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+      - name: Setup Release Keystore
+        run: |
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            echo "Decoding production release keystore..."
+            echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
+          elif [ ! -f "keystore.jks" ]; then
+            echo "Generating fallback keystore for release build..."
+            keytool -genkey -v -keystore keystore.jks -alias saralgati_key -keyalg RSA -keysize 2048 -validity 10000 -storepass saralgati_fallback -keypass saralgati_fallback -dname "CN=SaralGati,O=SaralGati,C=IN"
+          fi
+        working-directory: android
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}

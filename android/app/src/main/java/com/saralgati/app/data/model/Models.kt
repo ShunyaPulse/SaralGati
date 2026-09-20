@@ -93,3 +93,15 @@ data class AppVersionInfo(
     @Json(name = "force_update") val forceUpdate: Boolean = false,
     val changelog: String? = null
 )
+
+@JsonClass(generateAdapter = true)
+data class SyncHabitPayload(
+    val type: String,
+    val payload: Map<String, @JvmSuppressWildcards Any>
+)
+
+@JsonClass(generateAdapter = true)
+data class SyncHabitsRequest(
+    @Json(name = "battery_level") val batteryLevel: Int?,
+    val habits: List<SyncHabitPayload>
+)

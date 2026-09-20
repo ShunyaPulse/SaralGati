@@ -308,7 +308,25 @@ export async function POST(req: NextRequest) {
       const { formattedString: formattedElements } = pruneUITree(safeUIElements, safeQuestion);
       const fewShots = formatRelevantFewShots(safeAppPackage, safeQuestion, 4);
 
-      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
+      let knownHabitsStr = '';
+      if (effectiveElderId) {
+        try {
+          const habits = await query(
+            `SELECT rule_type, rule_payload FROM habit_rules WHERE elder_id = $1 AND confidence >= 0.3 ORDER BY updated_at DESC LIMIT 15`,
+            [effectiveElderId]
+          );
+          if (habits && habits.length > 0) {
+            knownHabitsStr = "\n\nKnown User Habits/Preferences (Use these to resolve ambiguous names, relations, or routines):\n" + habits.map((h: any) => {
+              const p = typeof h.rule_payload === 'string' ? h.rule_payload : JSON.stringify(h.rule_payload);
+              return `- ${h.rule_type}: ${p}`;
+            }).join('\n');
+          }
+        } catch (err) {
+          console.error('Error fetching habits:', err);
+        }
+      }
+
+      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.${knownHabitsStr}
 The user is looking at an Android app: ${safeAppPackage}.
 Here are the numbered interactive elements on their screen:
 ${formattedElements}

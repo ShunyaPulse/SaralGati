@@ -42,6 +42,9 @@ interface AgentApi {
 
     @POST("api/v1/agent/feedback")
     suspend fun sendFeedback(@Body request: com.saralgati.app.data.model.FeedbackRequest): Response<ApiResponse<Map<String, Any>>>
+
+    @POST("api/v1/agent/sync-habits")
+    suspend fun syncHabits(@Body request: com.saralgati.app.data.model.SyncHabitsRequest): Response<ApiResponse<Any>>
 }
 
 interface AppApi {

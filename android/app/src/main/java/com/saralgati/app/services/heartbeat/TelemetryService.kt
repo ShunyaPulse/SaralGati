@@ -70,6 +70,27 @@ class TelemetryService : Service() {
                         } else {
                             Log.w(TAG, "Heartbeat failed: ${response.code()}")
                         }
+
+                        // On-Device Habit Aggregator Sync
+                        try {
+                            val habits = listOf(
+                                com.saralgati.app.data.model.SyncHabitPayload(
+                                    type = "device_preference",
+                                    payload = mapOf("font_scale" to resources.configuration.fontScale)
+                                )
+                            )
+                            val syncRes = NetworkModule.agentApi.syncHabits(
+                                com.saralgati.app.data.model.SyncHabitsRequest(
+                                    batteryLevel = batteryPct,
+                                    habits = habits
+                                )
+                            )
+                            if (syncRes.isSuccessful) {
+                                Log.d(TAG, "Habits synced successfully")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Habit sync error: ${e.message}")
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Network error during heartbeat: ${e.message}")

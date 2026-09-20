@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/db';
+import { generateAIResponse } from '@/lib/aiFallback';
+
+export async function POST(req: NextRequest) {
+  try {
+    const authHeader = req.headers.get('authorization');
+    const expectedSecret = process.env.FLYWHEEL_SECRET || process.env.API_SECRET || 'saralgati_super_secret_key_2024';
+
+    if (authHeader !== `Bearer ${expectedSecret}` && req.headers.get('x-flywheel-secret') !== expectedSecret) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // 1. Get elders who have recent verified interactions
+    const eldersRes = await query<{ elder_id: string }>(
+      `SELECT DISTINCT elder_id 
+       FROM model_interactions 
+       WHERE feedback_status = 'verified' AND elder_id IS NOT NULL 
+       ORDER BY elder_id LIMIT 10`
+    );
+
+    const processedElders: string[] = [];
+    let habitsCreated = 0;
+
+    for (const { elder_id } of eldersRes || []) {
+      // 2. Get their last 30 verified interactions
+      const interactions = await query<{ question: string; app_package: string; ui_elements: any; actual_tapped_index: number }>(
+        `SELECT question, app_package, ui_elements, actual_tapped_index
+         FROM model_interactions
+         WHERE elder_id = $1 AND feedback_status = 'verified'
+         ORDER BY created_at DESC LIMIT 30`,
+        [elder_id]
+      );
+
+      if (!interactions || interactions.length < 3) continue; // Need some data to find patterns
+
+      // 3. Format history for AI
+      const historyText = interactions.map(i => {
+        const elements = Array.isArray(i.ui_elements) ? i.ui_elements : JSON.parse(i.ui_elements || '[]');
+        const targetElement = elements[i.actual_tapped_index] || 'Unknown';
+        return `App: ${i.app_package} | Q: "${i.question}" | Tapped: ${targetElement}`;
+      }).join('\n');
+
+      const systemPrompt = `You are a data mining agent. Extract consistent personal habits or naming conventions from the user's interaction history.
+Focus on:
+1. Implicit relations (e.g. if they say "beta" and consistently tap "Rahul", rule_type: 'relation_beta', payload: 'Rahul')
+2. Routines (e.g. if they say "aarti" and tap a specific YouTube video, rule_type: 'morning_aarti', payload: 'Video Title')
+
+Return a strict JSON array of objects with keys: rule_type (string), rule_payload (string/object). If no clear patterns exist, return []. Do not wrap in markdown blocks, just raw JSON.`;
+
+      const aiResponse = await generateAIResponse({
+        systemPrompt,
+        userPrompt: `Here is the elder's verified interaction history:\n${historyText}\n\nExtract their habits.`
+      });
+
+      try {
+        const cleanJson = aiResponse.text.replace(/^```json|```$/gi, '').trim();
+        const extracted = JSON.parse(cleanJson);
+        
+        if (Array.isArray(extracted) && extracted.length > 0) {
+          // 4. Save to habit_rules
+          for (const habit of extracted) {
+            await query(
+              `INSERT INTO habit_rules (elder_id, rule_type, rule_payload, confidence, updated_at)
+               VALUES ($1, $2, $3, $4, NOW())
+               ON CONFLICT DO NOTHING`, // Note: habit_rules might not have unique constraint, let's just insert
+              [elder_id, habit.rule_type, JSON.stringify(habit.rule_payload), 0.8]
+            );
+            habitsCreated++;
+          }
+        }
+      } catch (err) {
+        console.error('Failed to parse AI response for habits:', aiResponse.text);
+      }
+      
+      processedElders.push(elder_id);
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        processed_elders: processedElders.length,
+        habits_created: habitsCreated
+      }
+    });
+
+  } catch (error) {
+    console.error('Habit Mining Error:', error);
+    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+  }
+}

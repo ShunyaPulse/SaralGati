@@ -23,7 +23,7 @@ export const syncHabitsSchema = z.object({
   device_token: z.string(),
   habits: z.array(z.object({
     type: z.string(),
-    payload: z.record(z.any()),
+    payload: z.record(z.string(), z.any()),
   })),
   battery_level: z.number().min(0).max(100),
   timestamp: z.string().datetime(),
@@ -40,7 +40,7 @@ export const reportStuckSchema = z.object({
 export const habitRuleSchema = z.object({
   elder_id: z.string().uuid(),
   rule_type: z.enum(['frequent_contact', 'app_trigger', 'time_routine', 'location_trigger']),
-  rule_payload: z.record(z.any()),
+  rule_payload: z.record(z.string(), z.any()),
   confidence: z.number().min(0).max(1).default(0.5),
   is_active: z.boolean().default(true),
 });

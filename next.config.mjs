@@ -1,8 +1,5 @@
-import type { NextConfig } from 'next';
-
-
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   output: 'standalone',
   poweredByHeader: false,
   images: {
@@ -11,7 +8,6 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
     ],
   },
-
 };
 
 export default nextConfig;

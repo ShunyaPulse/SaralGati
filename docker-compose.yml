@@ -1,8 +1,11 @@
 version: '3.8'
 services:
-  # nosemgrep: yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
   postgres:
     image: postgres:16-alpine
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql
     security_opt:
       - no-new-privileges:true
     environment:
@@ -13,9 +16,11 @@ services:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
-  # nosemgrep: yaml.docker-compose.security.writable-filesystem-service.writable-filesystem-service
   redis:
     image: redis:7-alpine
+    read_only: true
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     ports:

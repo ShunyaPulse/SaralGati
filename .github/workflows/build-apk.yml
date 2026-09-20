@@ -43,15 +43,31 @@ jobs:
         run: chmod +x ./gradlew
         working-directory: android
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Decode Release Keystore (if present)
+        if: env.HAS_KEYSTORE == 'true'
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+
+      - name: Build Hardened Release APK
+        run: ./gradlew assembleRelease --no-daemon
         working-directory: android
         env:
           BUILD_NUMBER: ${{ inputs.version_code }}
           BUILD_VERSION: ${{ inputs.version_name }}
+          KEYSTORE_PATH: keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Rename APK to SaralGati.apk
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/SaralGati.apk
+      - name: Prepare Release APK
+        run: |
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/SaralGati.apk
+          elif [ -f android/app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/SaralGati.apk
+          fi
 
       - name: Upload Release Asset
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
@@ -60,6 +76,6 @@ jobs:
           name: "SaralGati Android App (Latest)"
           draft: false
           prerelease: false
-          files: android/app/build/outputs/apk/debug/SaralGati.apk
+          files: android/app/build/outputs/apk/release/SaralGati.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

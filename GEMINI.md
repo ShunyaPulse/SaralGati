@@ -27,4 +27,11 @@
 - **Nested Dependency CVE Fixes**: When fixing vulnerabilities in indirect/nested dependencies (e.g., `postcss` under `next` or `nodemailer` under `next-auth`), prefer `package.json` `"overrides"` combined with `npm install --legacy-peer-deps` instead of breaking framework upgrades.
 - **No PWA Web Manifest**: Do NOT add `manifest.json` or PWA installation prompts to the website. The user must be guided to download and use the native Android companion APK (`SaralGati.apk`) rather than installing the caregiver dashboard web app as a PWA.
 - **PowerShell Command Separator**: In Windows terminal commands, always use `;` (semicolon) to chain sequential commands instead of `&&`.
+- **Next.js Config Format**: Always use `next.config.mjs` instead of `next.config.ts` to prevent runtime build failures caused by major TypeScript compiler version bumps.
+- **Zod v4 API Invariants**:
+  - Always use `error.issues` instead of `error.errors`.
+  - Do NOT manually type-annotate `err` in `error.issues.forEach((err) => ...)` (Zod v4 `$ZodIssue.path` is `PropertyKey[]`, including `symbol`).
+  - Always use two arguments for `z.record(z.string(), ...)` instead of `z.record(...)`.
+- **CodeQL Action Pinning**: In `.github/workflows/codeql.yml`, all `github/codeql-action` steps (`init`, `analyze`, `upload-sarif`) must be pinned to the exact same commit SHA to prevent version mismatch crashes and satisfy Semgrep immutable action tag rules.
+- **Docker Dependency Resolution**: Always keep `RUN npm ci --legacy-peer-deps` in the `Dockerfile` to avoid `ERESOLVE` failures with peer-optional dependencies (such as `next-auth` and `nodemailer`).
 

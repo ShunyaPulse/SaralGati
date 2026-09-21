@@ -1,7 +1,11 @@
 package com.saralgati.app.ui.phonedoctor
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -14,10 +18,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.saralgati.app.data.local.LocalPrefs
 import kotlinx.coroutines.launch
 
@@ -25,9 +32,24 @@ import kotlinx.coroutines.launch
 @Composable
 fun PhoneDoctorScreen() {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val localPrefs = remember { LocalPrefs(context) }
     
     var showSettings by remember { mutableStateOf(false) }
+    var hasWritePermission by remember { mutableStateOf(canWriteSettings(context)) }
+    
+    // Auto-refresh permission state when returning from system settings
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasWritePermission = canWriteSettings(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
     
     // Checkbox states (Caregiver configures these)
     var fixRinger by remember { mutableStateOf(localPrefs.getBoolean("doctor_fix_ringer", true)) }
@@ -118,12 +140,69 @@ fun PhoneDoctorScreen() {
                         Text("Max Video/Media Volume", fontSize = 15.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = fixBrightness, onCheckedChange = { fixBrightness = it; localPrefs.saveBoolean("doctor_fix_brightness", it) })
-                        Text("Brightness to 100% (Requires Permission)", fontSize = 15.sp)
+                        Checkbox(
+                            checked = fixBrightness,
+                            onCheckedChange = {
+                                fixBrightness = it
+                                localPrefs.saveBoolean("doctor_fix_brightness", it)
+                                if (it && !hasWritePermission) {
+                                    openWriteSettingsPermission(context)
+                                }
+                            }
+                        )
+                        Text(
+                            text = if (hasWritePermission) "Brightness High (85%) ✅" else "Brightness High (85%)",
+                            fontSize = 15.sp
+                        )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = fixScreenTimeout, onCheckedChange = { fixScreenTimeout = it; localPrefs.saveBoolean("doctor_fix_timeout", it) })
-                        Text("Screen Timeout 5 Mins (Requires Permission)", fontSize = 15.sp)
+                        Checkbox(
+                            checked = fixScreenTimeout,
+                            onCheckedChange = {
+                                fixScreenTimeout = it
+                                localPrefs.saveBoolean("doctor_fix_timeout", it)
+                                if (it && !hasWritePermission) {
+                                    openWriteSettingsPermission(context)
+                                }
+                            }
+                        )
+                        Text(
+                            text = if (hasWritePermission) "Screen Timeout 5 Mins ✅" else "Screen Timeout 5 Mins",
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    // If either brightness or timeout is enabled but permission is missing, show an explicit action card
+                    if ((fixBrightness || fixScreenTimeout) && !hasWritePermission) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "⚠️ System Modify Permission Required",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF92400E)
+                                )
+                                Text(
+                                    text = "Roshni aur screen timeout set karne ke liye 'Allow modify system settings' chalu karein.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF92400E),
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                                Button(
+                                    onClick = { openWriteSettingsPermission(context) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD97706)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.fillMaxWidth().height(36.dp)
+                                ) {
+                                    Text("Allow Permission Now", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
+                            }
+                        }
                     }
                 }
             },
@@ -133,6 +212,29 @@ fun PhoneDoctorScreen() {
                 }
             }
         )
+    }
+}
+
+private fun canWriteSettings(context: Context): Boolean {
+    return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(context)
+}
+
+private fun openWriteSettingsPermission(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        try {
+            val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val fallback = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(fallback)
+            } catch (ignored: Exception) {}
+        }
     }
 }
 
@@ -152,26 +254,43 @@ private fun executeFixes(context: Context, prefs: LocalPrefs) {
         
         if (prefs.getBoolean("doctor_fix_media", true)) {
             val maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (maxMedia * 0.8).toInt(), 0) // 80% is safe/loud enough
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (maxMedia * 0.85).toInt(), 0)
             fixedItems++
         }
 
-        // Brightness and Screen Timeout require WRITE_SETTINGS permission.
-        // We will just show a Toast for now if they are checked but permission is missing.
-        if (prefs.getBoolean("doctor_fix_brightness", false) || prefs.getBoolean("doctor_fix_timeout", false)) {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                if (!android.provider.Settings.System.canWrite(context)) {
-                    Toast.makeText(context, "System Modify Permission needed for Brightness/Timeout!", Toast.LENGTH_LONG).show()
-                } else {
-                    if (prefs.getBoolean("doctor_fix_brightness", false)) {
-                        android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
-                        android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS, 200) // ~80%
-                        fixedItems++
-                    }
-                    if (prefs.getBoolean("doctor_fix_timeout", false)) {
-                        android.provider.Settings.System.putInt(context.contentResolver, android.provider.Settings.System.SCREEN_OFF_TIMEOUT, 300000) // 5 mins
-                        fixedItems++
-                    }
+        val hasPermission = canWriteSettings(context)
+
+        if (prefs.getBoolean("doctor_fix_brightness", false)) {
+            if (hasPermission) {
+                try {
+                    Settings.System.putInt(
+                        context.contentResolver,
+                        Settings.System.SCREEN_BRIGHTNESS_MODE,
+                        Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+                    )
+                    Settings.System.putInt(
+                        context.contentResolver,
+                        Settings.System.SCREEN_BRIGHTNESS,
+                        220 // ~85% Brightness for clear elder readability
+                    )
+                    fixedItems++
+                } catch (e: Exception) {
+                    // Ignore failure gracefully
+                }
+            }
+        }
+
+        if (prefs.getBoolean("doctor_fix_timeout", false)) {
+            if (hasPermission) {
+                try {
+                    Settings.System.putInt(
+                        context.contentResolver,
+                        Settings.System.SCREEN_OFF_TIMEOUT,
+                        300000 // 5 minutes so screen doesn't turn off rapidly
+                    )
+                    fixedItems++
+                } catch (e: Exception) {
+                    // Ignore failure gracefully
                 }
             }
         }

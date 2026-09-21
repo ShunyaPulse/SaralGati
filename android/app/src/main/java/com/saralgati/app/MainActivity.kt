@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -102,7 +103,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (isPaired) {
-                        var selectedTab by remember { mutableIntStateOf(0) }
+                        var selectedTab by remember { mutableStateOf(0) }
                         Scaffold(
                             bottomBar = {
                                 NavigationBar {

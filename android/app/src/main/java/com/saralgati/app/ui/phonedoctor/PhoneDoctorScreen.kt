@@ -6,8 +6,6 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
@@ -95,10 +93,10 @@ fun PhoneDoctorScreen() {
                 .padding(16.dp)
                 .size(48.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Doctor Settings",
-                tint = Color.LightGray // Very subtle so elders don't click it often
+            Text(
+                text = "⚙️",
+                fontSize = 24.sp,
+                color = Color.LightGray
             )
         }
     }

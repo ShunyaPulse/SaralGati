@@ -1,0 +1,21 @@
+# Gitpod Configuration for SaralGati
+image: gitpod/workspace-node-lts
+
+tasks:
+  - name: Setup & Run
+    init: |
+      if [ ! -f .env.local ] && [ -f .env.example ]; then cp .env.example .env.local; fi
+      npm install --legacy-peer-deps
+    command: npm run dev
+
+ports:
+  - port: 3000
+    name: SaralGati Web
+    onOpen: open-preview
+    visibility: public
+
+vscode:
+  extensions:
+    - dbaeumer.vscode-eslint
+    - esbenp.prettier-vscode
+    - bradlc.vscode-tailwindcss

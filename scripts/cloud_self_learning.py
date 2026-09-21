@@ -264,7 +264,8 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
                 print(f"    ✅ CORRECT! Feeding positive reinforcement...")
                 fb_payload = {
                     "interaction_id": interaction_id,
-                    "feedback": "tapped_highlight"
+                    "feedback": "tapped_highlight",
+                    "actual_tapped_index": expected_index
                 }
             else:
                 stats["corrections_injected"] += 1

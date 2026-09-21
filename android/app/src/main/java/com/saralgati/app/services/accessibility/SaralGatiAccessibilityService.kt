@@ -33,6 +33,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
     // Variables for Continuous Learning Implicit Feedback Loop
     private var activeInteractionId: String? = null
+    private var activeHighlightedIndex: Int? = null
     private var activeHighlightedBounds: android.graphics.Rect? = null
     private var activeHighlightTime: Long = 0L
     private var activeAppPackage: String? = null
@@ -129,7 +130,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
                 // Clear immediately to prevent duplicate feedback
                 val currentFlowGoal = activeFlowGoal
+                val tappedIndex = activeHighlightedIndex
                 activeInteractionId = null
+                activeHighlightedIndex = null
                 activeHighlightedBounds = null
                 activeAppPackage = null
                 activeWindowClassName = null
@@ -143,7 +146,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     try {
                         val req = com.saralgati.app.data.model.FeedbackRequest(
                             interactionId = interactionId,
-                            feedback = "tapped_highlight"
+                            feedback = "tapped_highlight",
+                            actualTappedIndex = tappedIndex
                         )
                         NetworkModule.agentApi.sendFeedback(req)
                         Log.d(TAG, "Sent window-transition auto-verification for: $interactionId")
@@ -177,18 +181,18 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val isTargetTapped = android.graphics.Rect.intersects(clickedRect, targetBounds)
                 val feedbackType = if (isTargetTapped) "tapped_highlight" else "tapped_other"
 
-                // If tapped other, determine which element index was actually tapped
-                var actualIndex: Int? = null
-                if (!isTargetTapped) {
+                // Determine which element index was actually tapped
+                val actualIndex: Int? = if (isTargetTapped) {
+                    activeHighlightedIndex
+                } else {
                     val foundIdx = activeElementBounds.indexOfFirst { android.graphics.Rect.intersects(clickedRect, it) }
-                    if (foundIdx != -1) {
-                        actualIndex = foundIdx
-                    }
+                    if (foundIdx != -1) foundIdx else null
                 }
 
                 // Clear immediately to prevent duplicate feedback calls
                 val currentFlowGoal = activeFlowGoal
                 activeInteractionId = null
+                activeHighlightedIndex = null
                 activeHighlightedBounds = null
                 activeAppPackage = null
                 activeWindowClassName = null
@@ -514,6 +518,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     val highlightIndex = data?.highlightIndex
                     if (highlightIndex != null && highlightIndex in elementBounds.indices) {
                         activeInteractionId = data?.interactionId
+                        activeHighlightedIndex = highlightIndex
                         activeHighlightedBounds = elementBounds[highlightIndex]
                         activeHighlightTime = System.currentTimeMillis()
                         activeAppPackage = appPackage
@@ -525,6 +530,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
                         activeInteractionId = null
+                        activeHighlightedIndex = null
                         activeHighlightedBounds = null
                         activeAppPackage = null
                         activeWindowClassName = null
@@ -545,6 +551,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
     private fun clearVisualCue() {
         activeInteractionId = null
+        activeHighlightedIndex = null
         activeHighlightedBounds = null
         activeAppPackage = null
         activeWindowClassName = null

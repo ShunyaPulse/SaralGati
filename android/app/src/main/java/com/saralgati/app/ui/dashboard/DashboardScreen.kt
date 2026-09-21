@@ -131,6 +131,27 @@ fun DashboardScreen(
                 ) {
                     Text("Enable Accessibility Permission")
                 }
+                
+                if (Build.VERSION.SDK_INT >= 33) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "If Accessibility says 'Restricted': Open App Info -> Top 3 Dots -> Allow restricted settings",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Open App Info (To Unlock)")
+                    }
+                }
             }
 
             // 2. Overlay Permission Button (only shown if not yet granted)

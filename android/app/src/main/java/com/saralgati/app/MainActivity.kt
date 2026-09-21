@@ -19,6 +19,7 @@ import com.saralgati.app.ui.onboarding.PairingScreen
 import com.saralgati.app.ui.theme.SaralGatiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var localPrefs: LocalPrefs
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
                     var availableUpdate by remember { mutableStateOf<AppVersionInfo?>(null) }
+                    val scope = rememberCoroutineScope()
 
                     // Check for App Updates: prompts every 3rd time the app is opened
                     LaunchedEffect(Unit) {
@@ -129,8 +131,10 @@ class MainActivity : ComponentActivity() {
                                 Button(
                                     onClick = {
                                         availableUpdate = null
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl))
-                                        startActivity(intent)
+                                        android.widget.Toast.makeText(this@MainActivity, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show()
+                                        scope.launch {
+                                            com.saralgati.app.utils.ApkInstaller.downloadAndInstall(this@MainActivity, update.downloadUrl)
+                                        }
                                     }
                                 ) {
                                     Text("Update Now")

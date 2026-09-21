@@ -1,0 +1,30 @@
+{
+  "name": "SaralGati Dev Environment",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode"
+      },
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "SaralGati App",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "postCreateCommand": "if [ ! -f .env.local ] && [ -f .env.example ]; then cp .env.example .env.local; fi && npm install --legacy-peer-deps"
+}
+

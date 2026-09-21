@@ -119,6 +119,30 @@ fun DashboardScreen(
                 }
             }
 
+
+            // Button to disable battery optimization
+            val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+            val isIgnoringBattery = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                pm.isIgnoringBatteryOptimizations(context.packageName)
+            } else {
+                true
+            }
+            
+            if (!isIgnoringBattery) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = Uri.parse("package:${context.packageName}")
+                        }
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Disable Battery Optimization")
+                }
+            }
+
             if (alertStatusMessage != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(

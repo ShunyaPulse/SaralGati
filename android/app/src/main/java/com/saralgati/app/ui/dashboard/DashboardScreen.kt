@@ -103,21 +103,32 @@ fun DashboardScreen(
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Text(
-                        text = "Connected Elder ID:\n$elderId",
+                        text = "✅ App is Connected",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "ID: ${if (elderId.length > 8) elderId.substring(0, 8) + "..." else elderId}",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedButton(
                         onClick = onUnpair,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp)
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = Modifier.height(36.dp)
                     ) {
-                        Text("Disconnect / Pair New QR", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Disconnect App", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -230,17 +241,19 @@ fun DashboardScreen(
                 Surface(
                     color = Color(0xFFDCFCE7),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "🛡️ All Permissions & Protection Active",
-                            fontWeight = FontWeight.SemiBold,
+                            text = "🛡️ All Protection is Active",
+                            fontWeight = FontWeight.Bold,
                             color = Color(0xFF15803D),
-                            fontSize = 14.sp
+                            fontSize = 16.sp,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -261,15 +274,16 @@ fun DashboardScreen(
 
         // On-Screen Helper Controls
         Surface(
-            color = Color(0xFFF3F4F6),
+            color = Color(0xFFF3F4F6), // Light gray background
+            contentColor = Color(0xFF1F2937), // Dark slate text for high contrast
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = "On-Screen Helper Settings",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    text = "On-Screen Helper",
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 20.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
@@ -279,7 +293,11 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Voice Guidance (TTS)")
+                    Text(
+                        text = "Voice Guidance (TTS)", 
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
+                    )
                     Switch(
                         checked = voiceEnabled,
                         onCheckedChange = { 
@@ -289,20 +307,20 @@ fun DashboardScreen(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Button(
                     onClick = {
                         val intent = Intent(context, com.saralgati.app.services.overlay.FloatingHelperService::class.java)
                         context.startService(intent)
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0074c8)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0074C8)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(12.dp)
+                        .height(60.dp),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
-                    Text("Start On-Screen Helper", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("🚀 Start Helper Now", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }

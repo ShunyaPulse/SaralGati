@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     for (const { elder_id } of eldersRes || []) {
       // 2. Get their last 30 verified interactions
       const interactions = await query<{ question: string; app_package: string; ui_elements: any; actual_tapped_index: number }>(
-        `SELECT question, app_package, ui_elements, actual_tapped_index
+        `SELECT question, app_package, ui_elements, COALESCE(actual_tapped_index, suggested_index) as actual_tapped_index
          FROM model_interactions
          WHERE elder_id = $1 AND feedback_status = 'verified'
          ORDER BY created_at DESC LIMIT 30`,
@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
 
       const systemPrompt = `You are a data mining agent. Extract consistent personal habits or naming conventions from the user's interaction history.
 Focus on:
-1. Implicit relations (e.g. if they say "beta" and consistently tap "Rahul", rule_type: 'relation_beta', payload: 'Rahul')
-2. Routines (e.g. if they say "aarti" and tap a specific YouTube video, rule_type: 'morning_aarti', payload: 'Video Title')
+1. Implicit relations (e.g. if they say "beta" and consistently tap "Rahul"). Use rule_type: 'frequent_contact', payload: {"name": "Rahul"}.
+2. Routines (e.g. if they say "aarti" and tap a specific YouTube video). Use rule_type: 'app_trigger', payload: {"video": "Title"}.
 
-Return a strict JSON array of objects with keys: rule_type (string), rule_payload (string/object). If no clear patterns exist, return []. Do not wrap in markdown blocks, just raw JSON.`;
+Return a strict JSON array of objects with keys: rule_type (string), rule_payload (object). The ONLY valid rule_types are: 'frequent_contact', 'app_trigger', 'time_routine', 'location_trigger'. If no clear patterns exist, return []. Do not wrap in markdown blocks, just raw JSON.`;
 
       const aiResponse = await generateAIResponse({
         systemPrompt,

@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       `UPDATE model_interactions
        SET feedback_status = $1,
            actual_tapped_index = CASE 
-               WHEN $1 = 'verified' THEN suggested_index 
+               WHEN $1 = 'verified' THEN COALESCE($2, suggested_index) 
                ELSE COALESCE($2, actual_tapped_index) 
            END,
            updated_at = NOW()

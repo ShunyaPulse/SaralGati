@@ -47,6 +47,7 @@ fun DashboardScreen(
     var isOverlayGranted by remember { mutableStateOf(isOverlayPermissionGranted(context)) }
     var isBatteryExempt by remember { mutableStateOf(isBatteryOptimizationIgnored(context)) }
     var isAutoStartConfigured by remember { mutableStateOf(localPrefs.getBoolean("pref_autostart_configured", false)) }
+    var canInstallPackages by remember { mutableStateOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.packageManager.canRequestPackageInstalls() else true) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -55,6 +56,9 @@ fun DashboardScreen(
                 isOverlayGranted = isOverlayPermissionGranted(context)
                 isBatteryExempt = isBatteryOptimizationIgnored(context)
                 isAutoStartConfigured = localPrefs.getBoolean("pref_autostart_configured", false)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    canInstallPackages = context.packageManager.canRequestPackageInstalls()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -187,7 +191,25 @@ fun DashboardScreen(
                 }
             }
 
-            // 4. Auto-Start Button (only shown if supported by OEM and not yet configured)
+            // 4. Install Unknown Apps Permission Button (for seamless Auto-Updates)
+            if (!canInstallPackages) {
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            }
+                            context.startActivity(intent)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Allow Auto-Updates Permission")
+                }
+            }
+
+            // 5. Auto-Start Button (only shown if supported by OEM and not yet configured)
             val showAutoStart = AutoStartHelper.isAutoStartSupported() && !isAutoStartConfigured
             if (showAutoStart) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -203,8 +225,8 @@ fun DashboardScreen(
                 }
             }
 
-            // 5. All Protections Active Badge (shown when no setup buttons are needed)
-            if (isAccessibilityEnabled && isOverlayGranted && isBatteryExempt && !showAutoStart) {
+            // 6. All Protections Active Badge (shown when no setup buttons are needed)
+            if (isAccessibilityEnabled && isOverlayGranted && isBatteryExempt && canInstallPackages && !showAutoStart) {
                 Surface(
                     color = Color(0xFFDCFCE7),
                     shape = RoundedCornerShape(12.dp),

@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AssistanceLog
+import com.saralgati.app.utils.AutoStartHelper
 import kotlinx.coroutines.launch
 
 @Composable
@@ -141,6 +142,17 @@ fun DashboardScreen(
                 ) {
                     Text("Disable Battery Optimization")
                 }
+            }
+
+            // Button to enable Auto-Start for custom manufacturer OS
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = {
+                    AutoStartHelper.navigateToAutoStart(context)
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Enable Auto-Start (${AutoStartHelper.getBrandName()})")
             }
 
             if (alertStatusMessage != null) {

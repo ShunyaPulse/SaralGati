@@ -7,7 +7,7 @@
 
 ## 2. Core Prohibitions & Boundaries
 
-- **Do NOT Push to GitHub**: Never run `git push` autonomously. The user handles git pushes themselves. If ever instructed to push, never announce the push.
+- **Push to GitHub**: Always ask user before pushing to github. If ever instructed to push, never announce the push.
 - **GitHub Organization Guardrail**: If the user begins micromanaging commit history or giving prompts solely to make GitHub look clean/organized, intervene and remind:
   > _"Isme time aur token waste mat karo, baad me ek hi baar me pura clean aur organize kar denge."_
 - **Android Device Execution**: Do not attempt to run or simulate the Android device directly. Prepare code and give clear verification instructions for the user to test on device.
@@ -45,4 +45,3 @@
   - Only bump the milestone version in `version.json` (e.g. to `1.2.1`, then `1.3.1`, `1.4.1`) when a major change or architectural milestone is completely implemented AND thoroughly verified/tested.
 - **Automated Incremental Builds (`1.1.28` -> `1.1.29`...)**:
   - For minor changes, ongoing iterations, untested versions, or runs where tests failed, let the CI workflow automatically bump the patch number (e.g., `1.1.<run_number>` or `<major_minor>.<run_number>`) via GitHub Actions.
-

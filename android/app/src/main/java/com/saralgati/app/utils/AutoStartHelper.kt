@@ -16,6 +16,22 @@ object AutoStartHelper {
         return Build.MANUFACTURER.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
+    fun isAutoStartSupported(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        return manufacturer.contains("xiaomi") ||
+                manufacturer.contains("redmi") ||
+                manufacturer.contains("poco") ||
+                manufacturer.contains("oppo") ||
+                manufacturer.contains("realme") ||
+                manufacturer.contains("vivo") ||
+                manufacturer.contains("iqoo") ||
+                manufacturer.contains("oneplus") ||
+                manufacturer.contains("samsung") ||
+                manufacturer.contains("transsion") ||
+                manufacturer.contains("tecno") ||
+                manufacturer.contains("infinix")
+    }
+
     fun navigateToAutoStart(context: Context) {
         val manufacturer = Build.MANUFACTURER.lowercase()
         val intent = Intent()

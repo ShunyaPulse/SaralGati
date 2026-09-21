@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
@@ -97,12 +98,38 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (isPaired) {
-                        DashboardScreen(
-                            onUnpair = {
-                                localPrefs.clear()
-                                isPaired = false
+                        var selectedTab by remember { mutableIntStateOf(0) }
+                        Scaffold(
+                            bottomBar = {
+                                NavigationBar {
+                                    NavigationBarItem(
+                                        selected = selectedTab == 0,
+                                        onClick = { selectedTab = 0 },
+                                        icon = { Text("🛡️", fontSize = 20.sp) },
+                                        label = { Text("Suraksha") }
+                                    )
+                                    NavigationBarItem(
+                                        selected = selectedTab == 1,
+                                        onClick = { selectedTab = 1 },
+                                        icon = { Text("🩹", fontSize = 20.sp) },
+                                        label = { Text("Phone Doctor") }
+                                    )
+                                }
                             }
-                        )
+                        ) { paddingValues ->
+                            androidx.compose.foundation.layout.Box(modifier = androidx.compose.foundation.layout.padding(paddingValues)) {
+                                if (selectedTab == 0) {
+                                    DashboardScreen(
+                                        onUnpair = {
+                                            localPrefs.clear()
+                                            isPaired = false
+                                        }
+                                    )
+                                } else {
+                                    com.saralgati.app.ui.phonedoctor.PhoneDoctorScreen()
+                                }
+                            }
+                        }
                     } else {
                         PairingScreen(
                             localPrefs = localPrefs,

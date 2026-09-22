@@ -11,29 +11,7 @@
 > **"Technology should adapt to our parents, not the other way around."**  
 > SaralGati is an autonomous, on-device AI companion and remote caregiver ecosystem engineered to give senior citizens in India complete digital independence. It guides elders step-by-step through any smartphone app using natural voice and visual spotlights, while giving family caregivers remote peace of mind.
 
----
 
-## 📖 Table of Contents
-
-1. [The Challenge: Digital Exclusion Among Seniors](#-the-challenge-digital-exclusion-among-seniors)
-2. [What is SaralGati?](#-what-is-saralgati)
-3. [Key Features for Elders & Caregivers (70%)](#-key-features-for-elders--caregivers)
-   - [Live Floating Companion ("Saral Mitra")](#1-live-floating-companion-saral-mitra)
-   - [Visual Focus Spotlight](#2-visual-focus-spotlight)
-   - [Hands-Free Multi-Step Flow Engine](#3-hands-free-multi-step-flow-engine)
-   - [Phone Doctor ("Sab Theek Karo" 1-Tap Reset)](#4-phone-doctor-sab-theek-karo-1-tap-reset)
-   - [Caregiver Command Dashboard](#5-caregiver-command-dashboard)
-   - [Strict Privacy-First Commitment](#6-strict-privacy-first-commitment)
-4. [Architecture, Technology & Security (30%)](#-architecture-technology--security)
-   - [System Architecture Diagram](#system-architecture-diagram)
-   - [Native Android Companion App Stack](#native-android-companion-app-stack)
-   - [Cloud & Backend Infrastructure](#cloud--backend-infrastructure)
-   - [Edge AI & Autonomous Flywheel](#edge-ai--autonomous-flywheel)
-   - [Security & Reliability Hardening](#security--reliability-hardening)
-5. [Getting Started & Installation](#-getting-started--installation)
-6. [Release & In-App Auto Update](#-release--in-app-auto-update)
-
----
 
 ## 👵 The Challenge: Digital Exclusion Among Seniors
 
@@ -101,33 +79,56 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 
 ## 🛠️ Architecture, Technology & Security
 
-### System Architecture Diagram
+### System Architecture & Question Answering Resolution Pipeline
 
 ```mermaid
 flowchart TD
-    subgraph ElderDevice["📱 Elder Android Device"]
-        A[Android UI / Third-Party Apps] -->|Accessibility Event| B[SaralGati Accessibility Service]
-        B -->|Tree Node Extraction & Bounds| C[Fast-Path Rule Engine]
-        D[Phone Doctor 1-Tap Reset] -->|WRITE_SETTINGS & DND Policy| E[Android System Audio/Display]
-        F[Telemetry & WorkManager] -->|Heartbeat & Battery| G[Background Sync]
+    subgraph Client["📱 Elder Android Device"]
+        Q["Elder Asks Voice / Text Question"] --> AS["Accessibility Service Extracts UI Tree"]
+        AS --> HMAC["HMAC-SHA256 Sign Payload & Dispatch"]
     end
 
-    subgraph EdgeCloud["⚡ Edge & Cloud Services"]
-        B -->|HMAC-Signed Payload| H[Redis Global Screen Cache]
-        H -->|Cache Miss| I[Cloud Run Next.js API]
-        I -->|Few-Shot Intent Grounding| J[Cloudflare Workers AI Llama 3.1 8B]
-        I -->|Telemetry & Audit Logs| K[(Neon Serverless Postgres)]
-        G -->|Device State| K
+    subgraph Server["⚡ SaralGati API Engine (Cloud Run)"]
+        HMAC --> SG["Security Gate: Device Token Auth & Rate Limiter"]
+        SG --> C0{"Active Multi-Step Flow?"}
+        
+        %% Case 1: Multi-Step Flow
+        C0 -- "Yes (Active Session)" --> ANS1["🎯 CASE 1: Flow Engine (~0ms)<br/>Advances multi-screen workflow (e.g., WhatsApp Call)"]
+        
+        %% Case 2: Deterministic Fast-Path
+        C0 -- "No" --> C1{"Matches Fast-Path Rules?"}
+        C1 -- "Yes (App Patterns & Intent Dict)" --> ANS2["⚡ CASE 2: Fast-Path Engine (<1ms)<br/>Deterministic rules for WhatsApp, Dialer, YouTube, SMS"]
+        
+        %% Case 3: Redis Screen Cache
+        C1 -- "No" --> C2{"Redis Screen Cache Hit?"}
+        C2 -- "Yes (Normalized Screen Hash)" --> ANS3["🚀 CASE 3: Redis Screen Cache (<5ms)<br/>Instant sub-5ms cache hit from verified global history"]
+        
+        %% Case 4: Cloudflare Workers AI LoRA
+        C2 -- "No (Cache Miss)" --> PREP["UI Pruning + Habit Context + Few-Shot Retriever"]
+        PREP --> CF["🧠 CASE 4: Cloudflare Workers AI (<800ms)<br/>Llama 3.1 8B with Custom LoRA Adapter (saralgati-elder-llama31-8b)"]
+        CF --> VAL{"Semantic Validator Check"}
+        
+        %% Case 5: Semantic Validation & Recovery
+        VAL -- "Target Validated" --> ANS4["✅ Verified Target Index & Hindi Explanation"]
+        VAL -- "Hallucination / Noise Detected" --> ANS5["🛡️ CASE 5: Semantic Fallback Recovery<br/>Re-anchors target to nearest verified actionable button"]
+        
+        ANS4 --> PROMOTE["Promote to Redis Screen Cache"]
+        ANS1 --> RESP["Return Standard Response Payload to Android App"]
+        ANS2 --> RESP
+        ANS3 --> RESP
+        ANS4 --> RESP
+        ANS5 --> RESP
     end
 
-    subgraph Caregiver["💻 Caregiver Web Dashboard"]
-        L[Next.js Dashboard & NextAuth] -->|Query State| K
-        L -->|Configure Fixes & QR Pair| K
+    subgraph Storage["💾 Persistence & Self-Learning Flywheel"]
+        RESP -.->|Async Telemetry & Feedback| DB[("Neon Serverless Postgres (model_interactions)")]
+        DB -.->|Weekly DPO Mining| DPO["Autonomous Kaggle Unsloth Pipeline"]
+        DPO -.->|Deploy New Weights| CF
     end
 
-    subgraph Flywheel["🔄 Self-Learning Flywheel"]
-        K -->|DPO Interaction Logs| M[Weekly Kaggle Unsloth Pipeline]
-        M -->|Trained LoRA Weights| J
+    subgraph Companion["🌟 Elder Companion Action"]
+        RESP --> SPOT["Highlight Target Button with Glowing Spotlight Ring"]
+        RESP --> TTS["Play Natural Soothing Hindi Audio Guidance"]
     end
 ```
 
@@ -146,7 +147,7 @@ flowchart TD
 
 - **Full-Stack Framework**: Next.js 16 (App Router, standalone output, React 19), TypeScript, Tailwind CSS.
 - **Deployment**: Containerized on Google Cloud Run (`asia-south1`) with automated GitHub Actions GitOps.
-- **Database Layer**: Neon Serverless PostgreSQL with connection pooling (`pg`), Drizzle/raw SQL, and automated schema migrations.
+- **Database Layer**: Neon Serverless PostgreSQL with native connection pooling (`node-postgres` / `pg` client), parameterized SQL security, and automated schema migrations.
 - **High-Speed Cache**: Oracle VM Redis running sub-5ms screen hash caches, interaction rate-limiting, and frequent habit caches.
 
 ### Edge AI & Autonomous Flywheel

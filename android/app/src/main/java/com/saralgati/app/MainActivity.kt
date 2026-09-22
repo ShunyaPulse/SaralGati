@@ -25,6 +25,7 @@ import com.saralgati.app.ui.onboarding.PairingScreen
 import com.saralgati.app.ui.theme.SaralGatiTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private lateinit var localPrefs: LocalPrefs
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
                     var availableUpdate by remember { mutableStateOf<AppVersionInfo?>(null) }
+                    val scope = rememberCoroutineScope()
 
                     // Check for App Updates: prompts every 3rd time the app is opened
                     LaunchedEffect(Unit) {
@@ -65,7 +67,7 @@ class MainActivity : ComponentActivity() {
                                             @Suppress("DEPRECATION")
                                             packageManager.getPackageInfo(packageName, 0).versionCode
                                         }
-                                        if (versionInfo.versionCode > currentVersionCode) {
+                                        if (versionInfo.versionCode > currentVersionCode || versionInfo.forceUpdate) {
                                             availableUpdate = versionInfo
                                         }
                                     }
@@ -153,16 +155,26 @@ class MainActivity : ComponentActivity() {
                             },
                             text = {
                                 Text(
-                                    text = "SaralGati का नया वर्ज़न उपलब्ध है। बेहतर सुरक्षा और नए फ़ीचर्स के लिए अभी अपडेट करें।" +
-                                            if (!update.changelog.isNullOrBlank()) "\n\nबदलाव:\n${update.changelog}" else ""
+                                    text = "SaralGati का नया वर्ज़न उपलब्ध है। बेहतर सुरक्षा और नए फ़ीचर्स के लिए अभी अपडेट करें।"
                                 )
                             },
                             confirmButton = {
                                 Button(
                                     onClick = {
-                                        availableUpdate = null
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(update.downloadUrl))
-                                        startActivity(intent)
+                                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !this@MainActivity.packageManager.canRequestPackageInstalls()) {
+                                            android.widget.Toast.makeText(this@MainActivity, "Please allow 'Install Unknown Apps' to update", android.widget.Toast.LENGTH_LONG).show()
+                                            val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                                                data = android.net.Uri.parse("package:${this@MainActivity.packageName}")
+                                            }
+                                            this@MainActivity.startActivity(intent)
+                                            // Keep dialog open so they can click Update Now again after returning
+                                        } else {
+                                            availableUpdate = null
+                                            android.widget.Toast.makeText(this@MainActivity, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show()
+                                            scope.launch {
+                                                com.saralgati.app.utils.ApkInstaller.downloadAndInstall(this@MainActivity, update.downloadUrl)
+                                            }
+                                        }
                                     }
                                 ) {
                                     Text("Update Now")

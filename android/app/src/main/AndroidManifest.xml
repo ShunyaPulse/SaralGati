@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Network permissions for API sync -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -18,6 +20,7 @@
 
     <!-- Draw over other apps for visual guidance overlay -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -72,6 +75,8 @@
             android:foregroundServiceType="microphone"
             android:exported="false" />
 
+        <!-- Receiver for PackageInstaller session -->
+        <receiver android:name=".utils.InstallReceiver" android:exported="false" />
     </application>
 
 </manifest>

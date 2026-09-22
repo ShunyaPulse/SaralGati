@@ -11,8 +11,6 @@
 > **"Technology should adapt to our parents, not the other way around."**  
 > SaralGati is an autonomous, on-device AI companion and remote caregiver ecosystem engineered to give senior citizens in India complete digital independence. It guides elders step-by-step through any smartphone app using natural voice and visual spotlights, while giving family caregivers remote peace of mind.
 
-
-
 ## 👵 The Challenge: Digital Exclusion Among Seniors
 
 Over 140 million elders in India have smartphones, yet the vast majority feel anxious and dependent on their children for basic tasks:
@@ -91,27 +89,27 @@ flowchart TD
     subgraph Server["⚡ SaralGati API Engine (Cloud Run)"]
         HMAC --> SG["Security Gate: Device Token Auth & Rate Limiter"]
         SG --> C0{"Active Multi-Step Flow?"}
-        
+
         %% Case 1: Multi-Step Flow
         C0 -- "Yes (Active Session)" --> ANS1["🎯 CASE 1: Flow Engine (~0ms)<br/>Advances multi-screen workflow (e.g., WhatsApp Call)"]
-        
+
         %% Case 2: Deterministic Fast-Path
         C0 -- "No" --> C1{"Matches Fast-Path Rules?"}
         C1 -- "Yes (App Patterns & Intent Dict)" --> ANS2["⚡ CASE 2: Fast-Path Engine (<1ms)<br/>Deterministic rules for WhatsApp, Dialer, YouTube, SMS"]
-        
+
         %% Case 3: Redis Screen Cache
         C1 -- "No" --> C2{"Redis Screen Cache Hit?"}
         C2 -- "Yes (Normalized Screen Hash)" --> ANS3["🚀 CASE 3: Redis Screen Cache (<5ms)<br/>Instant sub-5ms cache hit from verified global history"]
-        
+
         %% Case 4: Cloudflare Workers AI LoRA
         C2 -- "No (Cache Miss)" --> PREP["UI Pruning + Habit Context + Few-Shot Retriever"]
         PREP --> CF["🧠 CASE 4: Cloudflare Workers AI (<800ms)<br/>Llama 3.1 8B with Custom LoRA Adapter (saralgati-elder-llama31-8b)"]
         CF --> VAL{"Semantic Validator Check"}
-        
+
         %% Case 5: Semantic Validation & Recovery
         VAL -- "Target Validated" --> ANS4["✅ Verified Target Index & Hindi Explanation"]
         VAL -- "Hallucination / Noise Detected" --> ANS5["🛡️ CASE 5: Semantic Fallback Recovery<br/>Re-anchors target to nearest verified actionable button"]
-        
+
         ANS4 --> PROMOTE["Promote to Redis Screen Cache"]
         ANS1 --> RESP["Return Standard Response Payload to Android App"]
         ANS2 --> RESP

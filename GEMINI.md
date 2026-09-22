@@ -27,6 +27,10 @@
 
 ## 5. Security & Workflow Invariants
 
+- **Zero Hardcoded Secrets & Credentials Invariant**:
+  - NEVER hardcode, paste, or default credentials, database passwords, API tokens, connection strings, or private keys into ANY Git-tracked file (including test scripts, scratch files, configs, documentation, or workflows).
+  - Always read secrets from environment variables (e.g. `process.env.DATABASE_URL`, `process.env.API_SECRET`, `System.getenv(...)`) with generic placeholders (e.g. `'YOUR_DATABASE_URL'`) if fallbacks are needed.
+  - Actual credentials must ONLY reside in `.env.local` (which is git-ignored) or platform Secret Managers (Cloud Run / GitHub Secrets).
 - **GitHub Actions Shell Injection Prevention**: Never interpolate `${{ ... }}` context expressions (such as `github.event.*`, `inputs.*`, `vars.*`) directly inside `run:` inline bash scripts in `.github/workflows/`. Always map them to intermediate environment variables in `env:` and access them via `"$ENV_VAR"` in shell scripts.
 - **Nested Dependency CVE Fixes**: When fixing vulnerabilities in indirect/nested dependencies (e.g., `postcss` under `next` or `nodemailer` under `next-auth`), prefer `package.json` `"overrides"` combined with `npm install --legacy-peer-deps` instead of breaking framework upgrades.
 - **No PWA Web Manifest**: Do NOT add `manifest.json` or PWA installation prompts to the website. The user must be guided to download and use the native Android companion APK (`SaralGati.apk`) rather than installing the caregiver dashboard web app as a PWA.

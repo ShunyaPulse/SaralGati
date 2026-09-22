@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "security"
@@ -14,6 +16,8 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "android"
@@ -23,6 +27,12 @@ updates:
     schedule:
       interval: "daily"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      codeql:
+        patterns:
+          - "github/codeql-action/*"
     labels:
       - "dependencies"
       - "actions"

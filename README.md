@@ -1,210 +1,215 @@
+# 🌸 SaralGati (सरल गति)
+
+### _AI-Powered Digital Companion & Guardian for Elders_
+
+[![Android CI / Release](https://github.com/ShunyaPulse/SaralGati/actions/workflows/build-apk.yml/badge.svg)](https://github.com/ShunyaPulse/SaralGati/actions/workflows/build-apk.yml)
+[![Cloud Run Deploy](https://github.com/ShunyaPulse/SaralGati/actions/workflows/deploy.yml/badge.svg)](https://github.com/ShunyaPulse/SaralGati/actions/workflows/deploy.yml)
+[![CodeQL Security](https://github.com/ShunyaPulse/SaralGati/actions/workflows/codeql.yml/badge.svg)](https://github.com/ShunyaPulse/SaralGati/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20%7C%20Web-emerald)](https://github.com/ShunyaPulse/SaralGati)
+
+> **"Technology should adapt to our parents, not the other way around."**  
+> SaralGati is an autonomous, on-device AI companion and remote caregiver ecosystem engineered to give senior citizens in India complete digital independence. It guides elders step-by-step through any smartphone app using natural voice and visual spotlights, while giving family caregivers remote peace of mind.
+
 ---
-base_model: unsloth/llama-3.2-3b-instruct-unsloth-bnb-4bit
-library_name: peft
-pipeline_tag: text-generation
-tags:
-- base_model:adapter:unsloth/llama-3.2-3b-instruct-unsloth-bnb-4bit
-- lora
-- sft
-- transformers
-- trl
-- unsloth
+
+## 📖 Table of Contents
+
+1. [The Challenge: Digital Exclusion Among Seniors](#-the-challenge-digital-exclusion-among-seniors)
+2. [What is SaralGati?](#-what-is-saralgati)
+3. [Key Features for Elders & Caregivers (70%)](#-key-features-for-elders--caregivers)
+   - [Live Floating Companion ("Saral Mitra")](#1-live-floating-companion-saral-mitra)
+   - [Visual Focus Spotlight](#2-visual-focus-spotlight)
+   - [Hands-Free Multi-Step Flow Engine](#3-hands-free-multi-step-flow-engine)
+   - [Phone Doctor ("Sab Theek Karo" 1-Tap Reset)](#4-phone-doctor-sab-theek-karo-1-tap-reset)
+   - [Caregiver Command Dashboard](#5-caregiver-command-dashboard)
+   - [Strict Privacy-First Commitment](#6-strict-privacy-first-commitment)
+4. [Architecture, Technology & Security (30%)](#-architecture-technology--security)
+   - [System Architecture Diagram](#system-architecture-diagram)
+   - [Native Android Companion App Stack](#native-android-companion-app-stack)
+   - [Cloud & Backend Infrastructure](#cloud--backend-infrastructure)
+   - [Edge AI & Autonomous Flywheel](#edge-ai--autonomous-flywheel)
+   - [Security & Reliability Hardening](#security--reliability-hardening)
+5. [Getting Started & Installation](#-getting-started--installation)
+6. [Release & In-App Auto Update](#-release--in-app-auto-update)
+
 ---
 
-# Model Card for Model ID
+## 👵 The Challenge: Digital Exclusion Among Seniors
 
-<!-- Provide a quick summary of what the model is/does. -->
+Over 140 million elders in India have smartphones, yet the vast majority feel anxious and dependent on their children for basic tasks:
 
+- **Frequent UI Redesigns**: Everyday apps like WhatsApp, PhonePe, and YouTube change layouts often, confusing seniors.
+- **Language & Tech Jargon**: Prompts in English with words like _"Authenticate"_, _"Permissions"_, or _"Sync"_ cause fear of doing something wrong.
+- **Accidental Settings Misconfigurations**: Sound accidentally silenced, screen brightness dimmed, Do Not Disturb turned on, or screen timeout set to 15 seconds.
+- **Fear of Cyber Scams**: Constant fear of clicking the wrong button or falling victim to fraudulent requests.
+- **Hesitation to Ask**: Elders often feel guilty repeatedly asking their busy children for help with phone problems.
 
+---
 
-## Model Details
+## 🌟 What is SaralGati?
 
-### Model Description
+**SaralGati ("सरल गति" – Effortless Movement)** transforms an ordinary Android smartphone into an elder-friendly, guided device without dumbing down the phone or replacing the OS:
 
-<!-- Provide a longer summary of what this model is. -->
+1. **The Senior** uses their phone naturally. Whenever stuck, a single tap on the friendly floating helper explains what to do in soothing Hindi/Hinglish, illuminating the exact button with a bright spotlight ring.
+2. **The Caregiver (Son / Daughter)** gets a clean web dashboard to remotely pair their parent's phone via QR code, monitor battery levels and connectivity, configure 1-tap phone healing parameters, and see that their loved ones are safe.
 
+---
 
+## 💡 Key Features for Elders & Caregivers
 
-- **Developed by:** [More Information Needed]
-- **Funded by [optional]:** [More Information Needed]
-- **Shared by [optional]:** [More Information Needed]
-- **Model type:** [More Information Needed]
-- **Language(s) (NLP):** [More Information Needed]
-- **License:** [More Information Needed]
-- **Finetuned from model [optional]:** [More Information Needed]
+### 1. Live Floating Companion ("Saral Mitra")
 
-### Model Sources [optional]
+- **Always Available**: A gentle, unobtrusive floating button rests at the screen edge across all third-party apps.
+- **Instant Spoken Assistance**: Speaks patient Hindi audio instructions (e.g., _"Suresh beta ko message bhejne ke liye niche chat par tap karein"_).
+- **Rage-Tap & Confusion Detection**: Detects if an elder repeatedly taps an unresponsive area or hesitates, proactively popping up to ask: _"Kya madad chahiye?"_
 
-<!-- Provide the basic links for the model. -->
+### 2. Visual Focus Spotlight
 
-- **Repository:** [More Information Needed]
-- **Paper [optional]:** [More Information Needed]
-- **Demo [optional]:** [More Information Needed]
+- **Zero Distractions**: When guidance is requested, background elements softly dim and a glowing spotlight ring draws direct attention to the target button.
+- **Smart Below-the-Fold Peeking**: If the required action button is hidden below the visible screen, SaralGati automatically peeks, scrolls smoothly, and points the elder in the right direction.
 
-## Uses
+### 3. Hands-Free Multi-Step Flow Engine
 
-<!-- Address questions around how the model is intended to be used, including the foreseeable users of the model and those affected by the model. -->
+- **Complex Tasks Made Simple**: Guides elders across multi-screen flows without interruption (e.g., _WhatsApp Video Call Flow_: `Chats Tab` ➔ `Search or Select Contact` ➔ `Chat Window` ➔ `Video Call Button`).
+- **Auto-Advancing Sessions**: Recognizes when step 1 is completed and immediately transitions to step 2 with updated spoken guidance.
 
-### Direct Use
+### 4. Phone Doctor ("Sab Theek Karo" 1-Tap Reset)
 
-<!-- This section is for the model use without fine-tuning or plugging into a larger ecosystem/app. -->
+Elders frequently mess up phone settings by accident. Rather than navigating deep Android system menus, the **Phone Doctor** tab gives elders a single giant green button:
 
-[More Information Needed]
+- 🔊 **Restores Ringer Volume**: Immediately unmutes the phone and sets incoming ringtone to maximum.
+- 🎬 **Optimizes Media Volume**: Sets video and audio volume to an elder-comfortable 85%.
+- ☀️ **Restores Screen Brightness**: Resets brightness to 85% for crystal-clear readability.
+- ⏱️ **Extends Screen Timeout**: Sets display timeout to 5 minutes so the screen doesn't abruptly sleep while reading.
+- 🔕 **Disables Do Not Disturb (DND)**: Silently turns off DND so family calls are never missed.
+- _Caregiver Configurable_: Caregivers can selectively toggle which parameters are healed via a PIN-protected Caregiver settings panel.
 
-### Downstream Use [optional]
+### 5. Caregiver Command Dashboard
 
-<!-- This section is for the model use when fine-tuned for a task, or when plugged into a larger ecosystem/app -->
+- **Zero-Friction QR Pairing**: Caregivers pair an elder's phone in seconds by scanning a secure pairing QR code from the dashboard.
+- **Live Device Telemetry**: Shows real-time battery percentage, charging state, companion service heartbeat, and app version.
+- **Frequent Contact & Habit Insights**: Aggregates frequent contacts (e.g., _"Doctor Sharma"_, _"Ramesh Bhaiya"_) so the companion understands family context without personal data leaks.
 
-[More Information Needed]
+### 6. Strict Privacy-First Commitment
 
-### Out-of-Scope Use
+- ❌ **NO Screenshots Taken**: SaralGati never captures screenshots or screen recordings.
+- ❌ **NO Personal Chats Read**: Personal message bodies, photo galleries, and payment PINs are completely inaccessible.
+- ✅ **Accessibility Tree Only**: The app only reads interactive UI element roles (e.g., `[BUTTON] Send`, `[INPUT] Search`) solely to calculate coordinate targets.
 
-<!-- This section addresses misuse, malicious use, and uses that the model will not work well for. -->
+---
 
-[More Information Needed]
+## 🛠️ Architecture, Technology & Security
 
-## Bias, Risks, and Limitations
+### System Architecture Diagram
 
-<!-- This section is meant to convey both technical and sociotechnical limitations. -->
+```mermaid
+flowchart TD
+    subgraph ElderDevice["📱 Elder Android Device"]
+        A[Android UI / Third-Party Apps] -->|Accessibility Event| B[SaralGati Accessibility Service]
+        B -->|Tree Node Extraction & Bounds| C[Fast-Path Rule Engine]
+        D[Phone Doctor 1-Tap Reset] -->|WRITE_SETTINGS & DND Policy| E[Android System Audio/Display]
+        F[Telemetry & WorkManager] -->|Heartbeat & Battery| G[Background Sync]
+    end
 
-[More Information Needed]
+    subgraph EdgeCloud["⚡ Edge & Cloud Services"]
+        B -->|HMAC-Signed Payload| H[Redis Global Screen Cache]
+        H -->|Cache Miss| I[Cloud Run Next.js API]
+        I -->|Few-Shot Intent Grounding| J[Cloudflare Workers AI Llama 3.1 8B]
+        I -->|Telemetry & Audit Logs| K[(Neon Serverless Postgres)]
+        G -->|Device State| K
+    end
 
-### Recommendations
+    subgraph Caregiver["💻 Caregiver Web Dashboard"]
+        L[Next.js Dashboard & NextAuth] -->|Query State| K
+        L -->|Configure Fixes & QR Pair| K
+    end
 
-<!-- This section is meant to convey recommendations with respect to the bias, risk, and technical limitations. -->
+    subgraph Flywheel["🔄 Self-Learning Flywheel"]
+        K -->|DPO Interaction Logs| M[Weekly Kaggle Unsloth Pipeline]
+        M -->|Trained LoRA Weights| J
+    end
+```
 
-Users (both direct and downstream) should be made aware of the risks, biases and limitations of the model. More information needed for further recommendations.
+### Native Android Companion App Stack
 
-## How to Get Started with the Model
+- **Language & Framework**: Kotlin, Jetpack Compose, Material 3 with high-contrast elder accessibility themes.
+- **Accessibility Engine**: Custom `AccessibilityService` traversing `AccessibilityNodeInfo` hierarchy with DP-normalized boundaries, below-fold peek scrolling, and clickable `TextView` role resolution.
+- **Persistent Reliability**:
+  - `ForegroundService` with notification channel for 24/7 background survival.
+  - Custom `AutoStartHelper` navigating brand-specific OEM battery killers (Xiaomi/MIUI, Samsung, Oppo, Vivo, OnePlus).
+  - Battery optimization whitelist (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`).
+- **Seamless In-App Updates**: Built with Android `PackageInstaller` session API. Bypasses Android 13+ _"Restricted Settings"_ lockouts by performing seamless updates directly inside the app session.
+- **Production Hardening**: ProGuard / R8 bytecode obfuscation, unused resource shrinking, and permanent CI release keystore signing (`keystore.jks`).
 
-Use the code below to get started with the model.
+### Cloud & Backend Infrastructure
 
-[More Information Needed]
+- **Full-Stack Framework**: Next.js 16 (App Router, standalone output, React 19), TypeScript, Tailwind CSS.
+- **Deployment**: Containerized on Google Cloud Run (`asia-south1`) with automated GitHub Actions GitOps.
+- **Database Layer**: Neon Serverless PostgreSQL with connection pooling (`pg`), Drizzle/raw SQL, and automated schema migrations.
+- **High-Speed Cache**: Oracle VM Redis running sub-5ms screen hash caches, interaction rate-limiting, and frequent habit caches.
 
-## Training Details
+### Edge AI & Autonomous Flywheel
 
-### Training Data
+- **Primary LLM**: Llama 3.1 8B Instruct deployed on Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`).
+- **Custom LoRA Adapter**: Fine-tuned on Hinglish elder voice queries and Android UI graphs (`saralgati-elder-llama31-8b`).
+- **Autonomous Feedback Flywheel**:
+  - Tracks implicit user actions (`tapped_suggested` vs `tapped_other`).
+  - Weekly scheduled GitHub Action trains DPO preference datasets on Kaggle Dual-T4 GPUs using Unsloth.
+  - Automatically exports and deploys updated LoRA adapters to Cloudflare Workers AI with zero downtime.
 
-<!-- This should link to a Dataset Card, perhaps with a short stub of information on what the training data is all about as well as documentation related to data pre-processing or additional filtering. -->
+### Security & Reliability Hardening
 
-[More Information Needed]
+- **HMAC Request Integrity**: All requests from the Android companion are signed with HMAC-SHA256 timestamp hashes (`X-App-Signature`, `X-App-Timestamp`) with replay protection.
+- **Cloudflare Turnstile**: Zero-friction anti-bot verification on caregiver registration and OTP login.
+- **Zero Hardcoded Secrets Invariant**: Complete isolation of credentials across GitHub Actions Secrets, GCP Secret Manager, and git-ignored local environments.
+- **Continuous Security Analysis**: CodeQL static analysis, Semgrep rulesets, Gitleaks secret scanning, and automated Dependabot updates running on every pull request.
 
-### Training Procedure
+---
 
-<!-- This relates heavily to the Technical Specifications. Content here should link to that section when it is relevant to the training procedure. -->
+## 🚀 Getting Started & Installation
 
-#### Preprocessing [optional]
+### Android Companion App
 
-[More Information Needed]
+1. Download the latest release APK from [GitHub Releases](https://github.com/ShunyaPulse/SaralGati/releases).
+2. Install the APK on the elder's smartphone.
+3. Grant **Accessibility Service** permission (`SaralGati Assistant`).
+4. (Optional) For Phone Doctor audio/brightness fixes, grant _Modify System Settings_ and _Do Not Disturb Access_ when prompted in the Caregiver menu.
+5. Scan the pairing QR code from the Caregiver Dashboard.
 
+### Web Dashboard & Backend Setup
 
-#### Training Hyperparameters
+```bash
+# Clone the repository
+git clone https://github.com/ShunyaPulse/SaralGati.git
+cd SaralGati
 
-- **Training regime:** [More Information Needed] <!--fp32, fp16 mixed precision, bf16 mixed precision, bf16 non-mixed precision, fp16 non-mixed precision, fp8 mixed precision -->
+# Install dependencies
+npm install --legacy-peer-deps
 
-#### Speeds, Sizes, Times [optional]
+# Configure environment variables
+cp .env.example .env.local
+# Add your DATABASE_URL, REDIS_URL, NEXTAUTH_SECRET, etc.
 
-<!-- This section provides information about throughput, start/end time, checkpoint size if relevant, etc. -->
+# Run the development server
+npm run dev
+```
 
-[More Information Needed]
+---
 
-## Evaluation
+## 📦 Tech Stack Summary
 
-<!-- This section describes the evaluation protocols and provides the results. -->
+| Layer              | Technologies                                                                       |
+| :----------------- | :--------------------------------------------------------------------------------- |
+| **Android App**    | Kotlin, Jetpack Compose, Material 3, AccessibilityService, WorkManager, Coroutines |
+| **Web & API**      | Next.js 16, React, TypeScript, Tailwind CSS, NextAuth.js                           |
+| **Cloud & DevOps** | Google Cloud Run, Docker, GitHub Actions, Cloudflare Workers AI                    |
+| **Data & Cache**   | Neon Serverless PostgreSQL, Oracle Cloud Redis                                     |
+| **AI / ML**        | Llama 3.1 8B Instruct, Unsloth, Kaggle Dual-T4, PEFT LoRA                          |
+| **Security**       | HMAC-SHA256, Cloudflare Turnstile, R8/ProGuard, CodeQL, Gitleaks                   |
 
-### Testing Data, Factors & Metrics
+---
 
-#### Testing Data
-
-<!-- This should link to a Dataset Card if possible. -->
-
-[More Information Needed]
-
-#### Factors
-
-<!-- These are the things the evaluation is disaggregating by, e.g., subpopulations or domains. -->
-
-[More Information Needed]
-
-#### Metrics
-
-<!-- These are the evaluation metrics being used, ideally with a description of why. -->
-
-[More Information Needed]
-
-### Results
-
-[More Information Needed]
-
-#### Summary
-
-
-
-## Model Examination [optional]
-
-<!-- Relevant interpretability work for the model goes here -->
-
-[More Information Needed]
-
-## Environmental Impact
-
-<!-- Total emissions (in grams of CO2eq) and additional considerations, such as electricity usage, go here. Edit the suggested text below accordingly -->
-
-Carbon emissions can be estimated using the [Machine Learning Impact calculator](https://mlco2.github.io/impact#compute) presented in [Lacoste et al. (2019)](https://arxiv.org/abs/1910.09700).
-
-- **Hardware Type:** [More Information Needed]
-- **Hours used:** [More Information Needed]
-- **Cloud Provider:** [More Information Needed]
-- **Compute Region:** [More Information Needed]
-- **Carbon Emitted:** [More Information Needed]
-
-## Technical Specifications [optional]
-
-### Model Architecture and Objective
-
-[More Information Needed]
-
-### Compute Infrastructure
-
-[More Information Needed]
-
-#### Hardware
-
-[More Information Needed]
-
-#### Software
-
-[More Information Needed]
-
-## Citation [optional]
-
-<!-- If there is a paper or blog post introducing the model, the APA and Bibtex information for that should go in this section. -->
-
-**BibTeX:**
-
-[More Information Needed]
-
-**APA:**
-
-[More Information Needed]
-
-## Glossary [optional]
-
-<!-- If relevant, include terms and calculations in this section that can help readers understand the model or model card. -->
-
-[More Information Needed]
-
-## More Information [optional]
-
-[More Information Needed]
-
-## Model Card Authors [optional]
-
-[More Information Needed]
-
-## Model Card Contact
-
-[More Information Needed]
-### Framework versions
-
-- PEFT 0.20.0
+<p align="center">
+  <i>Developed with ❤️ for Indian families by <a href="https://github.com/ShunyaPulse">Vansh Gupta (ShunyaPulse)</a></i>
+</p>

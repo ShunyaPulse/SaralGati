@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'public/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.*'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'version.json'
+      - "src/**"
+      - "public/**"
+      - "package.json"
+      - "package-lock.json"
+      - "next.config.*"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "version.json"
   workflow_dispatch:
 
 env:
@@ -71,7 +71,7 @@ jobs:
         env:
           GCP_CREDS: ${{ secrets.GCP_CREDENTIALS }}
         with:
-          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+          credentials_json: "${{ secrets.GCP_CREDENTIALS }}"
 
       - name: Set up Cloud SDK
         if: env.GCP_CREDS != ''

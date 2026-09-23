@@ -49,3 +49,38 @@
   - Only bump the milestone version in `version.json` (e.g. to `1.2.1`, then `1.3.1`, `1.4.1`) when a major change or architectural milestone is completely implemented AND thoroughly verified/tested.
 - **Automated Incremental Builds (`1.1.28` -> `1.1.29`...)**:
   - For minor changes, ongoing iterations, untested versions, or runs where tests failed, let the CI workflow automatically bump the patch number (e.g., `1.1.<run_number>` or `<major_minor>.<run_number>`) via GitHub Actions.
+
+## 7. Flywheel & Active Learning Invariants
+
+- **Cache Key Parity**:
+  - The cache key generation logic in `feedback/route.ts` and `ask/route.ts` MUST remain 100% mathematically identical (same SHA-256 algorithm and component ordering: `app_package:screen_hash:question:history_hash`). Never write to a plaintext key when the reader uses a hashed key.
+- **Async Interaction Logging Guard**:
+  - `recordModelInteraction` MUST be `await`ed before returning the HTTP response in `/api/v1/agent/ask` to eliminate race conditions with immediate feedback calls.
+- **Correction Explanation Sanitization**:
+  - When storing `tapped_other` (user correction) feedback, never retain the LLM's original explanation with the new target index. Always sanitize or replace the explanation (e.g., `'Yahan dabayein.'`) to prevent training data poisoning.
+- **SFT Tree Pruning Parity**:
+  - Dataset generators in `/api/v1/agent/training-data` MUST format UI elements using `pruneUITree()` from `@/lib/uiPruner` to keep the training distribution identical to production inference inputs.
+- **SFT Deduplication**:
+  - SFT queries must enforce `DISTINCT ON (app_package, screen_hash, question)` to prevent common queries from causing catastrophic overfitting.
+- **DPO Contrastive Pair Integrity**:
+  - In DPO preference datasets, `chosen` and `rejected` responses must contain distinct explanation phrasing; never generate pairs with identical text differing only by the `TARGET:[idx]` number.
+
+## 8. Autonomous LoRA Training & Deployment Invariants
+
+- **Response Masking (`train_on_responses_only`)**:
+  - All Unsloth / SFT trainers for Llama-3.1 MUST enable `train_on_responses_only_with_padding` (`response_part="<|start_header_id|>assistant<|end_header_id|>\n\n"`). Loss must never be computed on system prompts or user inputs.
+- **Automated Validation Gate**:
+  - Autonomous GPU training scripts must split a test set (`train_test_split(test_size=0.1)`) and execute `trainer.evaluate()`. Deployment to Cloudflare Workers AI must abort immediately if `eval_loss > 3.0` or divergence occurs.
+- **Seed Overfitting Guard**:
+  - If total training samples are below 20 (fallback seed data), cap training epochs to 1 to prevent overfitting and base model degradation.
+- **Target Model Identity Matching**:
+  - Fine-tune containers in Cloudflare Workers AI must register and run against the exact production model identifier (`@cf/meta/llama-3.1-8b-instruct-fast`).
+
+## 9. Android Privacy & Stability Invariants
+
+- **Password Field Exclusion**:
+  - `SaralGatiAccessibilityService`'s `traverseNode()` MUST strictly check `if (node.isPassword) return` before serializing or reading screen contents.
+- **Overlay Window Safety**:
+  - Calls to `WindowManager.addView` for system overlays MUST check `Settings.canDrawOverlays(context)` and be enclosed in a `try-catch` handling `WindowManager.BadTokenException`.
+- **Runtime Notification Permission**:
+  - For targetSdk >= 33, `android.permission.POST_NOTIFICATIONS` MUST be requested at runtime alongside `RECORD_AUDIO`.

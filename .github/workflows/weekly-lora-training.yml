@@ -80,9 +80,8 @@ jobs:
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
           jq --arg username "$USERNAME_LOWER" '.id = $username + "/saralgati-lora-training"' scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
 
-          echo "🔑 Using Cloudflare credentials from Kaggle secrets..."
-          # The script natively supports Kaggle UserSecretsClient as fallback.
-          # Please ensure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are set in Kaggle Secrets.
+          echo "🔑 Injecting Cloudflare deploy credentials into ephemeral Kaggle payload..."
+          python scripts/inject_kaggle_secrets.py
 
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
           kaggle kernels push -p kaggle_push/

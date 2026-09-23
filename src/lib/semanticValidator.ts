@@ -89,9 +89,9 @@ export function validateSemanticTarget(
   // 3. Interactive Role Check
   // If user is asking for an action and LLM targeted static [TEXT]
   const isTargetActionable =
-    targetClean.startsWith('[button]') ||
-    targetClean.startsWith('[input]') ||
-    targetClean.startsWith('[toggle]');
+    targetEl.toLowerCase().startsWith('[button]') ||
+    targetEl.toLowerCase().startsWith('[input]') ||
+    targetEl.toLowerCase().startsWith('[toggle]');
 
   if (!isTargetActionable) {
     // If target is [TEXT], check if there is an actionable element matching the intent

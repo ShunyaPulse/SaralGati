@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { queryOne } from '@/lib/db';
 import redis, { cacheSet } from '@/lib/redis';
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const newStatus = statusMapping[feedback] || 'pending';
 
-    const sanitizedIndex = (typeof actual_tapped_index === 'number' && Number.isInteger(actual_tapped_index) && actual_tapped_index >= 0 && actual_tapped_index <= 100)
+    const sanitizedIndex = (typeof actual_tapped_index === 'number' && Number.isInteger(actual_tapped_index) && actual_tapped_index >= 0 && actual_tapped_index <= 500)
       ? actual_tapped_index
       : null;
 
@@ -44,6 +45,10 @@ export async function POST(req: NextRequest) {
            actual_tapped_index = CASE 
                WHEN $1 = 'verified' THEN COALESCE($2, suggested_index) 
                ELSE COALESCE($2, actual_tapped_index) 
+           END,
+           explanation = CASE
+               WHEN $1 = 'rejected' AND $2 IS NOT NULL AND $2 != suggested_index THEN 'Yahan dabayein.'
+               ELSE explanation
            END,
            updated_at = NOW()
        WHERE id = $3
@@ -68,7 +73,9 @@ export async function POST(req: NextRequest) {
       .replace(/\s+/g, ' ');
 
     const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
-    const cacheKey = `screen_cache:${updatedRow.app_package}:${updatedRow.screen_hash}:${normalizedQuestion}`;
+    const cacheKeyRaw = `${updatedRow.app_package}:${updatedRow.screen_hash}:${normalizedQuestion}`;
+    const cacheKeyHash = crypto.createHash('sha256').update(cacheKeyRaw).digest('hex');
+    const cacheKey = `screen_cache:${cacheKeyHash}`;
 
     // 2. Continuous Learning Loop
     if (feedback === 'tapped_highlight' && updatedRow.suggested_index !== null) {

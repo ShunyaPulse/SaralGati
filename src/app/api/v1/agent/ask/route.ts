@@ -385,7 +385,7 @@ ${fewShots}`;
     }
 
     // 4. Log interaction asynchronously (single unconditioned call point at end of request)
-    recordModelInteraction({
+    await recordModelInteraction({
       interactionId,
       elderId: effectiveElderId,
       appPackage: safeAppPackage,
@@ -396,7 +396,7 @@ ${fewShots}`;
       explanation: finalResult.explanation,
       source: finalResult.source,
       modelUsed: finalResult.modelUsed
-    }).catch(() => {});
+    });
 
     return NextResponse.json({
       success: true,

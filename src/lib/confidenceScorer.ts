@@ -1,5 +1,5 @@
-import { ELDER_INTENTS, matchQueryPattern } from './intentDictionary';
-import { isNoiseElement } from './semanticValidator';
+import { ELDER_INTENTS, matchQueryPattern } from "./intentDictionary";
+import { isNoiseElement } from "./semanticValidator";
 
 export interface ConfidenceScore {
   score: number; // 0 to 100
@@ -19,7 +19,7 @@ export interface ConfidenceScore {
 export function scoreOutputConfidence(
   output: string,
   question: string,
-  uiElements: string[] = []
+  uiElements: string[] = [],
 ): ConfidenceScore {
   let score = 0;
   const reasons: string[] = [];
@@ -29,7 +29,7 @@ export function scoreOutputConfidence(
     return {
       score: 20,
       targetIndex: null,
-      reasons: ['No TARGET tag found in output']
+      reasons: ["No TARGET tag found in output"],
     };
   }
 
@@ -41,59 +41,88 @@ export function scoreOutputConfidence(
       return {
         score: 10,
         targetIndex,
-        reasons: ['TARGET index is out of screen bounds']
+        reasons: ["TARGET index is out of screen bounds"],
       };
     }
     score += 35;
-    reasons.push('Valid in-bounds target index (+35)');
+    reasons.push("Valid in-bounds target index (+35)");
 
     const targetEl = uiElements[targetIndex];
     const cleanEl = targetEl
-      .replace(/^\d+:\s*/, '')
-      .replace(/^\[below-fold\]\s*/i, '')
+      .replace(/^\d+:\s*/, "")
+      .replace(/^\[below-fold\]\s*/i, "")
       .trim();
     const lowerClean = cleanEl.toLowerCase();
 
     // 2. Noise Check: Penalize targeting preview counters or timestamps
     if (isNoiseElement(lowerClean)) {
       score -= 35;
-      reasons.push('Targeted noise element (timestamps/counters) (-35)');
+      reasons.push("Targeted noise element (timestamps/counters) (-35)");
     }
 
     // 3. Interactive Role Check
     const isActionable =
-      cleanEl.startsWith('[BUTTON]') ||
-      cleanEl.startsWith('[INPUT]') ||
-      cleanEl.startsWith('[TOGGLE]');
+      cleanEl.startsWith("[BUTTON]") ||
+      cleanEl.startsWith("[INPUT]") ||
+      cleanEl.startsWith("[TOGGLE]");
 
     if (isActionable) {
       score += 30;
-      reasons.push('Target is an interactive actionable element (+30)');
+      reasons.push("Target is an interactive actionable element (+30)");
     } else {
       score -= 15;
-      reasons.push('Target is static non-clickable text (-15)');
+      reasons.push("Target is static non-clickable text (-15)");
     }
 
     // 4. Intent Semantic Alignment Check
     const qLower = question.toLowerCase();
     const matchingIntents = ELDER_INTENTS.filter((intent) =>
-      intent.queryPatterns.some((pattern) => matchQueryPattern(qLower, pattern))
+      intent.queryPatterns.some((pattern) =>
+        matchQueryPattern(qLower, pattern),
+      ),
     );
 
     if (matchingIntents.length > 0) {
       const intentMatches = matchingIntents.some((intent) =>
-        intent.elementKeywords.some((k) => lowerClean.includes(k.toLowerCase()))
+        intent.elementKeywords.some((k) =>
+          lowerClean.includes(k.toLowerCase()),
+        ),
       );
 
       if (intentMatches) {
         score += 25;
-        reasons.push('Target matches question intent keywords (+25)');
+        reasons.push("Target matches question intent keywords (+25)");
       } else {
-        const qWords = qLower.split(/[\s,._\-?!]+/).filter((w) => w.length >= 3);
+        const STOP_WORDS = new Set([
+          "hai",
+          "hain",
+          "karo",
+          "kaise",
+          "karni",
+          "karna",
+          "mein",
+          "par",
+          "aur",
+          "wala",
+          "wali",
+          "kya",
+          "the",
+          "for",
+          "and",
+          "how",
+          "this",
+          "that",
+          "kahan",
+          "kab",
+          "kyon",
+        ]);
+        const qWords = qLower
+          .split(/[\s,._\-?!]+/)
+          .filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
         const wordMatch = qWords.some((w) => lowerClean.includes(w));
         if (wordMatch) {
           score += 15;
-          reasons.push('Target matches query specific entity (+15)');
+          reasons.push("Target matches query specific entity (+15)");
         }
       }
     } else {
@@ -101,11 +130,25 @@ export function scoreOutputConfidence(
     }
 
     // 5. Explanation internal consistency
-    const cleanExplanation = output.replace(/TARGET:\s*\d+/i, '').trim().toLowerCase();
-    const commonActionVerbs = ['कॉल', 'दबाएं', 'भेजें', 'खोजें', 'पे', 'pay', 'call', 'search'];
+    const cleanExplanation = output
+      .replace(/TARGET:\s*\d+/i, "")
+      .trim()
+      .toLowerCase();
+    const commonActionVerbs = [
+      "कॉल",
+      "दबाएं",
+      "भेजें",
+      "खोजें",
+      "पे",
+      "pay",
+      "call",
+      "search",
+    ];
     if (commonActionVerbs.some((v) => cleanExplanation.includes(v))) {
       score += 10;
-      reasons.push('Explanation contains clear Hinglish action instruction (+10)');
+      reasons.push(
+        "Explanation contains clear Hinglish action instruction (+10)",
+      );
     }
   } else {
     score = 50;
@@ -117,6 +160,6 @@ export function scoreOutputConfidence(
   return {
     score: normalizedScore,
     targetIndex,
-    reasons
+    reasons,
   };
 }

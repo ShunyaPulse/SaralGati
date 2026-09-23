@@ -694,10 +694,11 @@ export function matchElderIntent(
   const qLower = question.toLowerCase();
 
   const isNoise = (txt: string) => {
+    const isActionable = /^\[(button|input|toggle)\]/i.test(txt.trim());
     const clean = txt.replace(/^\[.*?\]\s*/g, '').trim();
     return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
            /\b(yesterday|am|pm|today)\b/i.test(clean) ||
-           /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)$/i.test(clean) ||
+           (!isActionable && /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)$/i.test(clean)) ||
            /^[📹🎥📞📱]\s*$/i.test(clean);
   };
 

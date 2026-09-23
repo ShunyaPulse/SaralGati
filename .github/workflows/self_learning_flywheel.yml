@@ -3,14 +3,14 @@ name: SaralGati Autonomous Self-Learning Flywheel
 on:
   schedule:
     # Runs automatically every 1 hour in the cloud (24 dynamic learning cycles per day)
-    - cron: '0 * * * *'
+    - cron: "0 * * * *"
   workflow_dispatch:
     # Allows manual trigger anytime from GitHub Actions tab
     inputs:
       max_cases:
-        description: 'Maximum test scenarios to simulate'
+        description: "Maximum test scenarios to simulate"
         required: false
-        default: '30'
+        default: "30"
 
 jobs:
   cloud-self-learning:
@@ -25,7 +25,7 @@ jobs:
       - name: Set up Python 3.11
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install Dependencies
         run: |

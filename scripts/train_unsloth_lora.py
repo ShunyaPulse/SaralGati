@@ -120,7 +120,7 @@ def train_lora(dataset_file):
         model,
         r=16,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-        lora_alpha=16,
+        lora_alpha=32,
         lora_dropout=0,
         bias="none",
         use_gradient_checkpointing="unsloth",
@@ -136,14 +136,20 @@ def train_lora(dataset_file):
 
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     dataset = dataset.map(formatting_prompts_func, batched=True)
-    total_samples = len(dataset)
-    print(f"[Train] Dataset size: {total_samples} samples.")
+    dataset_split = dataset.train_test_split(test_size=0.1, seed=42)
+    train_dataset = dataset_split["train"]
+    eval_dataset = dataset_split["test"]
+    
+    total_samples = len(train_dataset)
+    print(f"[Train] Training set size: {total_samples} samples. Eval set size: {len(eval_dataset)}")
 
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
     # Dynamic epoch count: more data = fewer epochs needed; tiny dataset = more epochs
-    if total_samples >= 5000:
+    if total_samples < 20:
+        num_epochs = 1
+    elif total_samples >= 5000:
         num_epochs = 2
     elif total_samples >= 1000:
         num_epochs = 3
@@ -157,9 +163,12 @@ def train_lora(dataset_file):
         warmup_ratio=0.05,
         num_train_epochs=num_epochs,
         learning_rate=2e-4,
+        weight_decay=0.01,
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         logging_steps=25,
+        evaluation_strategy="steps",
+        eval_steps=50,
         output_dir="lora_checkpoints",
         seed=3407,
         save_strategy="no",
@@ -167,7 +176,8 @@ def train_lora(dataset_file):
 
     trainer_kwargs = dict(
         model=model,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         dataset_text_field="text",
         max_seq_length=max_seq_length,
         dataset_num_proc=2,
@@ -179,7 +189,21 @@ def train_lora(dataset_file):
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
+    from unsloth.chat_templates import train_on_responses_only_with_padding
+    trainer = train_on_responses_only_with_padding(trainer, instruction_part="<|start_header_id|>user<|end_header_id|>\n\n", response_part="<|start_header_id|>assistant<|end_header_id|>\n\n")
+
     trainer.train()
+    
+    # Evaluate model to prevent blind deploy
+    eval_results = trainer.evaluate()
+    eval_loss = eval_results.get("eval_loss", float('inf'))
+    print(f"[Eval] Final evaluation loss: {eval_loss}")
+    
+    if eval_loss > 3.0:
+        print("❌ [Fatal] Eval loss is too high (> 3.0). Training likely diverged or data is corrupted. Aborting deployment!")
+        sys.exit(1)
+    
+    print("[Eval] Validation passed. Proceeding to save and deploy.")
 
     print(f"[Save] Saving clean LoRA adapter weights (~100MB) to {output_dir}...")
     model.save_pretrained(output_dir)
@@ -222,16 +246,19 @@ def deploy_to_cloudflare(output_dir):
                     old_id = ft.get("id")
                     print(f"[Deploy] Refreshing existing fine-tune '{finetune_name}' (ID: {old_id}) to prevent MAX_ASSETS_ERROR...")
                     del_url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/finetunes/{old_id}"
-                    requests.delete(del_url, headers=headers)
+                    del_res = requests.delete(del_url, headers=headers)
+                    del_res.raise_for_status()
+                    import time
+                    time.sleep(3) # Allow propagation time
                     break
     except Exception as e:
         print(f"[Deploy] Info: Fine-tune listing check: {e}")
 
-    # 2. Create fresh fine-tune container (using @cf/meta/llama-guard-3-8b per Cloudflare quirk workaround)
+    # 2. Create fresh fine-tune container
     print(f"[Deploy] Creating Cloudflare finetune container: {finetune_name}...")
     create_res = requests.post(list_url, headers=headers, json={
         "name": finetune_name,
-        "model": "@cf/meta/llama-guard-3-8b",
+        "model": "@cf/meta/llama-3.1-8b-instruct-fast",
         "description": "SaralGati Autonomous Self-Improving LoRA"
     })
 

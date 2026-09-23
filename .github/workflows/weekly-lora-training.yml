@@ -1,13 +1,13 @@
-name: Daily Autonomous LoRA Training
+name: Bi-Weekly Autonomous LoRA Training
 
 on:
   schedule:
-    # Run every day at 03:00 AM IST (21:30 UTC previous day)
-    - cron: '30 21 * * *'
+    # Run every Wednesday & Sunday at 03:00 AM IST (21:30 UTC Tuesday & Saturday)
+    - cron: "30 21 * * 2,6"
   workflow_dispatch:
     inputs:
       force_train:
-        description: 'Force training even with low sample count'
+        description: "Force training even with low sample count"
         required: false
         default: false
         type: boolean
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Check Training Data Availability
         id: check_data
@@ -71,23 +71,18 @@ jobs:
             exit 0
           fi
           pip install kaggle
-          
+
           echo "📦 Isolating Kaggle files..."
           mkdir -p kaggle_push
           cp scripts/train_unsloth_lora.py kaggle_push/
-          
+
           echo "🔄 Updating kernel-metadata.json with correct Kaggle username..."
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
           jq --arg username "$USERNAME_LOWER" '.id = $username + "/saralgati-lora-training"' scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
-          
-          echo "🔑 Auto-injecting Cloudflare deploy credentials..."
-          if [ -n "$CLOUDFLARE_ACCOUNT_ID" ] && [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            sed -i "s|CLOUDFLARE_ACCOUNT_ID = os.environ.get(\"CLOUDFLARE_ACCOUNT_ID\")|CLOUDFLARE_ACCOUNT_ID = \"$CLOUDFLARE_ACCOUNT_ID\"|" kaggle_push/train_unsloth_lora.py
-            sed -i "s|CLOUDFLARE_API_TOKEN = os.environ.get(\"CLOUDFLARE_API_TOKEN\")|CLOUDFLARE_API_TOKEN = \"$CLOUDFLARE_API_TOKEN\"|" kaggle_push/train_unsloth_lora.py
-            echo "✅ Cloudflare credentials injected into isolated Kaggle script."
-          else
-            echo "⚠️ Cloudflare secrets not set; skipping injection."
-          fi
-          
+
+          echo "🔑 Using Cloudflare credentials from Kaggle secrets..."
+          # The script natively supports Kaggle UserSecretsClient as fallback.
+          # Please ensure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are set in Kaggle Secrets.
+
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
           kaggle kernels push -p kaggle_push/

@@ -58,10 +58,19 @@ data class ScreenContextRequest(
 )
 
 @JsonClass(generateAdapter = true)
+data class FlowState(
+    @Json(name = "flow_id") val flowId: String,
+    @Json(name = "current_step") val currentStep: Int,
+    @Json(name = "total_steps") val totalSteps: Int,
+    @Json(name = "step_label") val stepLabel: String
+)
+
+@JsonClass(generateAdapter = true)
 data class ScreenExplanationResponse(
     val explanation: String,
     @Json(name = "highlight_index") val highlightIndex: Int? = null,
-    @Json(name = "interaction_id") val interactionId: String? = null
+    @Json(name = "interaction_id") val interactionId: String? = null,
+    val flow: FlowState? = null
 )
 
 @JsonClass(generateAdapter = true)

@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!-- Foreground service permissions for persistent elder telemetry / heartbeat -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -27,6 +29,18 @@
 
     <!-- DND Access permission for Phone Doctor to turn off Do Not Disturb -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+
+    <queries>
+        <package android:name="com.miui.securitycenter" />
+        <package android:name="com.coloros.safecenter" />
+        <package android:name="com.oppo.safe" />
+        <package android:name="com.iqoo.secure" />
+        <package android:name="com.vivo.permissionmanager" />
+        <package android:name="com.oneplus.security" />
+        <package android:name="com.samsung.android.lool" />
+        <package android:name="com.samsung.android.sm" />
+        <package android:name="com.transsion.phonemanager" />
+    </queries>
 
     <application
         android:allowBackup="true"

@@ -28,6 +28,7 @@ android {
         targetSdk = 37
         versionCode = vCode
         versionName = vName
+        buildConfigField("String", "API_SECRET", "\"${System.getenv("API_SECRET") ?: "YOUR_API_SECRET"}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -76,6 +77,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

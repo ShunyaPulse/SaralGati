@@ -100,7 +100,16 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         createBubbleView()
         createExpandedView()
         
-        windowManager.addView(bubbleView, paramsBubble)
+        if (!android.provider.Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return
+        }
+        try {
+            windowManager.addView(bubbleView, paramsBubble)
+        } catch (e: WindowManager.BadTokenException) {
+            stopSelf()
+            return
+        }
         Log.i(TAG, "Floating Helper Service started")
     }
 
@@ -183,6 +192,9 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return
         }
         speechRecognizer?.startListening(intent)
     }

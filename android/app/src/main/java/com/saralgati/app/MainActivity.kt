@@ -36,8 +36,12 @@ class MainActivity : ComponentActivity() {
         localPrefs = LocalPrefs(this)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
         
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 1001)
+        var permissions = arrayOf(android.Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions += android.Manifest.permission.POST_NOTIFICATIONS
+        }
+        if (permissions.any { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+            requestPermissions(permissions, 1001)
         }
 
         setContent {

@@ -26,7 +26,7 @@ object NetworkModule {
 
     // In a real app this should be obfuscated or fetched from native C++,
     // but for the purpose of the prototype we use a hardcoded fallback or BuildConfig variable.
-    private const val API_SECRET = "saralgati_super_secret_key_2024"
+    private val API_SECRET: String = com.saralgati.app.BuildConfig.API_SECRET
 
     private val authInterceptor = okhttp3.Interceptor { chain ->
         val original = chain.request()

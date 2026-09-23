@@ -567,6 +567,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         elements: MutableList<String>,
         elementBounds: MutableList<android.graphics.Rect>
     ) {
+        if (node.isPassword) return
         if (!node.isVisibleToUser) return
         
         // Ignore SaralGati's own overlay windows from being scanned as screen content!

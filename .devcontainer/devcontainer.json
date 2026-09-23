@@ -5,6 +5,18 @@
     "ghcr.io/devcontainers/features/git:1": {}
   },
   "customizations": {
+    "codespaces": {
+      "repositories": {
+        "ShunyaPulse/SaralGati": {
+          "permissions": {
+            "actions": "write",
+            "security-events": "write",
+            "contents": "write",
+            "workflows": "write"
+          }
+        }
+      }
+    },
     "vscode": {
       "settings": {
         "terminal.integrated.defaultProfile.linux": "bash",
@@ -12,6 +24,7 @@
         "editor.defaultFormatter": "esbenp.prettier-vscode"
       },
       "extensions": [
+        "Google.google-antigravity",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss"

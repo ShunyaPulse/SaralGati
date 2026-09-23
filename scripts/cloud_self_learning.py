@@ -199,7 +199,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     print(f" Device Dependency : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 
-    flywheel_secret = auth_token or os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET") or "saralgati_super_secret_key_2024"
+    flywheel_secret = auth_token or os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET") or "YOUR_FLYWHEEL_SECRET"
     headers = {
         "Content-Type": "application/json",
         "X-Flywheel-Secret": flywheel_secret,

@@ -50,12 +50,13 @@ jobs:
             echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
           elif [ ! -f "keystore.jks" ]; then
             echo "Generating fallback keystore for release build..."
-            keytool -genkey -v -keystore keystore.jks -alias saralgati_key -keyalg RSA -keysize 2048 -validity 10000 -storepass saralgati_fallback -keypass saralgati_fallback -dname "CN=SaralGati,O=SaralGati,C=IN"
+            keytool -genkey -v -keystore keystore.jks -alias saralgati_key -keyalg RSA -keysize 2048 -validity 10000 -storepass "$FALLBACK_PASSWORD" -keypass "$FALLBACK_PASSWORD" -dname "CN=SaralGati,O=SaralGati,C=IN"
           fi
         working-directory: android
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          FALLBACK_PASSWORD: "YOUR_FALLBACK_PASSWORD"
 
       - name: Determine Version
         id: version

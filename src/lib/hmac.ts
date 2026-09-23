@@ -1,10 +1,10 @@
-import crypto from 'crypto';
+import crypto from "crypto";
 
-const API_SECRET = process.env.API_SECRET || 'saralgati_super_secret_key_2024';
+const API_SECRET = process.env.API_SECRET || "YOUR_API_SECRET";
 
 export function verifyAndroidHmac(request: Request): boolean {
-  const timestamp = request.headers.get('X-App-Timestamp');
-  const signature = request.headers.get('X-App-Signature');
+  const timestamp = request.headers.get("X-App-Timestamp");
+  const signature = request.headers.get("X-App-Signature");
 
   if (!timestamp || !signature) {
     return false;
@@ -23,14 +23,14 @@ export function verifyAndroidHmac(request: Request): boolean {
 
   const message = `${method}${path}${timestamp}`;
   const expectedSignature = crypto
-    .createHmac('sha256', API_SECRET)
+    .createHmac("sha256", API_SECRET)
     .update(message)
-    .digest('base64');
+    .digest("base64");
 
   try {
     return crypto.timingSafeEqual(
       Buffer.from(signature),
-      Buffer.from(expectedSignature)
+      Buffer.from(expectedSignature),
     );
   } catch (e) {
     return false;

@@ -83,8 +83,10 @@ jobs:
         if: env.GCP_CREDS != ''
         env:
           GCP_CREDS: ${{ secrets.GCP_CREDENTIALS }}
+          REPO_IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
-          IMAGE=$(echo "ghcr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE=$(echo "ghcr.io/$REPO_IMAGE_NAME:$COMMIT_SHA" | tr '[:upper:]' '[:lower:]')
           gcloud run deploy saralgati \
             --image=$IMAGE \
             --region=asia-south1 \

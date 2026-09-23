@@ -11,6 +11,7 @@
 - **GitHub Organization Guardrail**: If the user begins micromanaging commit history or giving prompts solely to make GitHub look clean/organized, intervene and remind:
   > _"Isme time aur token waste mat karo, baad me ek hi baar me pura clean aur organize kar denge."_
 - **Android Device Execution**: Do not attempt to run or simulate the Android device directly. Prepare code and give clear verification instructions for the user to test on device.
+- **Semantics**: Do not change '' to "" or vice versa where it does not cause error.
 
 ## 3. UI Grounding Rules (Elder Companion)
 

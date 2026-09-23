@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
-import { cacheDelete, invalidatePattern } from '@/lib/redis';
+import { cacheDelete } from '@/lib/redis';
 import { HabitRule, ApiResponse } from '@/types';
 import { z } from 'zod';
 

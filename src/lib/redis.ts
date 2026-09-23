@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const redis = new Redis(redisUrl, {
-  tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+  tls: redisUrl.startsWith('rediss://') ? {} : undefined,
   maxRetriesPerRequest: 1,
   connectTimeout: 3000,
   commandTimeout: 2000,
@@ -20,7 +20,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     const data = await redis.get(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.error(`Redis cacheGet Error for key ${key}:`, error);
+    console.error('Redis cacheGet Error:', error);
     return null;
   }
 }
@@ -34,7 +34,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds?: number)
       await redis.set(key, serialized);
     }
   } catch (error) {
-    console.error(`Redis cacheSet Error for key ${key}:`, error);
+    console.error('Redis cacheSet Error:', error);
   }
 }
 
@@ -42,7 +42,7 @@ export async function cacheDelete(key: string): Promise<void> {
   try {
     await redis.del(key);
   } catch (error) {
-    console.error(`Redis cacheDelete Error for key ${key}:`, error);
+    console.error('Redis cacheDelete Error:', error);
   }
 }
 
@@ -57,7 +57,7 @@ export async function invalidatePattern(pattern: string): Promise<void> {
       }
     } while (cursor !== '0');
   } catch (error) {
-    console.error(`Redis invalidatePattern Error for pattern ${pattern}:`, error);
+    console.error('Redis invalidatePattern Error:', error);
   }
 }
 
@@ -103,7 +103,7 @@ export async function rateLimiter(identifier: string, limit: number, windowSecon
       remaining: Math.max(0, limit - requestCount)
     };
   } catch (error) {
-    console.error(`Redis rateLimiter Error for identifier ${identifier}:`, error);
+    console.error('Redis rateLimiter Error:', error);
     // Graceful degradation: allow request if Redis fails
     return { allowed: true, remaining: 1 };
   }

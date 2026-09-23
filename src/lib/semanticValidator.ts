@@ -1,4 +1,4 @@
-import { ELDER_INTENTS, matchElderIntent } from './intentDictionary';
+import { ELDER_INTENTS, matchElderIntent, matchQueryPattern } from './intentDictionary';
 
 export interface SemanticValidationResult {
   isValid: boolean;
@@ -15,12 +15,12 @@ const NOISE_REGEXES = [
   /\b(am|pm)\b/i,
   /\b(sent|delivered|read|typing\.\.\.|online|last seen)\b/i,
   // Global message preview/subtitle noise (e.g. "📹 Video call", "Missed video call", "Audio call")
-  /(?:^|\]\s*)[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)\s*$/i,
-  /(?:^|\]\s*)[📹🎥📞📱]\s*/i
+  /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/i,
+  /^[📹🎥📞📱]\s*$/i
 ];
 
 function cleanElementText(text: string): string {
-  return text.replace(/^\d+:\s*/, '').replace(/^\[below-fold\]\s*/i, '').trim().toLowerCase();
+  return text.replace(/^\d+:\s*/, '').replace(/^\[below-fold\]\s*/i, '').replace(/^\[.*?\]\s*/, '').trim().toLowerCase();
 }
 
 export function isNoiseElement(elementText: string): boolean {
@@ -109,11 +109,7 @@ export function validateSemanticTarget(
 
   // 4. Semantic Alignment Check: Match question intent against target element
   const triggeredIntents = ELDER_INTENTS.filter((intent) =>
-    intent.queryPatterns.some((pattern) => {
-      const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
-      return regex.test(qLower) || qLower === pattern;
-    })
+    intent.queryPatterns.some((pattern) => matchQueryPattern(qLower, pattern))
   );
 
   if (triggeredIntents.length > 0) {
@@ -132,8 +128,13 @@ export function validateSemanticTarget(
       };
     }
 
+    // Split targetClean into discrete tokens for exact whole-word matching without RegExp injection
+    const targetWords = new Set(targetClean.split(/[\s,._\-?!/\\()[\]{}]+/).filter(Boolean));
+
     // Check universal action words (e.g. 'Proceed', 'Next', 'Continue')
-    const matchesUniversal = UNIVERSAL_ACTION_KEYWORDS.some((k) => new RegExp(`\\\b${k}\\\b`, 'i').test(targetClean));
+    const matchesUniversal = UNIVERSAL_ACTION_KEYWORDS.some((k) => 
+      targetWords.has(k.toLowerCase()) || targetClean.includes(k.toLowerCase())
+    );
     if (matchesUniversal) {
       return {
         isValid: true,
@@ -146,7 +147,7 @@ export function validateSemanticTarget(
 
     // Check direct word overlap with question (e.g. contact name or specific topic)
     const qWords = qLower.split(/[\s,._\-?!]+/).filter((w) => w.length >= 3);
-    const matchesQuestionWord = qWords.some((w) => new RegExp(`\\\b${w}\\\b`, 'i').test(targetClean));
+    const matchesQuestionWord = qWords.some((w) => targetWords.has(w));
 
     if (matchesQuestionWord) {
       return {

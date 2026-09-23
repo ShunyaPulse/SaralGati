@@ -1,4 +1,4 @@
-import { ELDER_INTENTS } from './intentDictionary';
+import { ELDER_INTENTS, matchQueryPattern } from './intentDictionary';
 import { isNoiseElement } from './semanticValidator';
 
 export interface ConfidenceScore {
@@ -77,11 +77,7 @@ export function scoreOutputConfidence(
     // 4. Intent Semantic Alignment Check
     const qLower = question.toLowerCase();
     const matchingIntents = ELDER_INTENTS.filter((intent) =>
-      intent.queryPatterns.some((pattern) => {
-        const escapedPattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(?:^|[\\s,.\\-?!])${escapedPattern}(?:[\\s,.\\-?!]|$)`, 'i');
-        return regex.test(qLower) || qLower === pattern;
-      })
+      intent.queryPatterns.some((pattern) => matchQueryPattern(qLower, pattern))
     );
 
     if (matchingIntents.length > 0) {

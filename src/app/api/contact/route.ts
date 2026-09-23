@@ -59,7 +59,7 @@ export async function POST(req: Request) {
 
     // Honeypot check
     if (website) {
-      return NextResponse.json({ success: true, message: 'Message sent successfully' });
+      return NextResponse.json({ error: 'Invalid submission' }, { status: 400 });
     }
 
     const port = Number(process.env.SMTP_PORT) || 465;
@@ -70,9 +70,6 @@ export async function POST(req: Request) {
       auth: {
         user: process.env.SMTP_USER || '',
         pass: process.env.SMTP_PASS || '',
-      },
-      tls: {
-        rejectUnauthorized: false,
       },
     });
 

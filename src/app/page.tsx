@@ -5,10 +5,10 @@ import Image from 'next/image';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
 import {
-  Download, Shield, Eye, Fingerprint, Smartphone,
-  Mic, Brain, Bell, CheckCircle2, XCircle,
+  Download, Shield, Eye, Fingerprint,
+  Brain, Bell, CheckCircle2, XCircle,
   ArrowRight, Lock, EyeOff, KeyRound, Sparkles,
-  ChevronRight, Heart, Zap, Volume2
+  ChevronRight, Heart, Volume2
 } from 'lucide-react';
 import PublicHeader from '@/components/layout/PublicHeader';
 import PublicFooter from '@/components/layout/PublicFooter';

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useElderStore } from '@/stores/elder-store';
-import { Smartphone, Copy, Check, ShieldAlert, Key, User } from 'lucide-react';
+import { Smartphone, Copy, Check, ShieldAlert, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {

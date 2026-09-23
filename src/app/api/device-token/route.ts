@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { randomBytes } from 'crypto';
-import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
     // Cache in Redis device session for 30 days
     try {
       const { setDeviceSession } = await import('@/lib/redis');
-      await setDeviceSession(plainToken, { elderId, caregiverId: userId }, 30 * 86400);
+      await setDeviceSession(plainToken, { elderId: elder.id, caregiverId: userId }, 30 * 86400);
     } catch (redisErr) {
       console.error('Failed to cache device session in Redis:', redisErr);
     }
@@ -54,7 +53,7 @@ export async function POST(request: Request) {
       success: true, 
       data: { 
         token: plainToken,
-        elderId,
+        elderId: elder.id,
         elderName: elder.elder_name,
         apiUrl: process.env.NEXTAUTH_URL || 'https://saralgati-685823552970.asia-south1.run.app'
       } 

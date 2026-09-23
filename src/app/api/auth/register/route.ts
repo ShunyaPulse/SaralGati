@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { query, queryOne } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet } from '@/lib/redis';
 import { cookies } from 'next/headers';
 import { verifyTurnstile } from '@/lib/turnstile';

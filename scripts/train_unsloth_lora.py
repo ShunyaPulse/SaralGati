@@ -8,7 +8,6 @@ to Cloudflare Workers AI.
 import os
 import sys
 import json
-import time
 import subprocess
 import requests
 
@@ -27,6 +26,7 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
         CLOUDFLARE_ACCOUNT_ID = CLOUDFLARE_ACCOUNT_ID or secrets.get_secret("CLOUDFLARE_ACCOUNT_ID")
         CLOUDFLARE_API_TOKEN = CLOUDFLARE_API_TOKEN or secrets.get_secret("CLOUDFLARE_API_TOKEN")
     except Exception:
+        # Fallback gracefully if running outside Kaggle environment
         pass
 
 

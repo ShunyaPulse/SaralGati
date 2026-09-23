@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useElderStore } from '@/stores/elder-store';
-import { useAlertStore } from '@/stores/alert-store';
 import { Filter, X } from 'lucide-react';
 
 export function AlertFilters({ elders, filters, onFilterChange }: any) {

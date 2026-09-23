@@ -1,6 +1,6 @@
 'use client';
 import React from 'react';
-import { Battery, Activity } from 'lucide-react';
+import { Battery } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
 import Link from 'next/link';

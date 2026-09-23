@@ -59,15 +59,20 @@ export async function POST(req: Request) {
 
     const { email, type, turnstileToken, website } = result.data;
 
-    // Honeypot trap: if hidden field is filled, silently reject (bot detected)
+    // Honeypot trap: if hidden field is filled, reject (bot detected)
     if (website) {
-      // Return fake success so bot doesn't know it was caught
-      return NextResponse.json({ success: true, message: 'OTP sent successfully' });
+      return NextResponse.json({ error: 'Invalid submission' }, { status: 400 });
     }
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 60-second resend cooldown per email
+    // 1. Enforce Turnstile verification at OTP request level FIRST
+    const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
+    if (!isTurnstileValid) {
+      return NextResponse.json({ error: 'Security verification failed. Please try again.' }, { status: 400 });
+    }
+
+    // 2. 60-second resend cooldown per email
     const cooldownKey = `otp_cooldown:${type}:${cleanEmail}`;
     const isOnCooldown = await cacheGet<string>(cooldownKey);
     if (isOnCooldown) {
@@ -75,12 +80,6 @@ export async function POST(req: Request) {
         { error: 'Please wait 60 seconds before requesting a new OTP.' },
         { status: 429 }
       );
-    }
-
-    // Enforce Turnstile verification at OTP request level
-    const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
-    if (!isTurnstileValid) {
-      return NextResponse.json({ error: 'Security verification failed. Please try again.' }, { status: 400 });
     }
 
     // Store successful Turnstile verification in Redis (expires in 10 minutes)
@@ -125,9 +124,6 @@ export async function POST(req: Request) {
       auth: {
         user: process.env.SMTP_USER || '',
         pass: process.env.SMTP_PASS || '',
-      },
-      tls: {
-        rejectUnauthorized: false,
       },
     });
 

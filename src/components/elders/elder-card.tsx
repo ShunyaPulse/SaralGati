@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Battery, Smartphone, PhoneCall, Clock, QrCode } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';

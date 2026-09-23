@@ -32,7 +32,7 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
 
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
-    url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=2000"
+    url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
     print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
     try:
         res = requests.get(url, timeout=30)
@@ -136,22 +136,33 @@ def train_lora(dataset_file):
 
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     dataset = dataset.map(formatting_prompts_func, batched=True)
+    total_samples = len(dataset)
+    print(f"[Train] Dataset size: {total_samples} samples.")
 
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    print("[Train] Starting Fast Fine-Tuning...")
+    # Dynamic epoch count: more data = fewer epochs needed; tiny dataset = more epochs
+    if total_samples >= 5000:
+        num_epochs = 2
+    elif total_samples >= 1000:
+        num_epochs = 3
+    else:
+        num_epochs = 5
+
+    print(f"[Train] Starting Fast Fine-Tuning: {num_epochs} epochs over {total_samples} samples...")
     training_args = TrainingArguments(
-        per_device_train_batch_size=2,
+        per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
-        warmup_steps=5,
-        max_steps=50,
+        warmup_ratio=0.05,
+        num_train_epochs=num_epochs,
         learning_rate=2e-4,
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
-        logging_steps=10,
+        logging_steps=25,
         output_dir="lora_checkpoints",
         seed=3407,
+        save_strategy="no",
     )
 
     trainer_kwargs = dict(
@@ -160,7 +171,7 @@ def train_lora(dataset_file):
         dataset_text_field="text",
         max_seq_length=max_seq_length,
         dataset_num_proc=2,
-        packing=False,
+        packing=True,
         args=training_args,
     )
     try:

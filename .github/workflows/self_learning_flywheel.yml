@@ -38,7 +38,7 @@ jobs:
           DEVICE_TOKEN: ${{ secrets.DEVICE_TOKEN }}
           API_SECRET: ${{ secrets.API_SECRET }}
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MAX_CASES: ${{ github.event.inputs.max_cases }}
         run: |
@@ -58,4 +58,4 @@ jobs:
           if [ -n "$INPUT_MAX_CASES" ]; then
             LIMIT_ARG="--limit $INPUT_MAX_CASES"
           fi
-          python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" --gemini-key "$GEMINI_API_KEY" $LIMIT_ARG
+          python scripts/cloud_self_learning.py --url "$SARALGATI_API_URL" $LIMIT_ARG

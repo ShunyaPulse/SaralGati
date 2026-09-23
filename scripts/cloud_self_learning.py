@@ -53,10 +53,12 @@ CLOUD_BENCHMARKS = [
 ]
 
 
-def generate_infinite_screens_via_gemini(gemini_api_key, count=5):
+def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5):
     """
-    Uses Free Gemini 3.5 Flash Lite API to generate completely brand-new, unseen Indian Android app screens
-    with realistic UI element tokens and natural Hinglish elder queries.
+    Multi-key pool with MODEL-FIRST exhaustive rotation:
+    Exhaust ALL keys on gemini-3.8-flash first, then ALL keys on gemini-3.7-flash, etc.
+    Falls through models only after every single key for that model has been tried.
+    Priority: 3.8-flash > 3.7-flash > 3.6-flash > 3.5-flash > 3-flash > 3.5-flash-lite > 3.1-flash-lite
     """
     import random
     popular_apps = [
@@ -80,7 +82,6 @@ def generate_infinite_screens_via_gemini(gemini_api_key, count=5):
     ]
     selected_apps = random.sample(popular_apps, min(count, len(popular_apps)))
 
-    # Add variation seed to prevent duplicate scenarios across hourly runs
     import datetime
     hour_seed = datetime.datetime.utcnow().strftime("%Y-%m-%d-%H")
     variation_contexts = [
@@ -118,56 +119,83 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
   }}
 ]"""
 
-    # Primary: gemini-3.5-flash-lite (Newest generation, 500 RPD, 15 RPM)
-    # Secondary: gemini-3.1-flash-lite (500 RPD fallback)
-    candidate_models = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
+    # MODEL-FIRST exhaustive rotation:
+    # Try ALL keys on highest-priority model before falling to next model.
+    CANDIDATE_MODELS = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
 
-    for model_name in candidate_models:
+    if not gemini_keys_pool:
+        print("⚠️ No Gemini API keys available. Falling back to benchmark screens.")
+        return []
+
+    for model_name in CANDIDATE_MODELS:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-        headers = {"Content-Type": "application/json", "x-goog-api-key": gemini_api_key}
-        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        model_exhausted = True
 
-        try:
-            res = requests.post(url, json=payload, headers=headers, timeout=25)
-            res.raise_for_status()
-            raw_text = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-            # Clean any accidental markdown backticks
-            clean_json = re.sub(r"^```(?:json)?", "", raw_text, flags=re.MULTILINE)
-            clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
-            parsed_data = json.loads(clean_json)
-            if isinstance(parsed_data, list) and len(parsed_data) > 0:
-                screens = [
-                    {
-                        "app_package": str(s.get("app_package", "")),
-                        "elements": [str(el) for el in s.get("elements", [])],
-                        "scenarios": [
-                            {
-                                "query": str(sc.get("query", "")),
-                                "expected": int(sc.get("expected", 0)),
-                                "intent": str(sc.get("intent", "general"))
-                            }
-                            for sc in s.get("scenarios", [])
-                        ]
-                    }
-                    for s in parsed_data
-                    if isinstance(s, dict)
-                ]
-                print(f"✨ Successfully synthesized {len(screens)} fresh, unseen app screens via {model_name}!")
-                return screens
-        except Exception as e:
-            print(f"⚠️ Dynamic synthesis warning with {model_name}: {e}. Trying next model...")
+        for key_idx, api_key in enumerate(gemini_keys_pool):
+            api_key = api_key.strip()
+            if not api_key:
+                continue
+            headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    print("⚠️ All dynamic generation models exhausted. Falling back to benchmark screens.")
+            try:
+                res = requests.post(url, json=payload, headers=headers, timeout=25)
+                if res.status_code == 429:
+                    # This key is rate-limited on this model; try next key
+                    print(f"  ⏭ Key [{key_idx+1}/{len(gemini_keys_pool)}] rate-limited on {model_name}, trying next key...")
+                    continue
+                res.raise_for_status()
+                raw_text = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                clean_json = re.sub(r"^```(?:json)?", "", raw_text, flags=re.MULTILINE)
+                clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
+                parsed_data = json.loads(clean_json)
+                if isinstance(parsed_data, list) and len(parsed_data) > 0:
+                    screens = [
+                        {
+                            "app_package": str(s.get("app_package", "")),
+                            "elements": [str(el) for el in s.get("elements", [])],
+                            "scenarios": [
+                                {
+                                    "query": str(sc.get("query", "")),
+                                    "expected": int(sc.get("expected", 0)),
+                                    "intent": str(sc.get("intent", "general"))
+                                }
+                                for sc in s.get("scenarios", [])
+                            ]
+                        }
+                        for s in parsed_data
+                        if isinstance(s, dict)
+                    ]
+                    print(f"✨ Synthesized {len(screens)} screens via {model_name} [key {key_idx+1}/{len(gemini_keys_pool)}]")
+                    return screens
+                model_exhausted = False
+            except Exception as e:
+                print(f"  ⚠️ Key [{key_idx+1}] / {model_name}: {e}. Trying next key...")
+                continue
+
+        if model_exhausted:
+            print(f"  ❌ All {len(gemini_keys_pool)} keys exhausted on {model_name}. Falling to next model...")
+
+    print("⚠️ All models and all keys exhausted. Falling back to benchmark screens.")
     return []
 
 
-
-def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases=None):
+def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max_cases=None):
+    num_keys = len(gemini_keys_pool) if gemini_keys_pool else 0
     print("=" * 75)
     print(" ☁️  SARALGATI 100% CLOUD-BASED AUTONOMOUS SELF-LEARNING PIPELINE")
     print("=" * 75)
     print(f" Target API Server : {api_url}")
-    print(f" Dynamic Generator : {'Active (Gemini 3.5 Flash Lite Turbo Multi-Batch)' if gemini_key else 'Static Benchmark Screens'}")
+    print(f" Gemini Key Pool   : {num_keys} keys loaded | Model-first exhaustive rotation")
+    print(f" Model Priority    : 3.8-flash > 3.7 > 3.6 > 3.5 > 3 > 3.5-lite > 3.1-lite")
     print(f" Device Dependency : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 
@@ -178,16 +206,17 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_key=None, max_cases
         "Authorization": f"Bearer {flywheel_secret}"
     }
 
-    # Generate screens in 2 batches for maximum yield while respecting 15 RPM
+    # Generate screens in 4 batches when keys available (more data per run)
     active_screens = []
-    if gemini_key:
-        for batch_num in (1, 2):
-            print(f"[Generator] Requesting batch {batch_num}/2 of dynamic app screens from Gemini API...")
-            dynamic_screens = generate_infinite_screens_via_gemini(gemini_key, count=8)
+    if gemini_keys_pool:
+        num_batches = 4 if num_keys >= 10 else 2
+        for batch_num in range(1, num_batches + 1):
+            print(f"[Generator] Requesting batch {batch_num}/{num_batches} of dynamic app screens...")
+            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8)
             if dynamic_screens:
                 active_screens.extend(dynamic_screens)
-            if batch_num == 1:
-                time.sleep(5)  # Strict 15 RPM guardrail between batches
+            if batch_num < num_batches:
+                time.sleep(2)  # Small inter-batch delay
 
     if not active_screens:
         print("[Generator] Using curated benchmark screen suite.")
@@ -323,8 +352,14 @@ if __name__ == "__main__":
     parser.add_argument("--url", default=os.environ.get("SARALGATI_API_URL", "https://saralgati-685823552970.asia-south1.run.app"),
                         help="SaralGati backend API base URL")
     parser.add_argument("--token", default=os.environ.get("DEVICE_TOKEN", None), help="Device token (optional)")
-    parser.add_argument("--gemini-key", default=os.environ.get("GEMINI_API_KEY", None), help="Google AI Studio / Gemini API key for infinite dynamic screen synthesis")
+    parser.add_argument("--gemini-keys", default=None, help="Comma-separated Gemini API keys pool (overrides env)")
     parser.add_argument("--limit", type=int, default=None, help="Max scenarios to run")
     args = parser.parse_args()
 
-    run_cloud_self_learning(api_url=args.url, auth_token=args.token, gemini_key=args.gemini_key, max_cases=args.limit)
+    # Build keys pool: --gemini-keys arg > GEMINI_API_KEYS env > GEMINI_API_KEY env (single key fallback)
+    raw_keys_str = args.gemini_keys or os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
+    keys_pool = [k.strip() for k in raw_keys_str.split(",") if k.strip()]
+    print(f"[Keys] Loaded {len(keys_pool)} Gemini API key(s) for model-first rotation.")
+
+    run_cloud_self_learning(api_url=args.url, auth_token=args.token, gemini_keys_pool=keys_pool, max_cases=args.limit)
+

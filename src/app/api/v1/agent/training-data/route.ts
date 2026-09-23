@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type') || searchParams.get('mode') || 'sft'; // 'sft' or 'dpo'
     const status = searchParams.get('status') || 'verified';
     const includeCorrections = searchParams.get('include_corrections') === 'true' || status === 'flywheel';
-    const limit = Math.min(parseInt(searchParams.get('limit') || '500', 10), 2000);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '500', 10), 10000);
     const format = searchParams.get('format') || 'json';
 
     // === MODE 1: DPO (Direct Preference Optimization) Pipeline ===

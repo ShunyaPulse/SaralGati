@@ -1,9 +1,9 @@
-name: Weekly Autonomous LoRA Training
+name: Daily Autonomous LoRA Training
 
 on:
   schedule:
-    # Run every Wednesday & Sunday at 03:00 AM IST (21:30 UTC Tuesday & Saturday)
-    - cron: '30 21 * * 2,6'
+    # Run every day at 03:00 AM IST (21:30 UTC previous day)
+    - cron: '30 21 * * *'
   workflow_dispatch:
     inputs:
       force_train:
@@ -29,19 +29,19 @@ jobs:
         env:
           INPUT_FORCE_TRAIN: ${{ inputs.force_train || 'false' }}
         run: |
-          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=500"
+          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=10000"
           echo "Fetching verified interactions from: $API_URL"
           COUNT=$(python -c "import urllib.request, json; res = json.loads(urllib.request.urlopen('$API_URL', timeout=15).read()); print(res.get('count', 0))" 2>/dev/null || echo "0")
           echo "Found $COUNT verified elder interactions in database."
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
-          
+
           FORCE="$INPUT_FORCE_TRAIN"
-          if [ "$COUNT" -ge 10 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
+          if [ "$COUNT" -ge 50 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
-            echo "✅ Threshold met ($COUNT samples). Ready for training."
+            echo "✅ Threshold met ($COUNT samples). Ready for daily training."
           else
             echo "should_train=false" >> $GITHUB_OUTPUT
-            echo "ℹ️ Less than 10 verified samples ($COUNT). Skipping training cycle to save GPU quota."
+            echo "ℹ️ Less than 50 verified samples ($COUNT). Skipping to save GPU quota."
           fi
 
       - name: Download Training Dataset

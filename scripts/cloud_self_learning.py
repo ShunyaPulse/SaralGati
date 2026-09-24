@@ -31,26 +31,6 @@ except ImportError:
     print("[Error] 'requests' library required. Run: pip install requests")
     sys.exit(1)
 
-# Minimal emergency fallback scenario (only triggered if Gemini API is unreachable)
-CLOUD_BENCHMARKS = [
-    {
-        "app_package": "com.whatsapp",
-        "elements": [
-            "[0] [TEXT] WhatsApp",
-            "[1] [BUTTON] Camera",
-            "[2] [BUTTON] Search",
-            "[3] [BUTTON] Chats",
-            "[4] [BUTTON] Updates",
-            "[5] [BUTTON] Calls",
-            "[6] [BUTTON] Ramesh Beta",
-            "[7] [BUTTON] New chat"
-        ],
-        "scenarios": [
-            {"query": "Ramesh ko phone lagao", "expected": 6, "intent": "chat_selection"},
-            {"query": "Naya message bhejo kisi ko", "expected": 7, "intent": "new_chat"}
-        ]
-    }
-]
 
 
 def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5):
@@ -132,7 +112,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     ]
 
     if not gemini_keys_pool:
-        print("⚠️ No Gemini API keys available. Falling back to benchmark screens.")
+        print("⚠️ No Gemini API keys available in pool.")
         return []
 
     for model_name in CANDIDATE_MODELS:
@@ -184,7 +164,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
         if model_exhausted:
             print(f"  ❌ All {len(gemini_keys_pool)} keys exhausted on {model_name}. Falling to next model...")
 
-    print("⚠️ All models and all keys exhausted. Falling back to benchmark screens.")
+    print("⚠️ All models and all keys exhausted.")
     return []
 
 
@@ -219,8 +199,8 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
                 time.sleep(2)  # Small inter-batch delay
 
     if not active_screens:
-        print("[Generator] Using curated benchmark screen suite.")
-        active_screens = CLOUD_BENCHMARKS
+        print("⚠️ No active screens generated from Gemini API. Exiting self-learning cycle.")
+        return stats
 
     stats = {
         "total_scenarios": 0,

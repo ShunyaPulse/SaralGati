@@ -101,14 +101,17 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
 
     # MODEL-FIRST exhaustive rotation:
     # Try ALL keys on highest-priority model before falling to next model.
+    # Priority: best quality first, fallback to lite/older on 503/exhaustion.
+    # Note: "Gemini 3 Flash" (AI Studio) → API ID is `gemini-3-flash-preview`
+    #        (not `gemini-3-flash` which returns 404).
     CANDIDATE_MODELS = [
-        "gemini-3.8-flash",
-        "gemini-3.7-flash",
-        "gemini-3.6-flash",
-        "gemini-3.5-flash",
-        "gemini-3-flash",
-        "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
+        "gemini-3.8-flash",       # Latest stable, best quality  (5 RPM / 20 RPD free)
+        "gemini-3.7-flash",       # Previous gen, very capable   (5 RPM / 20 RPD free)
+        "gemini-3.6-flash",       # Solid fallback               (5 RPM / 20 RPD free)
+        "gemini-3.5-flash",       # Widely available             (10 RPM / 20 RPD free)
+        "gemini-3-flash-preview", # Gemini 3 Flash (AI Studio)   (5 RPM / 20 RPD free)
+        "gemini-3.5-flash-lite",  # High-throughput lite         (30 RPM / 1500 RPD free)
+        "gemini-3.1-flash-lite",  # Last-resort ultra-lite       (30 RPM / 1500 RPD free)
     ]
 
     if not gemini_keys_pool:
@@ -180,7 +183,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     print("=" * 75)
     print(f" Target API Server : {api_url}")
     print(f" Gemini Key Pool   : {num_keys} keys loaded | Model-first exhaustive rotation")
-    print(f" Model Priority    : 3.8-flash > 3.7 > 3.6 > 3.5 > 3 > 3.5-lite > 3.1-lite")
+    print(f" Model Priority    : 3.8-flash > 3.7 > 3.6 > 3.5 > 3-flash-preview > 3.5-lite > 3.1-lite")
     print(f" Device Dependency : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 

@@ -191,6 +191,15 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         "Authorization": f"Bearer {flywheel_secret}"
     }
 
+    stats = {
+        "total_scenarios": 0,
+        "correct_grounding": 0,
+        "corrections_injected": 0,
+        "golden_cache_promotions": 0,
+        "cache_evictions": 0,
+        "api_errors": 0
+    }
+
     # Generate screens in 4 batches when keys available (more data per run)
     active_screens = []
     if gemini_keys_pool:
@@ -206,15 +215,6 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     if not active_screens:
         print("⚠️ No active screens generated from Gemini API. Exiting self-learning cycle.")
         return stats
-
-    stats = {
-        "total_scenarios": 0,
-        "correct_grounding": 0,
-        "corrections_injected": 0,
-        "golden_cache_promotions": 0,
-        "cache_evictions": 0,
-        "api_errors": 0
-    }
 
     count = 0
     for screen in active_screens:

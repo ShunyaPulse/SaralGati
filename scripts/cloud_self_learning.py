@@ -128,6 +128,11 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
 
             try:
                 res = requests.post(url, json=payload, headers=headers, timeout=25)
+                if res.status_code in (500, 502, 503, 504):
+                    # Google server/model-level overload; fast-switch to next candidate model
+                    print(f"  ⚡ {model_name} is experiencing high demand ({res.status_code}). Fast-switching to next candidate model...")
+                    model_exhausted = False
+                    break
                 if res.status_code == 429:
                     # This key is rate-limited on this model; try next key
                     print(f"  ⏭ Key [{key_idx+1}/{len(gemini_keys_pool)}] rate-limited on {model_name}, trying next key...")

@@ -33,12 +33,13 @@ except ImportError:
 
 
 
-def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5):
+def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None):
     """
     Multi-key pool with MODEL-FIRST exhaustive rotation:
     Exhaust ALL keys on gemini-3.8-flash first, then ALL keys on gemini-3.7-flash, etc.
     Falls through models only after every single key for that model has been tried.
     Priority: 3.8-flash > 3.7-flash > 3.6-flash > 3.5-flash > 3-flash > 3.5-flash-lite > 3.1-flash-lite
+    Models that returned 503 are in blacklisted_models and skipped; retried only in the final pass.
     """
     import random
     popular_apps = [
@@ -118,7 +119,12 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
         print("⚠️ No Gemini API keys available in pool.")
         return []
 
+    if blacklisted_models is None:
+        blacklisted_models = set()
+
     for model_name in CANDIDATE_MODELS:
+        if model_name in blacklisted_models:
+            continue  # Skip models that gave 503 in a previous batch
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         model_exhausted = True
 
@@ -132,8 +138,9 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
             try:
                 res = requests.post(url, json=payload, headers=headers, timeout=25)
                 if res.status_code in (500, 502, 503, 504):
-                    # Google server/model-level overload; fast-switch to next candidate model
-                    print(f"  ⚡ {model_name} is experiencing high demand ({res.status_code}). Fast-switching to next candidate model...")
+                    # Blacklist this model for the entire pipeline run; retry only at the end
+                    blacklisted_models.add(model_name)
+                    print(f"  ⚡ {model_name} is experiencing high demand ({res.status_code}). Blacklisting for this run, fast-switching to next candidate model...")
                     model_exhausted = False
                     break
                 if res.status_code == 429:
@@ -207,13 +214,22 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     active_screens = []
     if gemini_keys_pool:
         num_batches = 4 if num_keys >= 10 else 2
+        blacklisted_models = set()  # Shared across all batches in this run
         for batch_num in range(1, num_batches + 1):
             print(f"[Generator] Requesting batch {batch_num}/{num_batches} of dynamic app screens...")
-            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8)
+            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=blacklisted_models)
             if dynamic_screens:
                 active_screens.extend(dynamic_screens)
             if batch_num < num_batches:
                 time.sleep(2)  # Small inter-batch delay
+
+        # Final retry pass: give blacklisted 503 models one last chance at the end
+        if blacklisted_models:
+            print(f"[Generator] Final retry pass for {len(blacklisted_models)} blacklisted model(s): {', '.join(sorted(blacklisted_models))}")
+            retry_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=set())
+            if retry_screens:
+                active_screens.extend(retry_screens)
+                print(f"[Generator] Final retry yielded {len(retry_screens)} additional screens.")
 
     if not active_screens:
         print("⚠️ No active screens generated from Gemini API. Exiting self-learning cycle.")

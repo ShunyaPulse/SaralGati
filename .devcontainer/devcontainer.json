@@ -2,17 +2,32 @@
   "name": "SaralGati Dev Environment",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm",
   "features": {
-    "ghcr.io/devcontainers/features/git:1": {}
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "customizations": {
     "codespaces": {
       "repositories": {
+        "ShunyaPulse/*": {
+          "permissions": {
+            "actions": "write",
+            "security-events": "write",
+            "contents": "write",
+            "workflows": "write",
+            "secrets": "write",
+            "pull-requests": "write",
+            "issues": "write"
+          }
+        },
         "ShunyaPulse/SaralGati": {
           "permissions": {
             "actions": "write",
             "security-events": "write",
             "contents": "write",
-            "workflows": "write"
+            "workflows": "write",
+            "secrets": "write",
+            "pull-requests": "write",
+            "issues": "write"
           }
         }
       }
@@ -27,7 +42,9 @@
         "Google.google-antigravity",
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
-        "bradlc.vscode-tailwindcss"
+        "bradlc.vscode-tailwindcss",
+        "github.vscode-github-actions",
+        "github.vscode-codeql"
       ]
     }
   },
@@ -40,4 +57,3 @@
   },
   "postCreateCommand": "if [ ! -f .env.local ] && [ -f .env.example ]; then cp .env.example .env.local; fi && npm install --legacy-peer-deps"
 }
-

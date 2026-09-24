@@ -2,8 +2,8 @@ name: SaralGati Autonomous Self-Learning Flywheel
 
 on:
   schedule:
-    # Runs automatically every 1 hour in the cloud (24 dynamic learning cycles per day)
-    - cron: "0 * * * *"
+    # Runs automatically every 1 hour in the cloud at minute 23 (bypasses top-of-hour throttling)
+    - cron: "23 * * * *"
   workflow_dispatch:
     # Allows manual trigger anytime from GitHub Actions tab
     inputs:

@@ -1,15 +1,20 @@
 package com.saralgati.app.services.heartbeat
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.saralgati.app.R
 import android.os.BatteryManager
 import com.saralgati.app.data.api.NetworkModule
@@ -27,6 +32,11 @@ class TelemetryService : Service() {
         private const val CHANNEL_ID = "saralgati_telemetry_channel"
         private const val NOTIFICATION_ID = 1001
         private const val HEARTBEAT_INTERVAL_MS = 60000L // 1 minute
+
+        // A cached fix older than this is not reported at all: the dashboard
+        // shows a stale pin as "last known", and an hours-old coordinate would
+        // read as the elder's current position.
+        private const val MAX_FIX_AGE_MS = 10 * 60 * 1000L
     }
 
     override fun onCreate() {
@@ -57,14 +67,21 @@ class TelemetryService : Service() {
                         val phoneModel = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
                         val osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
 
-                        val response = NetworkModule.eldersApi.updateHeartbeat(
-                            elderId, 
-                            mapOf(
-                                "battery_level" to batteryPct,
-                                "phone_model" to phoneModel,
-                                "os_version" to osVersion
-                            )
+                        val heartbeatBody = mutableMapOf<String, Any>(
+                            "battery_level" to batteryPct,
+                            "phone_model" to phoneModel,
+                            "os_version" to osVersion
                         )
+                        lastKnownFix()?.let { fix ->
+                            heartbeatBody["latitude"] = fix.latitude
+                            heartbeatBody["longitude"] = fix.longitude
+                            if (fix.hasAccuracy()) {
+                                heartbeatBody["location_accuracy_m"] = fix.accuracy.toDouble()
+                            }
+                            Log.d(TAG, "Reporting location fix age ${(System.currentTimeMillis() - fix.time) / 1000}s")
+                        }
+
+                        val response = NetworkModule.eldersApi.updateHeartbeat(elderId, heartbeatBody)
                         if (response.isSuccessful) {
                             Log.d(TAG, "Heartbeat sent successfully. Battery: $batteryPct%, Device: $phoneModel")
                         } else {
@@ -98,6 +115,51 @@ class TelemetryService : Service() {
                 delay(HEARTBEAT_INTERVAL_MS)
             }
         }
+    }
+
+    /**
+     * Freshest cached fix from any provider.
+     *
+     * Tracking is deliberately passive: one read per heartbeat instead of a
+     * long-lived location listener, so the companion never holds a wake lock on
+     * an elder's phone. Returns null when the permission is denied (the app then
+     * simply reports no location) or when every provider's cache is too old.
+     */
+    private fun lastKnownFix(): Location? {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fineGranted && !coarseGranted) return null
+
+        val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+        val providers = listOf(
+            LocationManager.GPS_PROVIDER,
+            LocationManager.NETWORK_PROVIDER,
+            LocationManager.PASSIVE_PROVIDER
+        )
+
+        var newest: Location? = null
+        for (provider in providers) {
+            val fix = try {
+                manager.getLastKnownLocation(provider)
+            } catch (e: SecurityException) {
+                null
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+
+            val current = newest
+            if (fix != null && (current == null || fix.time > current.time)) {
+                newest = fix
+            }
+        }
+
+        val fix = newest ?: return null
+        if (System.currentTimeMillis() - fix.time > MAX_FIX_AGE_MS) return null
+        return fix
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

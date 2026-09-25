@@ -36,7 +36,13 @@ class MainActivity : ComponentActivity() {
         localPrefs = LocalPrefs(this)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
         
-        var permissions = arrayOf(android.Manifest.permission.RECORD_AUDIO)
+        // COARSE and FINE are requested together: from Android 12 neither one
+        // alone gives a usable fix for the caregiver's location view.
+        var permissions = arrayOf(
+            android.Manifest.permission.RECORD_AUDIO,
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions += android.Manifest.permission.POST_NOTIFICATIONS
         }

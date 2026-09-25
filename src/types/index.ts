@@ -23,6 +23,11 @@ export interface ElderProfile {
   /** Derived pairing flag returned by the caregiver-facing elder endpoints. */
   is_paired?: boolean;
   last_heartbeat: Date | null;
+  /** Last known fix reported with the heartbeat; see migrations/008. */
+  last_lat: number | null;
+  last_lng: number | null;
+  location_accuracy_m: number | null;
+  location_updated_at: Date | null;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;

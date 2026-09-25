@@ -8,6 +8,7 @@ import { useElderStore } from '@/stores/elder-store';
 import { useAlertStore } from '@/stores/alert-store';
 import { ElderForm } from '@/components/elders/elder-form';
 import { HabitRulesList } from '@/components/elders/habit-rules-list';
+import { LiveLocationCard } from '@/components/elders/live-location-card';
 import { AssistanceLogsTimeline } from '@/components/elders/assistance-logs-timeline';
 import { Modal } from '@/components/ui/modal';
 import { PairingModal } from '@/components/elders/pairing-modal';
@@ -176,6 +177,8 @@ export default function ElderDetailPage() {
               </div>
             </div>
           </div>
+
+          <LiveLocationCard elder={elder} />
         </div>
 
         {/* Habits and Logs */}

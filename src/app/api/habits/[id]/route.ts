@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
 import { cacheDelete } from '@/lib/redis';
 import { HabitRule, ApiResponse } from '@/types';
+import { parseGeofence } from '@/lib/geo';
 import { z } from 'zod';
 
 const updateHabitSchema = z.object({
@@ -40,6 +41,22 @@ export async function PATCH(
 
     const body = await request.json();
     const validatedData = updateHabitSchema.parse(body);
+
+    // A safe zone edited through this route must satisfy the same rule that
+    // POST /api/habits enforces, otherwise the heartbeat route would quietly
+    // ignore a fence the caregiver believes is protecting the elder.
+    if (existing.rule_type === 'location_trigger' && validatedData.rule_payload) {
+      if (!parseGeofence(validatedData.rule_payload)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              'rule_payload needs a valid latitude and longitude (with an optional radius_m between 50 and 20000 metres and a label)',
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const updatedHabit = await queryOne<HabitRule>(
       `UPDATE habit_rules SET

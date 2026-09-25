@@ -1,0 +1,6 @@
+name = "saralgati-github-cron"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["23 * * * *"] # Har ghante minute 23 par trigger karega

@@ -15,6 +15,8 @@ export default function SettingsPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const selectedElder = elders.find((elder) => elder.id === selectedElderId);
+
   useEffect(() => {
     fetchElders();
   }, [fetchElders]);
@@ -122,6 +124,16 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </div>
+
+              {selectedElder?.is_paired && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    {selectedElder.elder_name}&apos;s phone is already paired. Generating a new token
+                    replaces the current one, so the phone stays unlinked until it is paired again.
+                  </span>
+                </div>
+              )}
 
               <button
                 type="button"

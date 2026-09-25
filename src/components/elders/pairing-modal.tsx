@@ -4,17 +4,19 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { Copy, Check, Download, Smartphone, RefreshCw, AlertCircle } from 'lucide-react';
+import { Copy, Check, Download, Smartphone, RefreshCw, AlertCircle, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface PairingModalProps {
   elderId: string;
   elderName: string;
+  /** True when this elder already has a phone linked. */
+  isPaired?: boolean;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function PairingModal({ elderId, elderName, isOpen, onClose }: PairingModalProps) {
+export function PairingModal({ elderId, elderName, isPaired = false, isOpen, onClose }: PairingModalProps) {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -66,14 +68,14 @@ export function PairingModal({ elderId, elderName, isOpen, onClose }: PairingMod
     }
   };
 
+  // Never mint a token just by opening this dialog. A new token replaces the
+  // one the elder's phone is using, which silently unlinks an already paired
+  // device — so generating must stay an explicit caregiver action.
   useEffect(() => {
-    if (isOpen) {
-      fetchTokenAndGenerateQr();
-    } else {
-      setQrDataUrl('');
-      setToken('');
-      setCopied(false);
-    }
+    setQrDataUrl('');
+    setToken('');
+    setCopied(false);
+    setError(null);
   }, [isOpen, elderId]);
 
   const handleCopy = () => {
@@ -134,7 +136,21 @@ export function PairingModal({ elderId, elderName, isOpen, onClose }: PairingMod
                 Ready to Scan
               </span>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 text-center px-2 py-8">
+              <QrCode className="w-10 h-10 text-slate-300" />
+              <p className="text-sm font-medium text-slate-700">No pairing code generated yet</p>
+              <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                {isPaired
+                  ? 'This elder already has a linked phone. Generating a new code replaces its token, so the current device stays unlinked until it scans the new code.'
+                  : 'Generate a one-time code, then scan it from the SaralGati companion app on your parent\'s phone.'}
+              </p>
+              <Button size="sm" onClick={fetchTokenAndGenerateQr} className="mt-1 gap-1.5">
+                <RefreshCw className="w-4 h-4" />
+                {isPaired ? 'Generate new pairing code' : 'Generate pairing code'}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Fallback Token Section */}

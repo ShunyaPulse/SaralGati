@@ -3,7 +3,11 @@ import React from 'react';
 import { Battery } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
+import { getDeviceStatus } from '@/lib/utils';
 import Link from 'next/link';
+
+const DEVICE_DOT_CLASS = { online: 'bg-green-500', offline: 'bg-amber-400', unpaired: 'bg-slate-300' } as const;
+const DEVICE_LABEL = { online: 'Online', offline: 'Offline', unpaired: 'Not paired yet' } as const;
 
 interface ElderStatusListProps {
   elders: ElderProfile[];
@@ -38,8 +42,7 @@ export function ElderStatusList({ elders, loading }: ElderStatusListProps) {
   return (
     <div className="space-y-4">
       {elders.map((elder) => {
-        const isOnline = elder.last_heartbeat ? new Date(elder.last_heartbeat).getTime() > Date.now() - 5 * 60 * 1000 : false;
-        const activeStatus = isOnline || elder.is_active;
+        const deviceStatus = getDeviceStatus(elder);
         const isLowBattery = elder.battery_status !== null && elder.battery_status <= 20;
 
         return (
@@ -49,7 +52,11 @@ export function ElderStatusList({ elders, loading }: ElderStatusListProps) {
                 <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg">
                   {elder.elder_name.charAt(0)}
                 </div>
-                <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${activeStatus ? 'bg-green-500' : 'bg-slate-400'}`}></div>
+                <div
+                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${DEVICE_DOT_CLASS[deviceStatus]}`}
+                  title={DEVICE_LABEL[deviceStatus]}
+                  aria-label={DEVICE_LABEL[deviceStatus]}
+                ></div>
               </div>
               
               <div className="flex-1 min-w-0">

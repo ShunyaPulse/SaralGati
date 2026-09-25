@@ -5,6 +5,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AssistanceLog } from '@/types';
+import { normalizeSeverity } from '@/lib/utils';
+
+const SEVERITY_VARIANT = { high: 'danger', medium: 'warning', low: 'info' } as const;
+const SEVERITY_LABEL = { high: 'HIGH', medium: 'MEDIUM', low: 'LOW' } as const;
 
 interface AlertItemProps {
   alert: AssistanceLog;
@@ -15,16 +19,7 @@ interface AlertItemProps {
 export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
   const [expanded, setExpanded] = useState(false);
 
-  const severity = alert.metadata?.severity || 'MEDIUM';
-
-  const getSeverityVariant = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'high': return 'danger';
-      case 'medium': return 'warning';
-      case 'low': return 'info';
-      default: return 'default';
-    }
-  };
+  const severity = normalizeSeverity(alert.metadata?.severity);
 
   return (
     <Card className={alert.resolved ? 'opacity-70 bg-gray-50' : 'border-l-4 border-l-red-500'}>
@@ -32,8 +27,8 @@ export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
         <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
           <div className="flex-1">
             <div className="flex items-center flex-wrap gap-2 mb-2">
-              <Badge variant={getSeverityVariant(severity)}>
-                {severity.toUpperCase()}
+              <Badge variant={SEVERITY_VARIANT[severity]}>
+                {SEVERITY_LABEL[severity]}
               </Badge>
               {showElderName && (
                 <span className="font-semibold text-gray-900 text-lg">

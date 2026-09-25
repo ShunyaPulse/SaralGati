@@ -18,7 +18,10 @@ export interface ElderProfile {
   battery_status: number | null;
   emergency_contact: string | null;
   preferred_lang: 'hi' | 'en' | 'hinglish';
-  device_token: string | null;
+  /** Never sent to the caregiver browser; see toApiElder in lib/utils. */
+  device_token?: string | null;
+  /** Derived pairing flag returned by the caregiver-facing elder endpoints. */
+  is_paired?: boolean;
   last_heartbeat: Date | null;
   is_active: boolean;
   created_at: Date;

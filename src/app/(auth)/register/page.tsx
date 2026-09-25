@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, User, AlertCircle } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
+import { safeRedirectPath } from '@/lib/utils';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +20,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
   const [checkingEmail, setCheckingEmail] = useState(false);
+  const [redirectTo, setRedirectTo] = useState('/dashboard');
 
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState('');
@@ -29,6 +32,20 @@ export default function RegisterPage() {
     ''
   );
 
+  // Resolve the caregiver's intended destination before being bounced here.
+  // Read from the URL directly so this page needs no Suspense boundary.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setRedirectTo(safeRedirectPath(params.get('callbackUrl') || params.get('returnTo')));
+  }, []);
+
+  // Already signed in? Skip onboarding entirely.
+  useEffect(() => {
+    if (sessionStatus === 'authenticated') {
+      router.replace(redirectTo);
+    }
+  }, [sessionStatus, redirectTo, router]);
+
   useEffect(() => {
     fetch('/api/auth/turnstile-config')
       .then((res) => res.json())
@@ -39,6 +56,8 @@ export default function RegisterPage() {
       })
       .catch((err) => console.error('Turnstile config error:', err));
   }, []);
+
+  const signInHref = `/login?callbackUrl=${encodeURIComponent(redirectTo)}`;
 
   const checkEmailAvailability = async (emailToCheck: string) => {
     const cleanEmail = emailToCheck.trim().toLowerCase();
@@ -151,7 +170,8 @@ export default function RegisterPage() {
       if (signInRes?.error) {
         setError('Registered successfully, but failed to auto-login. Please login manually.');
       } else {
-        router.push('/dashboard');
+        router.push(redirectTo);
+        router.refresh();
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during registration.');
@@ -161,11 +181,11 @@ export default function RegisterPage() {
   };
 
   const handleGoogleSignIn = () => {
-    signIn('google', { callbackUrl: '/dashboard' });
+    signIn('google', { callbackUrl: redirectTo });
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
         <Link href="/" className="mb-4">
           <Image src="/icon.png" alt="SaralGati" width={56} height={56} className="h-14 w-14 object-contain" priority />
@@ -175,14 +195,14 @@ export default function RegisterPage() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Already have an account?{' '}
-          <Link href="/login" className="font-medium text-orange-600 hover:text-orange-500">
+          <Link href={signInHref} className="font-medium text-[#0074c8] hover:text-blue-800">
             Sign in
           </Link>
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-orange-100">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+        <div className="bg-white py-8 px-6 shadow-xl sm:rounded-2xl sm:px-10 border border-slate-200">
           <form className="space-y-6" onSubmit={otpSent ? handleRegister : handleSendOtp}>
             {/* Honeypot trap — invisible to humans, auto-filled by bots */}
             <div className="absolute" style={{ left: '-9999px', position: 'absolute' }} aria-hidden="true">
@@ -212,7 +232,7 @@ export default function RegisterPage() {
                   disabled={otpSent}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg disabled:opacity-50"
                   placeholder="John Doe"
                 />
               </div>
@@ -242,7 +262,7 @@ export default function RegisterPage() {
                   className={`block w-full pl-10 sm:text-sm rounded-md py-3 border text-lg disabled:opacity-50 ${
                     emailExists
                       ? 'border-red-500 focus:ring-red-500 focus:border-red-500 bg-red-50/30'
-                      : 'border-gray-300 focus:ring-orange-500 focus:border-orange-500'
+                      : 'border-gray-300 focus:ring-[#0074c8] focus:border-[#0074c8]'
                   }`}
                   placeholder="you@example.com"
                 />
@@ -253,7 +273,7 @@ export default function RegisterPage() {
               {emailExists && (
                 <div className="mt-2 text-sm text-red-600 flex items-center justify-between bg-red-50 p-2.5 rounded-md border border-red-200">
                   <span>An account with this email already exists.</span>
-                  <Link href="/login" className="font-semibold text-orange-600 hover:text-orange-700 underline ml-2 whitespace-nowrap">
+                  <Link href={signInHref} className="font-semibold text-[#0074c8] hover:text-blue-800 underline ml-2 whitespace-nowrap">
                     Sign in &rarr;
                   </Link>
                 </div>
@@ -277,7 +297,7 @@ export default function RegisterPage() {
                   disabled={otpSent}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -300,7 +320,7 @@ export default function RegisterPage() {
                   disabled={otpSent}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg disabled:opacity-50"
                   placeholder="••••••••"
                 />
               </div>
@@ -336,7 +356,7 @@ export default function RegisterPage() {
                     required
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
-                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg text-center tracking-widest"
+                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg text-center tracking-widest"
                     placeholder="123456"
                     maxLength={6}
                   />
@@ -351,7 +371,7 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading || (!otpSent && (emailExists || checkingEmail || !turnstileToken))}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors cursor-pointer"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-[#0074c8] hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0074c8] disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {loading
                   ? (otpSent ? 'Registering...' : 'Sending OTP...')
@@ -361,7 +381,7 @@ export default function RegisterPage() {
               </button>
             </div>
           </form>
-          
+
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -376,7 +396,7 @@ export default function RegisterPage() {
               <button
                 onClick={handleGoogleSignIn}
                 type="button"
-                className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+                className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0074c8] transition-colors"
               >
                 <svg className="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -393,4 +413,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-

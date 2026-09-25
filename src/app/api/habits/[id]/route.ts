@@ -69,6 +69,11 @@ export async function PATCH(
     if (error.name === 'ZodError') {
       return NextResponse.json({ success: false, error: 'Validation Error', details: error.issues }, { status: 400 });
     }
+    // Editing a payload onto a habit the elder already has hits the unique index
+    // from migrations/007; that is a conflict, not a server error.
+    if (error.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Another habit rule with this type and payload already exists' }, { status: 409 });
+    }
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -81,6 +81,11 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<H
     if (error.name === 'ZodError') {
       return NextResponse.json({ success: false, error: 'Validation Error', details: error.issues }, { status: 400 });
     }
+    // Unique index on (elder_id, rule_type, rule_payload) from migrations/007:
+    // the elder already has this habit, so report a conflict instead of a 500.
+    if (error.code === '23505') {
+      return NextResponse.json({ success: false, error: 'This habit already exists for this elder' }, { status: 409 });
+    }
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

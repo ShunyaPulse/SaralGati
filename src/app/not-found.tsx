@@ -1,7 +1,7 @@
-import Link from 'next/link';
-import { ArrowLeft, LayoutDashboard, Sparkles } from 'lucide-react';
-import PublicHeader from '@/components/layout/PublicHeader';
-import PublicFooter from '@/components/layout/PublicFooter';
+import Link from "next/link";
+import { ArrowLeft, LayoutDashboard, Sparkles } from "lucide-react";
+import PublicHeader from "@/components/layout/PublicHeader";
+import PublicFooter from "@/components/layout/PublicFooter";
 
 export default function NotFound() {
   return (
@@ -24,10 +24,11 @@ export default function NotFound() {
           </p>
 
           <h1 className="mt-4 text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Yahan kuch nahi mila.
+            Not found!
           </h1>
           <p className="mt-3 text-slate-400 leading-relaxed">
-            The page you were looking for has moved or never existed. Let&apos;s get you back to something useful.
+            The page you were looking for has moved or never existed. Let&apos;s
+            get you back to something useful.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">

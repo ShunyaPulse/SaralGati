@@ -3,18 +3,7 @@ import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { cacheDelete } from '@/lib/redis';
 import { HabitRule, ApiResponse } from '@/types';
-import { z } from 'zod';
-
-const createHabitSchema = z.object({
-  elder_id: z.string().uuid(),
-  rule_type: z.string(),
-  app_package: z.string().optional(),
-  screen_name: z.string().optional(),
-  ui_node_id: z.string().optional(),
-  action_type: z.string(),
-  confidence: z.number().min(0).max(1),
-  payload: z.any().optional(),
-});
+import { habitRuleSchema } from '@/lib/validations';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<HabitRule[]>>> {
   try {
@@ -57,7 +46,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<H
     }
 
     const body = await request.json();
-    const validatedData = createHabitSchema.parse(body);
+    const validatedData = habitRuleSchema.parse(body);
     const userId = session.user.id;
 
     // Verify ownership
@@ -68,17 +57,14 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<H
 
     const newHabit = await queryOne<HabitRule>(
       `INSERT INTO habit_rules (
-        elder_id, rule_type, app_package, screen_name, ui_node_id, action_type, confidence, payload
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        elder_id, rule_type, rule_payload, confidence, is_active, updated_at
+      ) VALUES ($1, $2, $3::jsonb, $4, $5, NOW()) RETURNING *`,
       [
         validatedData.elder_id,
         validatedData.rule_type,
-        validatedData.app_package || null,
-        validatedData.screen_name || null,
-        validatedData.ui_node_id || null,
-        validatedData.action_type,
+        JSON.stringify(validatedData.rule_payload),
         validatedData.confidence,
-        validatedData.payload ? JSON.stringify(validatedData.payload) : null
+        validatedData.is_active,
       ]
     );
 

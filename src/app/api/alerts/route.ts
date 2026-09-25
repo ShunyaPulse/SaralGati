@@ -15,13 +15,19 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
     const { searchParams } = new URL(request.url);
     const elderId = searchParams.get('elder_id');
     const status = searchParams.get('status'); // 'active', 'resolved', 'all'
-    const limit = parseInt(searchParams.get('limit') || '20', 10);
-    const page = parseInt(searchParams.get('page') || '1', 10);
+    const eventTypes = (searchParams.get('event_types') || '')
+      .split(',')
+      .map((type) => type.trim())
+      .filter(Boolean);
+    const fromDate = searchParams.get('from_date');
+    const toDate = searchParams.get('to_date');
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '20', 10) || 20, 1), 100);
+    const page = Math.max(parseInt(searchParams.get('page') || '1', 10) || 1, 1);
     const offset = (page - 1) * limit;
     const userId = session.user.id;
 
     // Build cache key based on params
-    const cacheKey = `alerts:${userId}:${elderId || 'all'}:${status || 'active'}:${page}:${limit}`;
+    const cacheKey = `alerts:${userId}:${elderId || 'all'}:${status || 'active'}:${eventTypes.join('|')}:${fromDate || ''}:${toDate || ''}:${page}:${limit}`;
 
     const cached = await cacheGet<AssistanceLog[]>(cacheKey);
     if (cached) {
@@ -45,9 +51,28 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<As
     }
 
     if (status === 'active') {
-      queryStr += ` AND al.resolved_at IS NULL`;
+      queryStr += ` AND al.resolved = false`;
     } else if (status === 'resolved') {
-      queryStr += ` AND al.resolved_at IS NOT NULL`;
+      queryStr += ` AND al.resolved = true`;
+    }
+
+    if (eventTypes.length > 0) {
+      queryStr += ` AND al.event_type = ANY($${paramIndex}::text[])`;
+      queryParams.push(eventTypes);
+      paramIndex++;
+    }
+
+    if (fromDate) {
+      queryStr += ` AND al.created_at >= $${paramIndex}::date`;
+      queryParams.push(fromDate);
+      paramIndex++;
+    }
+
+    if (toDate) {
+      // Inclusive of the whole end day, not just its midnight.
+      queryStr += ` AND al.created_at < ($${paramIndex}::date + INTERVAL '1 day')`;
+      queryParams.push(toDate);
+      paramIndex++;
     }
 
     queryStr += ` ORDER BY al.created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;

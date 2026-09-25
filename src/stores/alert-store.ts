@@ -4,9 +4,11 @@ import { AssistanceLog } from '@/types';
 
 export interface AlertFilters {
   elder_id?: string;
+  status?: 'active' | 'resolved' | 'all';
   event_types?: string[];
   from_date?: string;
   to_date?: string;
+  page?: number;
   limit?: number;
 }
 
@@ -36,9 +38,11 @@ export const useAlertStore = create<AlertState>()(
         try {
           const query = new URLSearchParams();
           if (appliedFilters.elder_id) query.append('elder_id', appliedFilters.elder_id);
+          if (appliedFilters.status) query.append('status', appliedFilters.status);
           if (appliedFilters.event_types?.length) query.append('event_types', appliedFilters.event_types.join(','));
           if (appliedFilters.from_date) query.append('from_date', appliedFilters.from_date);
           if (appliedFilters.to_date) query.append('to_date', appliedFilters.to_date);
+          if (appliedFilters.page) query.append('page', appliedFilters.page.toString());
           if (appliedFilters.limit) query.append('limit', appliedFilters.limit.toString());
           
           const res = await fetch(`/api/alerts?${query.toString()}`);

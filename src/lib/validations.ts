@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { parseGeofence } from './geo';
+
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
@@ -19,6 +21,29 @@ export const elderProfileSchema = z.object({
   preferred_lang: z.enum(['hi', 'en', 'hinglish']).default('hi'),
 });
 
+/**
+ * Companion heartbeat. Coordinates are optional - the phone may not have the
+ * location permission, may be indoors with the GPS off, or may be an older APK
+ * that never sent them. Both halves must arrive together: a lone latitude is a
+ * client bug, not a position, and storing it would move the caregiver's map.
+ */
+export const heartbeatSchema = z
+  .object({
+    battery_level: z.number().min(0).max(100).nullish(),
+    phone_model: z.string().max(120).nullish(),
+    os_version: z.string().max(60).nullish(),
+    latitude: z.number().min(-90).max(90).nullish(),
+    longitude: z.number().min(-180).max(180).nullish(),
+    location_accuracy_m: z.number().min(0).max(100_000).nullish(),
+  })
+  .superRefine((value, ctx) => {
+    const hasLat = value.latitude !== null && value.latitude !== undefined;
+    const hasLng = value.longitude !== null && value.longitude !== undefined;
+    if (hasLat !== hasLng) {
+      ctx.addIssue({ code: 'custom', message: 'latitude and longitude must be sent together' });
+    }
+  });
+
 export const syncHabitsSchema = z.object({
   device_token: z.string(),
   habits: z.array(z.object({
@@ -37,13 +62,29 @@ export const reportStuckSchema = z.object({
   loop_count: z.number().optional(),
 });
 
-export const habitRuleSchema = z.object({
-  elder_id: z.string().uuid(),
-  rule_type: z.enum(['frequent_contact', 'app_trigger', 'time_routine', 'location_trigger']),
-  rule_payload: z.record(z.string(), z.any()),
-  confidence: z.number().min(0).max(1).default(0.5),
-  is_active: z.boolean().default(true),
-});
+export const habitRuleSchema = z
+  .object({
+    elder_id: z.string().uuid(),
+    rule_type: z.enum(['frequent_contact', 'app_trigger', 'time_routine', 'location_trigger']),
+    rule_payload: z.record(z.string(), z.any()),
+    confidence: z.number().min(0).max(1).default(0.5),
+    is_active: z.boolean().default(true),
+  })
+  .superRefine((rule, ctx) => {
+    // A safe zone with no usable centre is silently ignored by the heartbeat
+    // route, so the caregiver would believe a fence is protecting the elder when
+    // nothing is ever checked. Reject it at write time instead. `parseGeofence`
+    // is the same parser the heartbeat uses, so the two can never disagree.
+    if (rule.rule_type !== 'location_trigger') return;
+    if (parseGeofence(rule.rule_payload)) return;
+
+    ctx.addIssue({
+      code: 'custom',
+      path: ['rule_payload'],
+      message:
+        'location_trigger rule_payload needs a valid latitude and longitude (with an optional radius_m between 50 and 20000 metres and a label)',
+    });
+  });
 
 /**
  * Body of POST /api/alerts, sent by the paired Android companion.

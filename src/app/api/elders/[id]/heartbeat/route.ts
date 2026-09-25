@@ -1,15 +1,99 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-import { queryOne } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { invalidatePattern } from '@/lib/redis';
 
 import { validateDeviceToken } from '@/lib/agent-auth';
+import { heartbeatSchema } from '@/lib/validations';
+import {
+  GEOFENCE_ALERT_COOLDOWN_MS,
+  distanceToFenceCenterM,
+  isFenceExit,
+  parseGeofence,
+  toGeoPoint,
+  type GeoPoint,
+  type Geofence,
+} from '@/lib/geo';
 
-const heartbeatSchema = z.object({
-  battery_level: z.number().min(0).max(100).nullish(),
-  phone_model: z.string().max(120).nullish(),
-  os_version: z.string().max(60).nullish(),
-});
+interface ElderLocationRow {
+  id: string;
+  caregiver_id: string;
+  elder_name: string;
+  last_lat: number | null;
+  last_lng: number | null;
+}
+
+/** Active safe zones for one elder, newest first. Unusable payloads are skipped. */
+async function loadGeofences(elderId: string): Promise<Geofence[]> {
+  const rules = await query<{ rule_payload: unknown }>(
+    `SELECT rule_payload FROM habit_rules
+      WHERE elder_id = $1 AND rule_type = 'location_trigger' AND is_active = true
+      ORDER BY created_at DESC
+      LIMIT 5`,
+    [elderId]
+  );
+
+  return rules
+    .map((rule) => parseGeofence(rule.rule_payload))
+    .filter((fence): fence is Geofence => fence !== null);
+}
+
+/**
+ * Raise a "left the safe zone" alert when two consecutive fixes straddle a fence.
+ *
+ * The *previous* fix has to be inside the fence. Without that check, saving a
+ * fence while the elder is already out - at the market, at a clinic - would fire
+ * an alarm the moment the caregiver created it, which is exactly the kind of
+ * false positive that trains families to ignore alerts.
+ */
+async function alertOnGeofenceExit(
+  elderId: string,
+  point: GeoPoint,
+  previous: GeoPoint | null,
+  fence: Geofence
+): Promise<Geofence | null> {
+  if (!isFenceExit(previous, point, fence)) return null;
+
+  // A phone drifting along the edge of a fence would otherwise notify the family
+  // on every heartbeat.
+  const cooldownSeconds = Math.round(GEOFENCE_ALERT_COOLDOWN_MS / 1000);
+  const recentAlert = await queryOne(
+    `SELECT id FROM assistance_logs
+      WHERE elder_id = $1
+        AND event_type = 'emergency'
+        AND metadata->>'kind' = 'geofence_exit'
+        AND metadata->>'fence_label' = $2
+        AND created_at > NOW() - ($3::int * INTERVAL '1 second')`,
+    [elderId, fence.label, cooldownSeconds]
+  );
+
+  if (recentAlert) return null;
+
+  const distanceM = distanceToFenceCenterM(point, fence);
+
+  await queryOne(
+    `INSERT INTO assistance_logs (
+      elder_id, event_type, screen_name, app_package, duration_ms, metadata
+    ) VALUES ($1, 'emergency', $2, 'geo', 0, $3::jsonb)`,
+    [
+      elderId,
+      fence.label,
+      JSON.stringify({
+        kind: 'geofence_exit',
+        description: `Left the safe zone "${fence.label}" (${distanceM} m from its centre)`,
+        severity: 'high',
+        fence_label: fence.label,
+        fence_latitude: fence.latitude,
+        fence_longitude: fence.longitude,
+        fence_radius_m: fence.radius_m,
+        distance_m: distanceM,
+        latitude: point.latitude,
+        longitude: point.longitude,
+      }),
+    ]
+  );
+
+  return fence;
+}
 
 export async function POST(
   request: Request,
@@ -35,27 +119,52 @@ export async function POST(
     );
 
     if (!parsedBody.success) {
-      return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+      return NextResponse.json(
+        { success: false, error: parsedBody.error.issues[0]?.message || 'Invalid payload' },
+        { status: 400 }
+      );
     }
 
     const batteryLevel = parsedBody.data.battery_level ?? null;
     const phoneModel = parsedBody.data.phone_model?.trim() || null;
     const osVersion = parsedBody.data.os_version?.trim() || null;
+    const accuracy =
+      typeof parsedBody.data.location_accuracy_m === 'number'
+        ? parsedBody.data.location_accuracy_m
+        : null;
 
-    // 1. Update elder's battery, phone model, OS version, and online status
-    const updatedElder = await queryOne<{ id: string; caregiver_id: string }>(
-      `UPDATE elder_profiles 
+    // The previous fix is read before the update so a fence crossing can be
+    // detected. RETURNING would only give us the new coordinates.
+    const previous = await queryOne<ElderLocationRow>(
+      `SELECT id, caregiver_id, elder_name, last_lat, last_lng
+       FROM elder_profiles WHERE id = $1`,
+      [elderId]
+    );
+
+    if (!previous) {
+      return NextResponse.json({ success: false, error: 'Elder not found' }, { status: 404 });
+    }
+
+    const point = toGeoPoint(parsedBody.data.latitude, parsedBody.data.longitude);
+    const previousPoint = toGeoPoint(previous.last_lat, previous.last_lng);
+
+    // 1. Update elder's battery, phone model, OS version, online status and the
+    //    last known location. `location_updated_at` only moves when a fix really
+    //    arrived, so the dashboard can tell "online but location unknown" apart
+    //    from "position is 4 hours old".
+    await queryOne(
+      `UPDATE elder_profiles
        SET battery_status = COALESCE($1, battery_status),
            phone_model = COALESCE($2, phone_model),
            os_version = COALESCE($3, os_version),
-           last_heartbeat = NOW()
-       WHERE id = $4 RETURNING id, caregiver_id`,
-      [batteryLevel, phoneModel, osVersion, elderId]
+           last_heartbeat = NOW(),
+           last_lat = COALESCE($4, last_lat),
+           last_lng = COALESCE($5, last_lng),
+           location_accuracy_m = COALESCE($6, location_accuracy_m),
+           location_updated_at = CASE WHEN $4 IS NOT NULL AND $5 IS NOT NULL THEN NOW() ELSE location_updated_at END
+       WHERE id = $7 RETURNING id`,
+      [batteryLevel, phoneModel, osVersion, point?.latitude ?? null, point?.longitude ?? null, accuracy, elderId]
     );
-
-    if (!updatedElder) {
-      return NextResponse.json({ success: false, error: 'Elder not found' }, { status: 404 });
-    }
 
     // 2. If battery is critically low (< 15%), we can log a battery_low alert (optional silent alert)
     if (batteryLevel !== null && batteryLevel < 15) {
@@ -77,10 +186,28 @@ export async function POST(
       }
     }
 
-    // 3. Invalidate Redis cache so caregiver dashboard shows "Online" immediately
-    await invalidatePattern(`elders:${updatedElder.caregiver_id}*`);
+    // 3. Safe zones: alert the caregiver when the elder crosses an active fence.
+    let breachedFence: Geofence | null = null;
+    if (point) {
+      const fences = await loadGeofences(elderId);
+      for (const fence of fences) {
+        breachedFence = await alertOnGeofenceExit(elderId, point, previousPoint, fence);
+        if (breachedFence) break;
+      }
+    }
 
-    return NextResponse.json({ success: true, timestamp: new Date().toISOString() });
+    // 4. Invalidate Redis cache so caregiver dashboard shows "Online" immediately
+    await invalidatePattern(`elders:${previous.caregiver_id}*`);
+    if (breachedFence) {
+      await invalidatePattern(`alerts:${previous.caregiver_id}*`);
+    }
+
+    return NextResponse.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      location_tracked: point !== null,
+      safe_zone_exit: breachedFence?.label ?? null,
+    });
   } catch (error) {
     console.error('Error processing heartbeat:', error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });

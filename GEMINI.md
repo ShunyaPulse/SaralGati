@@ -4,6 +4,7 @@
 
 - **Language**: Strictly respond in **Hinglish** (Hindi written in English alphabet / Roman script).
 - **Tone & Conciseness**: High conciseness, low verbosity. Keep answers crisp, technical, and directly to the point. No fluff or unnecessary preambles.
+- **Pull Requests**: PR titles and PR descriptions must be written in **English** (chat replies stay Hinglish).
 
 ## 2. Core Prohibitions & Boundaries
 

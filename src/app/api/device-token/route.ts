@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { queryOne } from '@/lib/db';
+import { cacheDelete, setDeviceSession } from '@/lib/redis';
 import { randomBytes } from 'crypto';
 
 export async function POST(request: Request) {
@@ -27,6 +28,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Not Found or Unauthorized' }, { status: 404 });
     }
 
+    // Read the token being replaced first: rotating it has to retire the cached
+    // session for the old value too, otherwise a token that leaked from a lost
+    // phone keeps working until its (up to) 30 day Redis entry expires.
+    const previous = await queryOne<{ device_token: string | null }>(
+      `SELECT device_token FROM elder_profiles WHERE id = $1`,
+      [elderId]
+    );
+
     // Generate bearer token: sg_ + 32 random hex chars
     const plainToken = `sg_${randomBytes(16).toString('hex')}`;
 
@@ -43,7 +52,10 @@ export async function POST(request: Request) {
 
     // Cache in Redis device session for 30 days
     try {
-      const { setDeviceSession } = await import('@/lib/redis');
+      const staleToken = previous?.device_token;
+      if (staleToken && staleToken !== plainToken) {
+        await cacheDelete(`device_session:${staleToken}`);
+      }
       await setDeviceSession(plainToken, { elderId: elder.id, caregiverId: userId }, 30 * 86400);
     } catch (redisErr) {
       console.error('Failed to cache device session in Redis:', redisErr);

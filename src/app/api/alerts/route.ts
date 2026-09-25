@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
-import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
+import { cacheGet, cacheSet, invalidatePattern, rateLimiter } from '@/lib/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
+import { androidAlertSchema } from '@/lib/validations';
 import { verifyAndroidHmac } from '@/lib/hmac';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog[]>>> {
@@ -95,11 +96,28 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
     if (!verifyAndroidHmac(request)) {
       return NextResponse.json({ success: false, error: 'Invalid app signature' }, { status: 403 });
     }
-    const body = await request.json();
-    const { elder_id, event_type, description, severity, screenshot_url, screen_name, app_package } = body;
+    // The companion app is the only caller, but its payload used to go straight
+    // into the insert: a bad `elder_id` reached Postgres as an invalid uuid and
+    // an unknown `event_type` tripped the CHECK constraint, both surfacing as a
+    // 500. Validate first so the device gets an actionable 400 instead.
+    const parsed = androidAlertSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: parsed.error.issues[0]?.message || 'Invalid payload' },
+        { status: 400 }
+      );
+    }
 
-    if (!elder_id) {
-      return NextResponse.json({ success: false, error: 'elder_id is required' }, { status: 400 });
+    const { elder_id, event_type, description, severity, screenshot_url, screen_name, app_package } = parsed.data;
+
+    // A changing screen can make one phone emit a burst of alerts; cap the rate
+    // so a single device cannot flood the caregiver feed or the table.
+    const alertLimit = await rateLimiter(`alert:${elder_id}`, 30, 60);
+    if (!alertLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: 'Too many alerts, please slow down' },
+        { status: 429 }
+      );
     }
 
     // Lookup elder and caregiver
@@ -113,7 +131,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
     }
 
     // Map sos_trigger from Android to emergency to satisfy DB constraint
-    const mappedEventType = event_type === 'sos_trigger' ? 'emergency' : (event_type || 'emergency');
+    const mappedEventType = event_type === 'sos_trigger' ? 'emergency' : event_type;
 
     // Insert alert log
     const newAlert = await queryOne<AssistanceLog>(
@@ -126,7 +144,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
         screen_name || 'SOS / Companion App',
         app_package || 'com.saralgati.app',
         0,
-        JSON.stringify({ description: description || 'Mobile alert', severity: severity || 'critical', screenshot_url })
+        JSON.stringify({ description: description || 'Mobile alert', severity, screenshot_url })
       ]
     );
 

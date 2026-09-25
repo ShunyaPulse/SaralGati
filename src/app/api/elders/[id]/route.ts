@@ -101,8 +101,17 @@ export async function PATCH(
     await invalidatePattern(`elders:${userId}*`);
 
     return NextResponse.json({ success: true, data: toApiElder(updatedElder) });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating elder preferences:', error);
+    // 42703 = undefined_column, i.e. this deployment is running ahead of
+    // migrations/009. Say what is actually wrong instead of handing the caregiver
+    // a generic failure they can do nothing with.
+    if (error?.code === '42703') {
+      return NextResponse.json(
+        { success: false, error: 'This preference is not available yet - a database migration is pending.' },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }

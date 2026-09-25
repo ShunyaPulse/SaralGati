@@ -69,7 +69,7 @@ export function ElderForm({ initialData, onSubmit, onCancel }: ElderFormProps) {
       />
       
       <div className="rounded-lg bg-emerald-50 border border-emerald-100 p-3 text-xs text-emerald-800 flex items-start gap-2.5">
-        <Smartphone className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+        <Smartphone className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
         <div>
           <p className="font-semibold text-emerald-900">Automatic Device Detection</p>
           <p className="text-emerald-700 mt-0.5">
@@ -93,18 +93,25 @@ export function ElderForm({ initialData, onSubmit, onCancel }: ElderFormProps) {
       />
 
       <div className="space-y-1">
-        <label className="text-sm font-medium text-gray-700">Preferred Language</label>
+        <label htmlFor="preferred_lang" className="text-sm font-medium text-gray-700">
+          Preferred Language
+        </label>
         <select
+          id="preferred_lang"
           name="preferred_lang"
           value={formData.preferred_lang}
           onChange={handleChange}
+          aria-invalid={errors.preferred_lang ? true : undefined}
+          aria-describedby={errors.preferred_lang ? 'preferred_lang-error' : undefined}
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         >
           <option value="hi">Hindi</option>
           <option value="en">English</option>
           <option value="hinglish">Hinglish</option>
         </select>
-        {errors.preferred_lang && <p className="text-sm text-red-500">{errors.preferred_lang}</p>}
+        {errors.preferred_lang && (
+          <p id="preferred_lang-error" className="text-sm text-red-600">{errors.preferred_lang}</p>
+        )}
       </div>
 
       <div className="flex justify-end space-x-3 pt-4">

@@ -92,8 +92,12 @@ export default function ElderDetailPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
         <div className="flex items-center gap-4">
-          <Link href="/elders" className="p-2 -ml-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors">
-            <ArrowLeft className="h-5 w-5" />
+          <Link
+            href="/elders"
+            aria-label="Back to elders"
+            className="p-2 -ml-2 rounded-full hover:bg-slate-200 text-slate-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8]"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
           </Link>
           <h1 className="text-2xl font-bold text-slate-900">{elder.elder_name}</h1>
         </div>
@@ -114,11 +118,22 @@ export default function ElderDetailPage() {
               <div className="flex justify-between items-start mb-4">
                 <h2 className="text-lg font-semibold text-slate-900">Profile Information</h2>
                 <div className="flex space-x-2">
-                  <button onClick={() => setIsEditModalOpen(true)} className="p-1.5 text-slate-400 hover:text-teal-600 rounded-md hover:bg-slate-50 transition-colors">
-                    <Edit2 className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(true)}
+                    aria-label="Edit profile"
+                    className="p-1.5 text-slate-400 hover:text-teal-600 rounded-md hover:bg-slate-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8]"
+                  >
+                    <Edit2 className="h-4 w-4" aria-hidden="true" />
                   </button>
-                  <button onClick={handleDelete} disabled={isDeleting} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-slate-50 transition-colors disabled:opacity-50">
-                    <Trash2 className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                    aria-label="Delete profile"
+                    className="p-1.5 text-slate-400 hover:text-red-600 rounded-md hover:bg-slate-50 transition-colors disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8]"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
                   </button>
                 </div>
               </div>

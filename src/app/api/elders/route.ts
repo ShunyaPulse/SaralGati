@@ -3,6 +3,7 @@ import { getAuthSession } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
 import { elderProfileSchema } from '@/lib/validations';
+import { toApiElder } from '@/lib/utils';
 import { ElderProfile, ApiResponse } from '@/types';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<ElderProfile[]>>> {
@@ -27,10 +28,13 @@ export async function GET(request: Request): Promise<NextResponse<ApiResponse<El
       [userId]
     );
 
-    // Set cache
-    await cacheSet(cacheKey, elders, 300); // 5 minutes
+    // Never hand the device bearer token to the browser, or cache it
+    const safeElders = elders.map(toApiElder);
 
-    return NextResponse.json({ success: true, data: elders });
+    // Set cache
+    await cacheSet(cacheKey, safeElders, 300); // 5 minutes
+
+    return NextResponse.json({ success: true, data: safeElders });
   } catch (error) {
     console.error('Error fetching elders:', error);
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
@@ -70,7 +74,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<E
     // Invalidate cache
     await invalidatePattern(`elders:${userId}*`);
 
-    return NextResponse.json({ success: true, data: newElder }, { status: 201 });
+    return NextResponse.json({ success: true, data: toApiElder(newElder) }, { status: 201 });
   } catch (error: any) {
     console.error('Error creating elder:', error);
     

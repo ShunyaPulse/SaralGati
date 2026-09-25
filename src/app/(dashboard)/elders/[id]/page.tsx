@@ -12,6 +12,14 @@ import { AssistanceLogsTimeline } from '@/components/elders/assistance-logs-time
 import { Modal } from '@/components/ui/modal';
 import { PairingModal } from '@/components/elders/pairing-modal';
 import { ElderProfile } from '@/types';
+import { getDeviceStatus } from '@/lib/utils';
+
+const CONNECTION_BADGE_CLASS = {
+  online: 'bg-green-100 text-green-800',
+  offline: 'bg-amber-100 text-amber-800',
+  unpaired: 'bg-slate-200 text-slate-700',
+} as const;
+const CONNECTION_LABEL = { online: 'Online', offline: 'Offline', unpaired: 'Not paired' } as const;
 
 export default function ElderDetailPage() {
   const params = useParams();
@@ -78,8 +86,7 @@ export default function ElderDetailPage() {
 
   if (!elder) return null;
 
-  const isOnline = elder.last_heartbeat ? new Date(elder.last_heartbeat).getTime() > Date.now() - 5 * 60 * 1000 : false;
-  const activeStatus = isOnline || elder.is_active;
+  const deviceStatus = getDeviceStatus(elder);
 
   return (
     <div className="space-y-6">
@@ -139,8 +146,8 @@ export default function ElderDetailPage() {
                   <span className="text-sm text-slate-600 flex items-center">
                     <Activity className="h-4 w-4 mr-2 text-slate-400" /> Connection
                   </span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${activeStatus ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-800'}`}>
-                    {activeStatus ? 'Active' : 'Inactive'}
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${CONNECTION_BADGE_CLASS[deviceStatus]}`}>
+                    {CONNECTION_LABEL[deviceStatus]}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
@@ -195,6 +202,7 @@ export default function ElderDetailPage() {
       <PairingModal
         elderId={elder.id}
         elderName={elder.elder_name}
+        isPaired={deviceStatus !== 'unpaired'}
         isOpen={isPairingModalOpen}
         onClose={() => setIsPairingModalOpen(false)}
       />

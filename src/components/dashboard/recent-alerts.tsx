@@ -3,6 +3,7 @@ import React from 'react';
 import { AssistanceLog } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { normalizeSeverity } from '@/lib/utils';
 
 export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loading: boolean }) {
   if (loading) {
@@ -36,15 +37,15 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
       {alerts.map((alert) => {
         let Icon = Info;
         let colorClass = 'text-blue-500 bg-blue-50';
-        let severity = alert.metadata?.severity || 'LOW';
+        const severity = normalizeSeverity(alert.metadata?.severity);
 
         if (alert.resolved) {
           Icon = CheckCircle2;
           colorClass = 'text-emerald-500 bg-emerald-50';
-        } else if (severity === 'HIGH') {
+        } else if (severity === 'high') {
           Icon = ShieldAlert;
           colorClass = 'text-rose-500 bg-rose-50';
-        } else if (severity === 'MEDIUM') {
+        } else if (severity === 'medium') {
           Icon = AlertTriangle;
           colorClass = 'text-amber-500 bg-amber-50';
         }

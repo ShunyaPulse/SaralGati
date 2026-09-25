@@ -6,8 +6,12 @@ import { Button } from '@/components/ui/button';
 import { Battery, Smartphone, PhoneCall, Clock, QrCode } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
+import { getDeviceStatus } from '@/lib/utils';
 import Link from 'next/link';
 import { PairingModal } from './pairing-modal';
+
+const DEVICE_DOT_CLASS = { online: 'bg-[#22c55e]', offline: 'bg-amber-400', unpaired: 'bg-gray-400' } as const;
+const DEVICE_LABEL = { online: 'Online', offline: 'Offline', unpaired: 'Not paired yet' } as const;
 
 interface ElderCardProps {
   elder: ElderProfile;
@@ -16,11 +20,7 @@ interface ElderCardProps {
 export function ElderCard({ elder }: ElderCardProps) {
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const isLowBattery = elder.battery_status !== null && elder.battery_status <= 20;
-  
-  // Calculate if active based on last heartbeat within 5 minutes
-  const isOnline = elder.last_heartbeat ? new Date(elder.last_heartbeat).getTime() > Date.now() - 5 * 60 * 1000 : false;
-  // Fallback to is_active flag if no heartbeat logic applies perfectly
-  const activeStatus = isOnline || elder.is_active;
+  const deviceStatus = getDeviceStatus(elder);
 
   return (
     <Card hover className="h-full flex flex-col">
@@ -31,7 +31,11 @@ export function ElderCard({ elder }: ElderCardProps) {
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-600">
                 <span className="text-xl font-bold">{elder.elder_name.charAt(0)}</span>
               </div>
-              <span className={`absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-white ${activeStatus ? 'bg-[#22c55e]' : 'bg-gray-400'}`} title={activeStatus ? 'Active' : 'Offline'}></span>
+              <span
+                className={`absolute bottom-0 right-0 h-4 w-4 rounded-full border-2 border-white ${DEVICE_DOT_CLASS[deviceStatus]}`}
+                title={DEVICE_LABEL[deviceStatus]}
+                aria-label={DEVICE_LABEL[deviceStatus]}
+              ></span>
             </div>
             <div className="ml-4">
               <h3 className="text-lg font-semibold text-gray-900">{elder.elder_name}</h3>
@@ -93,6 +97,7 @@ export function ElderCard({ elder }: ElderCardProps) {
         <PairingModal
           elderId={elder.id}
           elderName={elder.elder_name}
+          isPaired={deviceStatus !== 'unpaired'}
           isOpen={isPairingOpen}
           onClose={() => setIsPairingOpen(false)}
         />

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter, cacheSet, cacheGet, getSubnet } from '@/lib/redis';
+import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet } from '@/lib/redis';
 import { cookies } from 'next/headers';
 import nodemailer from 'nodemailer';
 import { queryOne } from '@/lib/db';
@@ -110,33 +110,55 @@ export async function POST(req: Request) {
     await cacheSet(`otp:${type}:${cleanEmail}`, otp, 600);
     // Reset attempt counter on new OTP
     await cacheSet(`otp_attempts:${type}:${cleanEmail}`, 0, 600);
-    // Set 60-second cooldown
-    await cacheSet(cooldownKey, 'true', 60);
-
-    // Send Email
-    console.log(`[OTP] Generated CSPRNG OTP for ${cleanEmail} (${type})`);
 
     const port = Number(process.env.SMTP_PORT) || 465;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+
+    // Never report success for an OTP we could not deliver: the UI would tell
+    // the elder's family to check an inbox that will never receive anything.
+    const clearPendingOtp = async () => {
+      await cacheDelete(`otp:${type}:${cleanEmail}`);
+      await cacheDelete(`otp_attempts:${type}:${cleanEmail}`);
+    };
+
+    if (!smtpUser || !smtpPass) {
+      console.error('SMTP is not configured (SMTP_USER / SMTP_PASS missing); OTP cannot be delivered.');
+      await clearPendingOtp();
+      return NextResponse.json(
+        { error: 'Email delivery is not configured. Please contact support.' },
+        { status: 503 }
+      );
+    }
+
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port,
       secure: port === 465,
       auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
+        user: smtpUser,
+        pass: smtpPass,
       },
     });
 
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
       await transporter.sendMail({
         from: process.env.SMTP_FROM || 'noreply@saralgati.com',
         to: cleanEmail,
         subject: `Your ${type === 'register' ? 'Registration' : 'Login'} OTP - SaralGati`,
         text: `Your OTP is ${otp}. It will expire in 10 minutes.`,
       });
-    } else {
-      console.log('SMTP credentials not configured, skipping email delivery.');
+    } catch (mailError) {
+      console.error('Failed to deliver OTP email:', mailError);
+      await clearPendingOtp();
+      return NextResponse.json(
+        { error: 'Could not send the verification code. Please try again.' },
+        { status: 502 }
+      );
     }
+
+    // Only start the resend cooldown once delivery actually succeeded.
+    await cacheSet(cooldownKey, 'true', 60);
 
     return NextResponse.json({ success: true, message: 'OTP sent successfully' });
   } catch (error) {

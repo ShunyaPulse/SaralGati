@@ -2,6 +2,7 @@
 import React from 'react';
 import { Users, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import { ElderProfile, AssistanceLog } from '@/types';
+import { getDeviceStatus, isDeviceOnline, normalizeSeverity } from '@/lib/utils';
 
 interface StatsCardsProps {
   elders: ElderProfile[];
@@ -11,19 +12,19 @@ interface StatsCardsProps {
 
 export function StatsCards({ elders, alerts, loading }: StatsCardsProps) {
   // Calculate stats
-  const activeEldersCount = elders.filter(e => {
-    const isOnline = e.last_heartbeat ? new Date(e.last_heartbeat).getTime() > Date.now() - 5 * 60 * 1000 : false;
-    return isOnline || e.is_active;
-  }).length;
-  
+  const onlineEldersCount = elders.filter(isDeviceOnline).length;
+  const pairedEldersCount = elders.filter(e => getDeviceStatus(e) !== 'unpaired').length;
+
   const unresolvedAlertsCount = alerts.filter(a => !a.resolved).length;
-  const highSeverityAlertsCount = alerts.filter(a => !a.resolved && a.metadata?.severity === 'HIGH').length;
+  const highSeverityAlertsCount = alerts.filter(
+    a => !a.resolved && normalizeSeverity(a.metadata?.severity) === 'high'
+  ).length;
   
   const stats = [
     {
-      name: 'Active Elders',
-      value: loading ? '-' : activeEldersCount.toString(),
-      total: loading ? '-' : `out of ${elders.length}`,
+      name: 'Phones Online',
+      value: loading ? '-' : onlineEldersCount.toString(),
+      total: loading ? '-' : `${pairedEldersCount} of ${elders.length} paired`,
       icon: Users,
       color: 'text-blue-600',
       bgColor: 'bg-blue-100',

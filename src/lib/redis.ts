@@ -92,11 +92,19 @@ export async function rateLimiter(identifier: string, limit: number, windowSecon
 
     const results = await pipeline.exec();
 
-    if (!results) {
+    // exec() resolves to [error, result] pairs rather than throwing, so an
+    // unreachable Redis hands back errors here instead of hitting the catch.
+    // Trusting those entries denied every request (429) during an outage
+    // instead of degrading gracefully, so validate the shape explicitly.
+    const zcardEntry = results?.[2];
+    if (!zcardEntry || zcardEntry[0]) {
       return { allowed: true, remaining: 1 };
     }
 
-    const requestCount = results[2][1] as number;
+    const requestCount = Number(zcardEntry[1]);
+    if (!Number.isFinite(requestCount)) {
+      return { allowed: true, remaining: 1 };
+    }
 
     return {
       allowed: requestCount <= limit,

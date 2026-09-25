@@ -63,32 +63,57 @@ export async function POST(req: Request) {
     }
 
     const port = Number(process.env.SMTP_PORT) || 465;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    // Recipient for submissions: dedicated inbox if configured, else the sender mailbox.
+    const adminEmail = process.env.CONTACT_TO_EMAIL || process.env.SMTP_FROM;
+
+    // Fail loudly instead of reporting success for a message nobody will receive.
+    if (!smtpUser || !smtpPass || !adminEmail) {
+      console.error('Contact form delivery is not configured (SMTP_USER / SMTP_PASS / CONTACT_TO_EMAIL).');
+      return NextResponse.json(
+        { error: 'Message delivery is not configured. Please email us directly.' },
+        { status: 503 }
+      );
+    }
+
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port,
       secure: port === 465,
       auth: {
-        user: process.env.SMTP_USER || '',
-        pass: process.env.SMTP_PASS || '',
+        user: smtpUser,
+        pass: smtpPass,
       },
     });
 
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      const adminEmail = process.env.SMTP_FROM || 'techanics6174@gmail.com';
+    // Visitors control every one of these fields, so never interpolate them raw.
+    const escapeHtml = (value: string) =>
+      value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    try {
       await transporter.sendMail({
         from: process.env.SMTP_FROM || 'noreply@saralgati.com',
         to: adminEmail,
         replyTo: email,
         subject: `New Contact Form Submission: ${subject}`,
         text: `Name: ${name}\nEmail: ${email}\nSubject: ${subject}\n\nMessage:\n${message}`,
-        html: `<p><strong>Name:</strong> ${name}</p>
-               <p><strong>Email:</strong> ${email}</p>
-               <p><strong>Subject:</strong> ${subject}</p>
+        html: `<p><strong>Name:</strong> ${escapeHtml(name)}</p>
+               <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+               <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
                <p><strong>Message:</strong></p>
-               <p>${message.replace(/\n/g, '<br>')}</p>`,
+               <p>${escapeHtml(message).replace(/\n/g, '<br>')}</p>`,
       });
-    } else {
-      console.log('SMTP credentials not configured, skipping email delivery. Message was:', { name, email, subject, message });
+    } catch (mailError) {
+      console.error('Failed to deliver contact form email:', mailError);
+      return NextResponse.json(
+        { error: 'Could not send your message. Please try again.' },
+        { status: 502 }
+      );
     }
 
     return NextResponse.json({ success: true, message: 'Message sent successfully' });

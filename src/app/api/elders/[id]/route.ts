@@ -4,6 +4,7 @@ import { queryOne } from '@/lib/db';
 import { cacheDelete, invalidatePattern } from '@/lib/redis';
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { elderProfileSchema } from '@/lib/validations';
+import { toApiElder } from '@/lib/utils';
 import { ElderProfile, ApiResponse } from '@/types';
 
 export async function GET(
@@ -25,7 +26,7 @@ export async function GET(
         return NextResponse.json({ success: false, error: 'Not Found' }, { status: 404 });
       }
 
-      return NextResponse.json({ success: true, data: elder });
+      return NextResponse.json({ success: true, data: toApiElder(elder) });
     }
 
     // Companion app / device token check
@@ -102,7 +103,7 @@ export async function PUT(
     await invalidatePattern(`elders:${userId}*`);
     await cacheDelete(`agent-config:${elderId}`);
 
-    return NextResponse.json({ success: true, data: updatedElder });
+    return NextResponse.json({ success: true, data: toApiElder(updatedElder) });
   } catch (error: any) {
     console.error('Error updating elder:', error);
     if (error.name === 'ZodError') {

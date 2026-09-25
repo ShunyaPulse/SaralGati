@@ -7,6 +7,7 @@ import {
   alertPoint,
   alertTitle,
   isGeofenceExitAlert,
+  safeZoneExitEmail,
 } from './alerts';
 
 /** The row the heartbeat route inserts when an elder crosses a fence. */
@@ -73,6 +74,24 @@ test('a battery alert explains itself from the recorded level', () => {
   assert.equal(alertTitle(battery), 'Battery low');
   assert.equal(alertDescription(battery), 'The phone battery dropped to 12%.');
   assert.equal(alertMapUrl(battery), null);
+});
+
+test('the safe-zone exit email names the elder, the zone and where it happened', () => {
+  const { subject, text } = safeZoneExitEmail({
+    elderName: 'Suresh Kumar',
+    fence: { latitude: 28.6139, longitude: 77.209, radius_m: 500, label: 'Ghar' },
+    distanceM: 742.4,
+    point: { latitude: 28.5355, longitude: 77.391 },
+    at: new Date('2026-09-25T14:05:00.000Z'),
+  });
+
+  assert.equal(subject, 'Safe zone alert: Suresh Kumar left "Ghar"');
+  assert.match(text, /Suresh Kumar is outside the safe zone "Ghar"/);
+  assert.match(text, /about 742 m \(zone radius 500 m\)/);
+  assert.match(text, /https:\/\/www\.google\.com\/maps\?q=28\.535500,77\.391000/);
+  // Rendered on the family's clock, not the server's.
+  assert.match(text, /IST/);
+  assert.ok(!text.includes('2026-09-25T14:05:00.000Z'), 'no raw ISO timestamp in the body');
 });
 
 test('malformed metadata never throws', () => {

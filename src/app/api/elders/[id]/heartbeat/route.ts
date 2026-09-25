@@ -4,6 +4,8 @@ import { invalidatePattern } from '@/lib/redis';
 
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { heartbeatSchema } from '@/lib/validations';
+import { safeZoneExitEmail } from '@/lib/alerts';
+import { sendMail } from '@/lib/mailer';
 import {
   GEOFENCE_ALERT_COOLDOWN_MS,
   distanceToFenceCenterM,
@@ -19,6 +21,7 @@ interface ElderLocationRow {
   id: string;
   caregiver_id: string;
   elder_name: string;
+  caregiver_email: string | null;
   last_lat: number | null;
   last_lng: number | null;
 }
@@ -46,13 +49,25 @@ async function loadGeofences(elderId: string): Promise<Geofence[]> {
  * an alarm the moment the caregiver created it, which is exactly the kind of
  * false positive that trains families to ignore alerts.
  */
-async function alertOnGeofenceExit(
-  elderId: string,
-  point: GeoPoint,
-  previous: GeoPoint | null,
-  fence: Geofence,
-  accuracyMarginM: number
-): Promise<Geofence | null> {
+interface FenceExitCheck {
+  elderId: string;
+  elderName: string;
+  caregiverEmail: string | null;
+  point: GeoPoint;
+  previous: GeoPoint | null;
+  fence: Geofence;
+  accuracyMarginM: number;
+}
+
+async function alertOnGeofenceExit({
+  elderId,
+  elderName,
+  caregiverEmail,
+  point,
+  previous,
+  fence,
+  accuracyMarginM,
+}: FenceExitCheck): Promise<Geofence | null> {
   if (!isFenceExit(previous, point, fence, accuracyMarginM)) return null;
 
   // A phone drifting along the edge of a fence would otherwise notify the family
@@ -71,6 +86,7 @@ async function alertOnGeofenceExit(
   if (recentAlert) return null;
 
   const distanceM = distanceToFenceCenterM(point, fence);
+  const occurredAt = new Date();
 
   await queryOne(
     `INSERT INTO assistance_logs (
@@ -90,9 +106,24 @@ async function alertOnGeofenceExit(
         distance_m: distanceM,
         latitude: point.latitude,
         longitude: point.longitude,
+        occurred_at: occurredAt.toISOString(),
       }),
     ]
   );
+
+  // The alert row only helps a caregiver who opens the dashboard, so the family
+  // is emailed as well. Best-effort by design: the alert is already stored, and a
+  // mail failure must never fail the heartbeat that produced it.
+  if (caregiverEmail) {
+    const message = safeZoneExitEmail({
+      elderName,
+      fence,
+      distanceM,
+      point,
+      at: occurredAt,
+    });
+    await sendMail({ to: caregiverEmail, ...message });
+  }
 
   return fence;
 }
@@ -138,8 +169,11 @@ export async function POST(
     // The previous fix is read before the update so a fence crossing can be
     // detected. RETURNING would only give us the new coordinates.
     const previous = await queryOne<ElderLocationRow>(
-      `SELECT id, caregiver_id, elder_name, last_lat, last_lng
-       FROM elder_profiles WHERE id = $1`,
+      `SELECT ep.id, ep.caregiver_id, ep.elder_name, u.email AS caregiver_email,
+              ep.last_lat, ep.last_lng
+         FROM elder_profiles ep
+         LEFT JOIN users u ON u.id = ep.caregiver_id
+        WHERE ep.id = $1`,
       [elderId]
     );
 
@@ -197,13 +231,15 @@ export async function POST(
       const accuracyMarginM = fenceAccuracyMarginM(accuracy);
       const fences = await loadGeofences(elderId);
       for (const fence of fences) {
-        breachedFence = await alertOnGeofenceExit(
+        breachedFence = await alertOnGeofenceExit({
           elderId,
+          elderName: previous.elder_name,
+          caregiverEmail: previous.caregiver_email,
           point,
-          previousPoint,
+          previous: previousPoint,
           fence,
-          accuracyMarginM
-        );
+          accuracyMarginM,
+        });
         if (breachedFence) break;
       }
     }

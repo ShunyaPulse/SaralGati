@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet } from '@/lib/redis';
 import { cookies } from 'next/headers';
-import nodemailer from 'nodemailer';
+import { createMailer } from '@/lib/mailer';
 import { queryOne } from '@/lib/db';
 import { verifyTurnstile } from '@/lib/turnstile';
 import crypto from 'crypto';
@@ -111,10 +111,6 @@ export async function POST(req: Request) {
     // Reset attempt counter on new OTP
     await cacheSet(`otp_attempts:${type}:${cleanEmail}`, 0, 600);
 
-    const port = Number(process.env.SMTP_PORT) || 465;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-
     // Never report success for an OTP we could not deliver: the UI would tell
     // the elder's family to check an inbox that will never receive anything.
     const clearPendingOtp = async () => {
@@ -122,7 +118,9 @@ export async function POST(req: Request) {
       await cacheDelete(`otp_attempts:${type}:${cleanEmail}`);
     };
 
-    if (!smtpUser || !smtpPass) {
+    const transporter = createMailer();
+
+    if (!transporter) {
       console.error('SMTP is not configured (SMTP_USER / SMTP_PASS missing); OTP cannot be delivered.');
       await clearPendingOtp();
       return NextResponse.json(
@@ -130,16 +128,6 @@ export async function POST(req: Request) {
         { status: 503 }
       );
     }
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port,
-      secure: port === 465,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
 
     try {
       await transporter.sendMail({

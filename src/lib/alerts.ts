@@ -1,4 +1,4 @@
-import { mapsUrl, toGeoPoint, type GeoPoint } from './geo';
+import { mapsUrl, toGeoPoint, type GeoPoint, type Geofence } from './geo';
 
 /** `metadata.kind` the heartbeat route writes for a "left the safe zone" alert. */
 export const GEOFENCE_EXIT_KIND = 'geofence_exit';
@@ -88,4 +88,51 @@ export function alertPoint(alert: AlertLike): GeoPoint | null {
 export function alertMapUrl(alert: AlertLike): string | null {
   const point = alertPoint(alert);
   return point ? mapsUrl(point) : null;
+}
+
+export interface SafeZoneExitEmailInput {
+  elderName: string;
+  fence: Geofence;
+  /** Rounded metres between the fix and the zone centre. */
+  distanceM: number;
+  point: GeoPoint;
+  at?: Date;
+}
+
+/** The audience reads the clock in IST, so an ISO timestamp would just confuse. */
+function formatIst(at: Date): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(at);
+}
+
+/**
+ * Subject and body of the "your parent left the safe zone" email.
+ *
+ * The dashboard alert only reaches a caregiver who opens the dashboard, which is
+ * the wrong shape for a wander. Kept pure - and out of the nodemailer module - so
+ * it can be unit tested and so client components can import this file safely.
+ */
+export function safeZoneExitEmail(input: SafeZoneExitEmailInput): {
+  subject: string;
+  text: string;
+} {
+  const { elderName, fence, distanceM, point } = input;
+  const at = input.at ?? new Date();
+
+  return {
+    subject: `Safe zone alert: ${elderName} left "${fence.label}"`,
+    text: [
+      `${elderName} is outside the safe zone "${fence.label}".`,
+      '',
+      `Time: ${formatIst(at)} (IST)`,
+      `Distance from the zone centre: about ${Math.round(distanceM)} m (zone radius ${fence.radius_m} m)`,
+      `Where: ${mapsUrl(point)}`,
+      '',
+      'Open the SaralGati dashboard to see the live position and to resolve this alert.',
+      'This is an automated message.',
+    ].join('\n'),
+  };
 }

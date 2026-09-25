@@ -1,0 +1,54 @@
+name: Web Checks
+
+# Typecheck + unit tests for the Next.js dashboard.
+#
+# Nothing else on a pull request runs `npm test`: the deploy workflow only builds
+# the container, so a mistake in a pure module (agent fast path, geofence maths,
+# alert labels) can reach production with every security check green. The
+# check runs on Node 22 because the test script passes a glob to the Node test
+# runner, which only expands patterns itself on 21+.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/web-checks.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - ".github/workflows/web-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test

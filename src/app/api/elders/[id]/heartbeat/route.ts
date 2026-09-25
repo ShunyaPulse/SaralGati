@@ -4,8 +4,7 @@ import { invalidatePattern } from '@/lib/redis';
 
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { heartbeatSchema } from '@/lib/validations';
-import { safeZoneExitEmail, shouldEmailSafeZoneExit } from '@/lib/alerts';
-import { sendMail } from '@/lib/mailer';
+import { notifySafeZoneExit } from '@/lib/safeZoneAlerts';
 import {
   GEOFENCE_ALERT_COOLDOWN_MS,
   distanceToFenceCenterM,
@@ -54,8 +53,11 @@ interface FenceExitCheck {
   elderId: string;
   elderName: string;
   caregiverEmail: string | null;
-  /** The caregiver's mute switch for this elder; see migrations/009. */
-  emailEnabled: boolean;
+  /**
+   * Raw `elder_profiles.safe_zone_email_enabled`, or null when it could not be
+   * read; the notifier decides, so the mute rule lives in exactly one place.
+   */
+  emailPreference: boolean | null | undefined;
   point: GeoPoint;
   previous: GeoPoint | null;
   fence: Geofence;
@@ -74,7 +76,7 @@ async function alertOnGeofenceExit({
   elderId,
   elderName,
   caregiverEmail,
-  emailEnabled,
+  emailPreference,
   point,
   previous,
   fence,
@@ -127,22 +129,29 @@ async function alertOnGeofenceExit({
   // is emailed as well - unless this elder is muted. Best-effort by design: the
   // alert is already stored, and a mail failure must never fail the heartbeat
   // that produced it. Muting never suppresses the row above.
-  let emailAttempted = false;
-  let emailDelivered = false;
+  const emailOutcome = await notifySafeZoneExit({
+    elderName,
+    fence,
+    distanceM,
+    point,
+    caregiverEmail,
+    emailPreference,
+    at: occurredAt,
+  });
 
-  if (caregiverEmail && emailEnabled) {
-    emailAttempted = true;
-    const message = safeZoneExitEmail({
-      elderName,
-      fence,
-      distanceM,
-      point,
-      at: occurredAt,
-    });
-    emailDelivered = await sendMail({ to: caregiverEmail, ...message });
-  }
+  // Logged as well as returned to the device: a fence exit is rare and safety
+  // relevant, and "no mail arrived" has to be answerable from the server logs
+  // (muted / failed / no recipient are three different answers) instead of only
+  // from the phone's copy of the response.
+  console.log(
+    `Safe-zone exit for elder ${elderId} in "${fence.label}": safe-zone email ${emailOutcome}`
+  );
 
-  return { fence, emailAttempted, emailDelivered };
+  return {
+    fence,
+    emailAttempted: emailOutcome === 'sent' || emailOutcome === 'failed',
+    emailDelivered: emailOutcome === 'sent',
+  };
 }
 
 export async function POST(
@@ -258,7 +267,7 @@ export async function POST(
           elderId,
           elderName: previous.elder_name,
           caregiverEmail: previous.caregiver_email,
-          emailEnabled: shouldEmailSafeZoneExit(previous.email_safe_zone_exits),
+          emailPreference: previous.email_safe_zone_exits,
           point,
           previous: previousPoint,
           fence,

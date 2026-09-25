@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { ChevronDown, ChevronUp, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, AlertTriangle, MapPin } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AssistanceLog } from '@/types';
+import { alertDescription, alertMapUrl, alertTitle } from '@/lib/alerts';
 import { normalizeSeverity } from '@/lib/utils';
 
 const SEVERITY_VARIANT = { high: 'danger', medium: 'warning', low: 'info' } as const;
@@ -20,6 +21,9 @@ export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
   const [expanded, setExpanded] = useState(false);
 
   const severity = normalizeSeverity(alert.metadata?.severity);
+  const title = alertTitle(alert);
+  const description = alertDescription(alert);
+  const mapUrl = alertMapUrl(alert);
 
   return (
     <Card className={alert.resolved ? 'opacity-70 bg-gray-50' : 'border-l-4 border-l-red-500'}>
@@ -42,11 +46,29 @@ export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
               )}
             </div>
             
-            <h4 className="text-md font-medium text-gray-800 flex items-center capitalize">
-              <AlertTriangle className="w-4 h-4 mr-2 text-gray-500" />
-              {alert.event_type.replace(/_/g, ' ')}
+            <h4 className="text-md font-medium text-gray-800 flex items-center">
+              <AlertTriangle className="w-4 h-4 mr-2 text-gray-500" aria-hidden="true" />
+              {title}
             </h4>
-            
+
+            {description && (
+              <p className="text-sm text-gray-700 mt-1">{description}</p>
+            )}
+
+            {/* A wander is only actionable if the caregiver can see where it
+                happened; the position is stored on the alert, so link it out. */}
+            {mapUrl && (
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center text-sm font-medium text-teal-700 hover:text-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] rounded"
+              >
+                <MapPin className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+                Where this happened
+              </a>
+            )}
+
             <p className="text-sm text-gray-600 mt-1">
               Occurred at {format(new Date(alert.created_at), 'PPpp')} 
               ({formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })})
@@ -65,7 +87,11 @@ export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
               onClick={() => setExpanded(!expanded)}
               className="text-gray-500"
             >
-              {expanded ? <><ChevronUp className="w-4 h-4 mr-1" /> Less details</> : <><ChevronDown className="w-4 h-4 mr-1" /> More details</>}
+              {expanded ? (
+                <><ChevronUp className="w-4 h-4 mr-1" aria-hidden="true" /> Less details</>
+              ) : (
+                <><ChevronDown className="w-4 h-4 mr-1" aria-hidden="true" /> More details</>
+              )}
             </Button>
           </div>
         </div>
@@ -79,6 +105,10 @@ export function AlertItem({ alert, onResolve, showElderName }: AlertItemProps) {
             <div>
               <span className="text-gray-500 block mb-1">Screen Name:</span>
               <span className="font-medium text-gray-900">{alert.screen_name || 'N/A'}</span>
+            </div>
+            <div>
+              <span className="text-gray-500 block mb-1">Event Type:</span>
+              <span className="font-medium text-gray-900">{alert.event_type}</span>
             </div>
             <div>
               <span className="text-gray-500 block mb-1">Duration:</span>

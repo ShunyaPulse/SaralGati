@@ -7,6 +7,7 @@ import { heartbeatSchema } from '@/lib/validations';
 import {
   GEOFENCE_ALERT_COOLDOWN_MS,
   distanceToFenceCenterM,
+  fenceAccuracyMarginM,
   isFenceExit,
   parseGeofence,
   toGeoPoint,
@@ -49,9 +50,10 @@ async function alertOnGeofenceExit(
   elderId: string,
   point: GeoPoint,
   previous: GeoPoint | null,
-  fence: Geofence
+  fence: Geofence,
+  accuracyMarginM: number
 ): Promise<Geofence | null> {
-  if (!isFenceExit(previous, point, fence)) return null;
+  if (!isFenceExit(previous, point, fence, accuracyMarginM)) return null;
 
   // A phone drifting along the edge of a fence would otherwise notify the family
   // on every heartbeat.
@@ -189,9 +191,19 @@ export async function POST(
     // 3. Safe zones: alert the caregiver when the elder crosses an active fence.
     let breachedFence: Geofence | null = null;
     if (point) {
+      // Fences are judged against the accuracy the phone reported for this fix: a
+      // 200 m fix must travel further than the radius before a family is woken up,
+      // otherwise indoor GPS noise alone would raise a "left home" alert.
+      const accuracyMarginM = fenceAccuracyMarginM(accuracy);
       const fences = await loadGeofences(elderId);
       for (const fence of fences) {
-        breachedFence = await alertOnGeofenceExit(elderId, point, previousPoint, fence);
+        breachedFence = await alertOnGeofenceExit(
+          elderId,
+          point,
+          previousPoint,
+          fence,
+          accuracyMarginM
+        );
         if (breachedFence) break;
       }
     }

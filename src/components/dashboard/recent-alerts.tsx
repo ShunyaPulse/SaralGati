@@ -3,6 +3,7 @@ import React from 'react';
 import { AssistanceLog } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { alertDescription, alertTitle, isGeofenceExitAlert } from '@/lib/alerts';
 import { normalizeSeverity } from '@/lib/utils';
 
 export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loading: boolean }) {
@@ -64,10 +65,17 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
                   {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
                 </span>
               </div>
-              <p className="text-sm text-slate-600 mt-0.5 capitalize">
-                {alert.event_type.replace(/_/g, ' ')}
+              <p className="text-sm text-slate-600 mt-0.5">
+                {alertTitle(alert)}
               </p>
-              {alert.screen_name && (
+              {alertDescription(alert) && (
+                <p className="text-xs text-slate-500 mt-1 truncate">
+                  {alertDescription(alert)}
+                </p>
+              )}
+              {/* For a safe-zone exit `screen_name` is the fence label, which the
+                  title already shows, so only surface it for other alerts. */}
+              {alert.screen_name && !isGeofenceExitAlert(alert) && (
                 <p className="text-xs text-slate-500 mt-1 truncate">
                   Screen: {alert.screen_name}
                 </p>

@@ -54,6 +54,18 @@ export default function ElderDetailPage() {
     }
   }, [elderId, fetchAlerts]);
 
+  // This page is the caregiver's answer to "where is my parent right now", so the
+  // profile is re-read while it stays open. The heartbeat route drops the server
+  // side elders cache on every check-in, so this poll sees fresh coordinates and a
+  // fresh battery reading instead of the copy fetched on page load.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchElders();
+    }, 60_000);
+
+    return () => clearInterval(interval);
+  }, [fetchElders]);
+
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this elder profile? This action cannot be undone.')) {
       setIsDeleting(true);

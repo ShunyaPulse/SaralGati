@@ -3,7 +3,8 @@ async function triggerWorkflow(env) {
     "https://api.github.com/repos/ShunyaPulse/SaralGati/actions/workflows/self_learning_flywheel.yml/dispatches";
 
   console.log(
-    `Triggering GitHub Actions workflow at ${new Date().toISOString()}`,
+    "Triggering GitHub Actions workflow at",
+    new Date().toISOString(),
   );
 
   const response = await fetch(url, {
@@ -35,7 +36,9 @@ export default {
     const result = await triggerWorkflow(env);
     if (!result.ok) {
       console.error(
-        `Failed to trigger workflow. Status: ${result.status}`,
+        "Failed to trigger workflow. Status:",
+        result.status,
+        "Body:",
         result.body,
       );
     } else {

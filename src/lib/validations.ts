@@ -22,6 +22,16 @@ export const elderProfileSchema = z.object({
 });
 
 /**
+ * Body of PATCH /api/elders/[id]: the toggles a caregiver flips on their own,
+ * separately from the profile form. Kept apart from `elderProfileSchema` because
+ * that one is a full replace - a mute switch must not have to resend (and cannot
+ * be trusted to preserve) the elder's name, language and emergency contact.
+ */
+export const elderPreferencesSchema = z.object({
+  safe_zone_email_enabled: z.boolean(),
+});
+
+/**
  * Companion heartbeat. Coordinates are optional - the phone may not have the
  * location permission, may be indoors with the GPS off, or may be an older APK
  * that never sent them. Both halves must arrive together: a lone latitude is a

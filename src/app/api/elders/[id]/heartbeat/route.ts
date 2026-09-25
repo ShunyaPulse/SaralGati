@@ -4,7 +4,7 @@ import { invalidatePattern } from '@/lib/redis';
 
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { heartbeatSchema } from '@/lib/validations';
-import { safeZoneExitEmail } from '@/lib/alerts';
+import { safeZoneExitEmail, shouldEmailSafeZoneExit } from '@/lib/alerts';
 import { sendMail } from '@/lib/mailer';
 import {
   GEOFENCE_ALERT_COOLDOWN_MS,
@@ -22,6 +22,7 @@ interface ElderLocationRow {
   caregiver_id: string;
   elder_name: string;
   caregiver_email: string | null;
+  email_safe_zone_exits: boolean | null;
   last_lat: number | null;
   last_lng: number | null;
 }
@@ -53,21 +54,32 @@ interface FenceExitCheck {
   elderId: string;
   elderName: string;
   caregiverEmail: string | null;
+  /** The caregiver's mute switch for this elder; see migrations/009. */
+  emailEnabled: boolean;
   point: GeoPoint;
   previous: GeoPoint | null;
   fence: Geofence;
   accuracyMarginM: number;
 }
 
+interface FenceExitResult {
+  fence: Geofence;
+  /** True when the caregiver's mute switch allowed an email to be attempted. */
+  emailAttempted: boolean;
+  /** True when SMTP accepted the message. */
+  emailDelivered: boolean;
+}
+
 async function alertOnGeofenceExit({
   elderId,
   elderName,
   caregiverEmail,
+  emailEnabled,
   point,
   previous,
   fence,
   accuracyMarginM,
-}: FenceExitCheck): Promise<Geofence | null> {
+}: FenceExitCheck): Promise<FenceExitResult | null> {
   if (!isFenceExit(previous, point, fence, accuracyMarginM)) return null;
 
   // A phone drifting along the edge of a fence would otherwise notify the family
@@ -112,9 +124,14 @@ async function alertOnGeofenceExit({
   );
 
   // The alert row only helps a caregiver who opens the dashboard, so the family
-  // is emailed as well. Best-effort by design: the alert is already stored, and a
-  // mail failure must never fail the heartbeat that produced it.
-  if (caregiverEmail) {
+  // is emailed as well - unless this elder is muted. Best-effort by design: the
+  // alert is already stored, and a mail failure must never fail the heartbeat
+  // that produced it. Muting never suppresses the row above.
+  let emailAttempted = false;
+  let emailDelivered = false;
+
+  if (caregiverEmail && emailEnabled) {
+    emailAttempted = true;
     const message = safeZoneExitEmail({
       elderName,
       fence,
@@ -122,10 +139,10 @@ async function alertOnGeofenceExit({
       point,
       at: occurredAt,
     });
-    await sendMail({ to: caregiverEmail, ...message });
+    emailDelivered = await sendMail({ to: caregiverEmail, ...message });
   }
 
-  return fence;
+  return { fence, emailAttempted, emailDelivered };
 }
 
 export async function POST(
@@ -168,8 +185,14 @@ export async function POST(
 
     // The previous fix is read before the update so a fence crossing can be
     // detected. RETURNING would only give us the new coordinates.
+    // The email preference is read through `to_jsonb` on purpose: referencing the
+    // column directly would make every check-in fail with a 500 on a deployment
+    // that runs ahead of migrations/009, i.e. silence every elder's telemetry
+    // until someone runs the migration. COALESCE keeps the pre-migration default
+    // ("mail on") explicit rather than relying on a null.
     const previous = await queryOne<ElderLocationRow>(
       `SELECT ep.id, ep.caregiver_id, ep.elder_name, u.email AS caregiver_email,
+              COALESCE((to_jsonb(ep) ->> 'safe_zone_email_enabled')::boolean, true) AS email_safe_zone_exits,
               ep.last_lat, ep.last_lng
          FROM elder_profiles ep
          LEFT JOIN users u ON u.id = ep.caregiver_id
@@ -223,7 +246,7 @@ export async function POST(
     }
 
     // 3. Safe zones: alert the caregiver when the elder crosses an active fence.
-    let breachedFence: Geofence | null = null;
+    let breach: FenceExitResult | null = null;
     if (point) {
       // Fences are judged against the accuracy the phone reported for this fix: a
       // 200 m fix must travel further than the radius before a family is woken up,
@@ -231,22 +254,23 @@ export async function POST(
       const accuracyMarginM = fenceAccuracyMarginM(accuracy);
       const fences = await loadGeofences(elderId);
       for (const fence of fences) {
-        breachedFence = await alertOnGeofenceExit({
+        breach = await alertOnGeofenceExit({
           elderId,
           elderName: previous.elder_name,
           caregiverEmail: previous.caregiver_email,
+          emailEnabled: shouldEmailSafeZoneExit(previous.email_safe_zone_exits),
           point,
           previous: previousPoint,
           fence,
           accuracyMarginM,
         });
-        if (breachedFence) break;
+        if (breach) break;
       }
     }
 
     // 4. Invalidate Redis cache so caregiver dashboard shows "Online" immediately
     await invalidatePattern(`elders:${previous.caregiver_id}*`);
-    if (breachedFence) {
+    if (breach) {
       await invalidatePattern(`alerts:${previous.caregiver_id}*`);
     }
 
@@ -254,7 +278,12 @@ export async function POST(
       success: true,
       timestamp: new Date().toISOString(),
       location_tracked: point !== null,
-      safe_zone_exit: breachedFence?.label ?? null,
+      safe_zone_exit: breach?.fence.label ?? null,
+      // Reported separately: a muted elder and a misconfigured mail server look
+      // identical from the dashboard, and "no mail arrived" needs to be
+      // diagnosable from the device's own logs.
+      safe_zone_exit_emailed: breach?.emailAttempted ?? false,
+      safe_zone_exit_email_delivered: breach?.emailDelivered ?? false,
     });
   } catch (error) {
     console.error('Error processing heartbeat:', error);

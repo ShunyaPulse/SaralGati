@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { rateLimiter, getSubnet } from '@/lib/redis';
 import { cookies } from 'next/headers';
-import nodemailer from 'nodemailer';
+import { createMailer } from '@/lib/mailer';
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -62,30 +62,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid submission' }, { status: 400 });
     }
 
-    const port = Number(process.env.SMTP_PORT) || 465;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
     // Recipient for submissions: dedicated inbox if configured, else the sender mailbox.
     const adminEmail = process.env.CONTACT_TO_EMAIL || process.env.SMTP_FROM;
 
+    // One shared transport definition (see lib/mailer) so this route and the OTP
+    // mail cannot drift apart, and so it inherits the bounded timeouts.
+    const transporter = createMailer();
+
     // Fail loudly instead of reporting success for a message nobody will receive.
-    if (!smtpUser || !smtpPass || !adminEmail) {
+    if (!transporter || !adminEmail) {
       console.error('Contact form delivery is not configured (SMTP_USER / SMTP_PASS / CONTACT_TO_EMAIL).');
       return NextResponse.json(
         { error: 'Message delivery is not configured. Please email us directly.' },
         { status: 503 }
       );
     }
-
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port,
-      secure: port === 465,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass,
-      },
-    });
 
     // Visitors control every one of these fields, so never interpolate them raw.
     const escapeHtml = (value: string) =>

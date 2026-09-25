@@ -23,6 +23,11 @@ export interface ElderProfile {
   /** Derived pairing flag returned by the caregiver-facing elder endpoints. */
   is_paired?: boolean;
   last_heartbeat: Date | null;
+  /**
+   * Whether a safe-zone exit also emails the caregiver. The dashboard alert is
+   * recorded either way; see migrations/009.
+   */
+  safe_zone_email_enabled?: boolean;
   /** Last known fix reported with the heartbeat; see migrations/008. */
   last_lat: number | null;
   last_lng: number | null;

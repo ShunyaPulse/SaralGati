@@ -194,7 +194,11 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     print(f" Device Dependency : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 
-    flywheel_secret = auth_token or os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET") or "YOUR_FLYWHEEL_SECRET"
+    # No placeholder fallback: the server rejects unknown secrets, so running with
+    # a made-up default would only produce confusing 401s.
+    flywheel_secret = auth_token or os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET")
+    if not flywheel_secret:
+        raise SystemExit("FLYWHEEL_SECRET (or API_SECRET) must be set before running the flywheel.")
     headers = {
         "Content-Type": "application/json",
         "X-Flywheel-Secret": flywheel_secret,
@@ -340,7 +344,11 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
 
     # Check Training Flywheel Readiness
     try:
-        train_res = requests.get(urljoin(api_url, "/api/v1/agent/training-data?status=flywheel&limit=5"), timeout=15)
+        train_res = requests.get(
+            urljoin(api_url, "/api/v1/agent/training-data?status=flywheel&limit=5"),
+            headers=headers,
+            timeout=15,
+        )
         train_count = train_res.json().get("count", 0)
         print(f" Flywheel Verified Pool    : {train_count} verified samples ready in Neon DB.")
     except Exception:

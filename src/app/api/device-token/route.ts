@@ -49,13 +49,25 @@ export async function POST(request: Request) {
       console.error('Failed to cache device session in Redis:', redisErr);
     }
 
+    // Derive the API base URL from the request that generated the token, so a
+    // self-hosted or staging deployment never hands the phone a hardcoded URL
+    // pointing at some other environment.
+    const forwardedHost = request.headers.get('x-forwarded-host');
+    const host = forwardedHost || request.headers.get('host');
+    const proto = forwardedHost
+      ? (request.headers.get('x-forwarded-proto') || 'https')
+      : 'https';
+    const apiUrl = host
+      ? `${proto}://${host}`
+      : (process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || '');
+
     return NextResponse.json({ 
       success: true, 
       data: { 
         token: plainToken,
         elderId: elder.id,
         elderName: elder.elder_name,
-        apiUrl: process.env.NEXTAUTH_URL || 'https://saralgati-685823552970.asia-south1.run.app'
+        apiUrl
       } 
     });
   } catch (error) {

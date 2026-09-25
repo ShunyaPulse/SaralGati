@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { queryOne, transaction } from '@/lib/db';
-import { cacheDelete, invalidatePattern } from '@/lib/redis';
+import { cacheDelete, invalidatePattern, rateLimiter } from '@/lib/redis';
 import { syncHabitsSchema } from '@/lib/validations';
-
-// Basic rate limiting map (In production, use Redis for rate limiting)
-const rateLimits = new Map<string, { count: number, resetAt: number }>();
 
 export async function POST(request: Request) {
   try {
@@ -17,20 +14,13 @@ export async function POST(request: Request) {
 
     const { elderId, caregiverId } = authResult;
     
-    // Simple Rate Limiting: 60 req/min per device token (using elderId as proxy)
-    const now = Date.now();
-    const rateLimit = rateLimits.get(elderId) || { count: 0, resetAt: now + 60000 };
-    
-    if (now > rateLimit.resetAt) {
-      rateLimit.count = 1;
-      rateLimit.resetAt = now + 60000;
-    } else {
-      rateLimit.count++;
-      if (rateLimit.count > 60) {
-        return NextResponse.json({ success: false, error: 'Rate limit exceeded' }, { status: 429 });
-      }
+    // Rate limiting: 60 req/min per paired device. This runs in Redis because the
+    // in-memory Map it replaced was per-process, so it neither held across Cloud
+    // Run instances nor ever evicted an entry for a retired elder.
+    const rateLimit = await rateLimiter(`sync-habits:${elderId}`, 60, 60);
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Rate limit exceeded' }, { status: 429 });
     }
-    rateLimits.set(elderId, rateLimit);
 
     const body = await request.json();
     const validatedData = syncHabitsSchema.parse(body);

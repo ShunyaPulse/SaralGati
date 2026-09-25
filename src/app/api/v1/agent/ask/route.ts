@@ -9,7 +9,7 @@ import { evaluateMultiStepFlow } from "@/lib/flowEngine";
 import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
-import { validateDeviceToken } from "@/lib/agent-auth";
+import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
 import { rateLimiter } from "@/lib/redis";
 
 const askRequestSchema = z.object({
@@ -70,17 +70,7 @@ async function recordModelInteraction(params: {
 export async function POST(req: NextRequest) {
   try {
     // 1. Authenticate device session via Redis/DB or internal Flywheel secret FIRST
-    const flywheelSecret = req.headers.get("x-flywheel-secret");
-    const authHeader = req.headers.get("authorization");
-    const expectedSecret =
-      process.env.FLYWHEEL_SECRET ||
-      process.env.API_SECRET ||
-      "YOUR_FLYWHEEL_SECRET";
-
-    const isFlywheel = Boolean(
-      (flywheelSecret && flywheelSecret === expectedSecret) ||
-      (authHeader && authHeader === `Bearer ${expectedSecret}`),
-    );
+    const isFlywheel = isFlywheelRequest(req);
 
     const auth = isFlywheel
       ? { isAuthenticated: true, elderId: undefined }
@@ -121,9 +111,7 @@ export async function POST(req: NextRequest) {
     // 3. Apply strict AI processing rate limit (30 req/min per device/IP, 120 for flywheel)
     const rateLimitId = isFlywheel
       ? `ask:flywheel`
-      : auth.isAuthenticated
-        ? `ask:token:${auth.elderId}`
-        : `ask:ip:${req.headers.get("x-forwarded-for") || "anon"}`;
+      : `ask:device:${auth.elderId ?? req.headers.get("x-forwarded-for") ?? "anon"}`;
     const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 120 : 30, 60);
     if (!rateLimit.allowed) {
       return NextResponse.json(

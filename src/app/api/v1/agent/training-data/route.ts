@@ -1,20 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { pruneUITree } from "@/lib/uiPruner";
+import { isFlywheelRequest } from "@/lib/agent-auth";
 
 export async function GET(req: NextRequest) {
   try {
+    // This route exports raw elder questions, on-screen text and tapped targets.
+    // It was reachable by anyone who knew the URL, so restrict it to the
+    // internal flywheel jobs (GitHub Actions / Kaggle) that hold the secret.
+    if (!isFlywheelRequest(req)) {
+      return NextResponse.json(
+        { success: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || searchParams.get("mode") || "sft"; // 'sft' or 'dpo'
     const status = searchParams.get("status") || "verified";
     const includeCorrections =
       searchParams.get("include_corrections") === "true" ||
       status === "flywheel";
-    const limit = Math.min(
-      parseInt(searchParams.get("limit") || "500", 10),
-      10000,
-    );
-    const format = searchParams.get("format") || "json";
+    // `parseInt` on a non-numeric limit returns NaN, which still reached the
+    // query as LIMIT $n and made a malformed query string a 500.
+    const requestedLimit = Number.parseInt(searchParams.get("limit") || "", 10);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 10000)
+      : 500;
+    const format = (searchParams.get("format") || "json").toLowerCase();
 
     // === MODE 1: DPO (Direct Preference Optimization) Pipeline ===
     if (type === "dpo") {

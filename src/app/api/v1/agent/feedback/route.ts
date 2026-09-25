@@ -1,37 +1,65 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { queryOne } from '@/lib/db';
-import redis, { cacheSet } from '@/lib/redis';
+import redis, { cacheSet, rateLimiter } from '@/lib/redis';
+import { isFlywheelRequest, validateDeviceToken } from '@/lib/agent-auth';
 
-interface FeedbackPayload {
-  interaction_id: string;
-  feedback: 'tapped_highlight' | 'tapped_other' | 'timeout' | 'disliked';
-  actual_tapped_index?: number | null;
-}
+/**
+ * Feedback drives the self-learning cache: a verified answer is promoted to a
+ * 30-day "golden" entry that is then served to every elder on that screen. The
+ * route used to accept anything from anyone, so a single anonymous request
+ * could confirm or evict any interaction id and poison what elders get told to
+ * tap. It now requires the same trust as the other agent routes.
+ */
+const feedbackSchema = z.object({
+  interaction_id: z.string().uuid('interaction_id must be a UUID'),
+  feedback: z.enum(['tapped_highlight', 'tapped_other', 'timeout', 'disliked']),
+  actual_tapped_index: z.number().int().min(0).max(500).nullish(),
+});
+
+const STATUS_BY_FEEDBACK = {
+  tapped_highlight: 'verified',
+  tapped_other: 'rejected',
+  disliked: 'rejected',
+  timeout: 'timeout',
+} as const;
 
 export async function POST(req: NextRequest) {
   try {
-    const body: FeedbackPayload = await req.json();
-    const { interaction_id, feedback, actual_tapped_index } = body;
+    const isFlywheel = isFlywheelRequest(req);
+    const auth = isFlywheel ? null : await validateDeviceToken(req);
+    const elderId = auth?.elderId ?? null;
 
-    if (!interaction_id || !feedback) {
-      return NextResponse.json({ success: false, error: 'Missing interaction_id or feedback' }, { status: 400 });
+    if (!isFlywheel && !auth?.isAuthenticated) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
-    const statusMapping: Record<string, string> = {
-      tapped_highlight: 'verified',
-      tapped_other: 'rejected',
-      disliked: 'rejected',
-      timeout: 'timeout',
-    };
+    // A flywheel session posts a correction per simulated screen (~110), so give
+    // it more headroom than a single paired device.
+    const rateLimit = await rateLimiter(
+      isFlywheel ? 'feedback:flywheel' : `feedback:device:${elderId}`,
+      isFlywheel ? 240 : 60,
+      60,
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json({ success: false, error: 'Rate limit exceeded' }, { status: 429 });
+    }
 
-    const newStatus = statusMapping[feedback] || 'pending';
+    const parsed = feedbackSchema.safeParse(await req.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid payload', details: parsed.error.issues },
+        { status: 400 },
+      );
+    }
 
-    const sanitizedIndex = (typeof actual_tapped_index === 'number' && Number.isInteger(actual_tapped_index) && actual_tapped_index >= 0 && actual_tapped_index <= 500)
-      ? actual_tapped_index
-      : null;
+    const { interaction_id, feedback, actual_tapped_index } = parsed.data;
+    const newStatus = STATUS_BY_FEEDBACK[feedback];
+    const sanitizedIndex = actual_tapped_index ?? null;
 
-    // 1. Update the interaction record in PostgreSQL
+    // 1. Update the interaction record in PostgreSQL. A paired device may only
+    // touch its own elder's interactions; the flywheel is intentionally unscoped.
     const updatedRow = await queryOne<{
       id: string;
       app_package: string;
@@ -51,9 +79,9 @@ export async function POST(req: NextRequest) {
                ELSE explanation
            END,
            updated_at = NOW()
-       WHERE id = $3
+       WHERE id = $3 AND ($4::uuid IS NULL OR elder_id = $4::uuid)
        RETURNING id, app_package, screen_hash, question, suggested_index, explanation`,
-      [newStatus, sanitizedIndex, interaction_id]
+      [newStatus, sanitizedIndex, interaction_id, elderId]
     );
 
     if (!updatedRow) {

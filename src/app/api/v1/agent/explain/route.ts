@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateAIResponse } from "@/lib/aiFallback";
-import { validateDeviceToken } from "@/lib/agent-auth";
+import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import { rateLimiter } from "@/lib/redis";
 
 const explainRequestSchema = z.object({
   app_package: z
@@ -15,22 +16,12 @@ const explainRequestSchema = z.object({
 export async function POST(req: NextRequest) {
   try {
     // 1. Authenticate first
-    const flywheelSecret = req.headers.get("x-flywheel-secret");
-    const authHeader = req.headers.get("authorization");
-    const expectedSecret =
-      process.env.FLYWHEEL_SECRET ||
-      process.env.API_SECRET ||
-      "YOUR_FLYWHEEL_SECRET";
-
-    const isFlywheel = Boolean(
-      (flywheelSecret && flywheelSecret === expectedSecret) ||
-      (authHeader && authHeader === `Bearer ${expectedSecret}`),
-    );
+    const isFlywheel = isFlywheelRequest(req);
 
     const auth = isFlywheel
-      ? { isAuthenticated: true }
+      ? { isAuthenticated: true, elderId: undefined }
       : await validateDeviceToken(req);
-    if (!isFlywheel && !auth.isAuthenticated) {
+    if (!auth.isAuthenticated) {
       return NextResponse.json({
         success: true,
         data: {
@@ -42,7 +33,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 2. Validate payload with Zod
+    // 2. Rate limit: screen explanations are never cached, so without this a
+    // single paired device could spend the whole AI budget in a minute.
+    const rateLimitId = isFlywheel
+      ? "explain:flywheel"
+      : `explain:device:${auth.elderId ?? req.headers.get("x-forwarded-for") ?? "anon"}`;
+    const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 120 : 20, 60);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { success: false, error: "Too many requests. Please wait a moment." },
+        { status: 429 },
+      );
+    }
+
+    // 3. Validate payload with Zod
     const rawBody = await req.json();
     const parseResult = explainRequestSchema.safeParse(rawBody);
 

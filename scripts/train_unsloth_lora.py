@@ -17,14 +17,18 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 SARALGATI_API_URL = os.environ.get("SARALGATI_API_URL", "https://saralgati-685823552970.asia-south1.run.app")
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+# Shared secret for the internal training-data export. There is deliberately no
+# placeholder fallback: a default value here would be public in this repository.
+FLYWHEEL_SECRET = os.environ.get("FLYWHEEL_SECRET") or os.environ.get("API_SECRET")
 
 # Fallback to Kaggle UserSecrets if running inside Kaggle
-if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
+if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
     try:
         from kaggle_secrets import UserSecretsClient
         secrets = UserSecretsClient()
         CLOUDFLARE_ACCOUNT_ID = CLOUDFLARE_ACCOUNT_ID or secrets.get_secret("CLOUDFLARE_ACCOUNT_ID")
         CLOUDFLARE_API_TOKEN = CLOUDFLARE_API_TOKEN or secrets.get_secret("CLOUDFLARE_API_TOKEN")
+        FLYWHEEL_SECRET = FLYWHEEL_SECRET or secrets.get_secret("FLYWHEEL_SECRET")
     except Exception:
         # Fallback gracefully if running outside Kaggle environment
         pass
@@ -35,7 +39,9 @@ def fetch_live_dataset():
     url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
     print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
     try:
-        res = requests.get(url, timeout=30)
+        if not FLYWHEEL_SECRET:
+            raise RuntimeError("FLYWHEEL_SECRET / API_SECRET is not available in this environment")
+        res = requests.get(url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
         res.raise_for_status()
         content = res.text.strip()
         lines = [l for l in content.split("\n") if l.strip()]

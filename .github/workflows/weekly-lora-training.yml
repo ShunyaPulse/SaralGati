@@ -28,10 +28,17 @@ jobs:
         id: check_data
         env:
           INPUT_FORCE_TRAIN: ${{ inputs.force_train || 'false' }}
+          FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
+          API_URL: "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=10000"
         run: |
-          API_URL="https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=10000"
+          if [ -z "$FLYWHEEL_SECRET" ]; then
+            echo "::error::FLYWHEEL_SECRET is not configured; the training-data export requires it."
+            exit 1
+          fi
+
           echo "Fetching verified interactions from: $API_URL"
-          COUNT=$(python -c "import urllib.request, json; res = json.loads(urllib.request.urlopen('$API_URL', timeout=15).read()); print(res.get('count', 0))" 2>/dev/null || echo "0")
+          BODY=$(curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" "$API_URL")
+          COUNT=$(printf '%s' "$BODY" | python -c "import json,sys; print(json.load(sys.stdin).get('count', 0))" 2>/dev/null || echo "0")
           echo "Found $COUNT verified elder interactions in database."
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
 
@@ -46,8 +53,14 @@ jobs:
 
       - name: Download Training Dataset
         if: steps.check_data.outputs.should_train == 'true'
+        env:
+          FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
         run: |
-          curl -s "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" -o dataset.jsonl
+          # -f so an auth failure aborts instead of saving the error body as a
+          # dataset that then gets uploaded as a training artifact.
+          curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" \
+            -o dataset.jsonl
           echo "Downloaded $(wc -l < dataset.jsonl) rows to dataset.jsonl"
 
       - name: Upload Dataset Artifact

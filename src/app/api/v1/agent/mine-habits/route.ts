@@ -1,19 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { generateAIResponse } from "@/lib/aiFallback";
+import { isFlywheelRequest } from "@/lib/agent-auth";
+
+/** Mirrors the CHECK constraint on habit_rules.rule_type - the model is free to
+ * invent other labels, and an unchecked insert would fail the whole write. */
+const ALLOWED_RULE_TYPES = new Set([
+  "frequent_contact",
+  "app_trigger",
+  "time_routine",
+  "location_trigger",
+]);
 
 export async function POST(req: NextRequest) {
   try {
-    const authHeader = req.headers.get("authorization");
-    const expectedSecret =
-      process.env.FLYWHEEL_SECRET ||
-      process.env.API_SECRET ||
-      "YOUR_FLYWHEEL_SECRET";
-
-    if (
-      authHeader !== `Bearer ${expectedSecret}` &&
-      req.headers.get("x-flywheel-secret") !== expectedSecret
-    ) {
+    if (!isFlywheelRequest(req)) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
@@ -78,10 +79,23 @@ Return a strict JSON array of objects with keys: rule_type (string), rule_payloa
         if (Array.isArray(extracted) && extracted.length > 0) {
           // 4. Save to habit_rules
           for (const habit of extracted) {
-            await query(
+            // habit_rules has no unique constraint, so `ON CONFLICT DO NOTHING`
+            // never fired and every flywheel run appended the same mined habit
+            // again - those duplicates then all got injected into the prompt.
+            // Guard the insert explicitly instead of relying on a constraint.
+            if (!ALLOWED_RULE_TYPES.has(habit?.rule_type)) continue;
+            if (!habit.rule_payload || typeof habit.rule_payload !== "object") {
+              continue;
+            }
+
+            const inserted = await query<{ id: string }>(
               `INSERT INTO habit_rules (elder_id, rule_type, rule_payload, confidence, updated_at)
-               VALUES ($1, $2, $3, $4, NOW())
-               ON CONFLICT DO NOTHING`, // Note: habit_rules might not have unique constraint, let's just insert
+               SELECT $1, $2, $3::jsonb, $4, NOW()
+               WHERE NOT EXISTS (
+                 SELECT 1 FROM habit_rules
+                 WHERE elder_id = $1 AND rule_type = $2 AND rule_payload = $3::jsonb
+               )
+               RETURNING id`,
               [
                 elder_id,
                 habit.rule_type,
@@ -89,7 +103,7 @@ Return a strict JSON array of objects with keys: rule_type (string), rule_payloa
                 0.8,
               ],
             );
-            habitsCreated++;
+            if (inserted.length > 0) habitsCreated++;
           }
         }
       } catch (err) {

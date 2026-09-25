@@ -61,9 +61,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: 'Elder not found' }, { status: 404 });
     }
 
-    // Fetch active habits
+    // Fetch active habits. Habit rules are deactivated rather than deleted when
+    // a caregiver disables one, so without this filter the elder's phone kept
+    // suggesting shortcuts the caregiver had switched off.
     const habits = await query<HabitRule>(
-      `SELECT * FROM habit_rules WHERE elder_id = $1`,
+      `SELECT * FROM habit_rules WHERE elder_id = $1 AND is_active = true ORDER BY created_at DESC`,
       [elderId]
     );
 

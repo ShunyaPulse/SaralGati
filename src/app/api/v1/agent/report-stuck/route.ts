@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('Error reporting stuck loop:', error);
     if (error.name === 'ZodError') {
-      return NextResponse.json({ success: false, error: 'Validation Error', details: error.errors }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Validation Error', details: error.issues }, { status: 400 });
     }
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }

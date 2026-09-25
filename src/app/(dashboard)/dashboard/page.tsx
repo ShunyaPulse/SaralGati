@@ -22,7 +22,22 @@ export default function DashboardPage() {
     fetchAlerts();
   }, [fetchElders, fetchAlerts]);
 
-  if (!isMounted) return null;
+  if (!isMounted) {
+    return (
+      <div className="space-y-6" aria-busy="true" aria-label="Loading dashboard">
+        <div className="h-9 w-72 max-w-full animate-pulse rounded-lg bg-slate-200" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-28 animate-pulse rounded-xl border border-slate-200 bg-white" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white lg:col-span-2" />
+          <div className="h-80 animate-pulse rounded-xl border border-slate-200 bg-white" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

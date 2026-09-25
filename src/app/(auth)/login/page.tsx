@@ -1,19 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { signIn } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
+import { safeRedirectPath } from '@/lib/utils';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { status: sessionStatus } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [redirectTo, setRedirectTo] = useState('/dashboard');
 
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
@@ -25,6 +28,20 @@ export default function LoginPage() {
     process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY ||
     ''
   );
+
+  // Resolve where the caregiver was headed before being bounced here.
+  // Read from the URL directly so this page needs no Suspense boundary.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setRedirectTo(safeRedirectPath(params.get('callbackUrl') || params.get('returnTo')));
+  }, []);
+
+  // Already signed in? Skip the form entirely.
+  useEffect(() => {
+    if (sessionStatus === 'authenticated') {
+      router.replace(redirectTo);
+    }
+  }, [sessionStatus, redirectTo, router]);
 
   useEffect(() => {
     fetch('/api/auth/turnstile-config')
@@ -89,7 +106,8 @@ export default function LoginPage() {
       if (res?.error) {
         setError(res.error || 'Invalid credentials');
       } else {
-        router.push('/dashboard');
+        router.push(redirectTo);
+        router.refresh();
       }
     } catch (err) {
       setError('An error occurred. Please try again.');
@@ -99,11 +117,11 @@ export default function LoginPage() {
   };
 
   const handleGoogleSignIn = () => {
-    signIn('google', { callbackUrl: '/dashboard' });
+    signIn('google', { callbackUrl: redirectTo });
   };
 
   return (
-    <div className="min-h-screen bg-orange-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center">
         <Link href="/" className="mb-4">
           <Image src="/icon.png" alt="SaralGati" width={56} height={56} className="h-14 w-14 object-contain" priority />
@@ -113,14 +131,14 @@ export default function LoginPage() {
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Or{' '}
-          <Link href="/register" className="font-medium text-orange-600 hover:text-orange-500">
+          <Link href="/register" className="font-medium text-[#0074c8] hover:text-blue-800">
             create a new account
           </Link>
         </p>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-xl sm:rounded-lg sm:px-10 border border-orange-100">
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
+        <div className="bg-white py-8 px-6 shadow-xl sm:rounded-2xl sm:px-10 border border-slate-200">
           <form className="space-y-6" onSubmit={isOtpMode && !otpSent ? handleSendOtp : handleSubmit}>
             {/* Honeypot trap — invisible to humans, auto-filled by bots */}
             <div className="absolute" style={{ left: '-9999px', position: 'absolute' }} aria-hidden="true">
@@ -151,7 +169,7 @@ export default function LoginPage() {
                   disabled={otpSent}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg disabled:opacity-50"
+                  className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg disabled:opacity-50"
                   placeholder="you@example.com"
                 />
               </div>
@@ -174,7 +192,7 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg"
+                    className="block w-full pl-10 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg"
                     placeholder="••••••••"
                   />
                 </div>
@@ -194,7 +212,7 @@ export default function LoginPage() {
                     required
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
-                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500 py-3 border text-lg text-center tracking-widest"
+                    className="block w-full px-3 sm:text-sm border-gray-300 rounded-md focus:ring-[#0074c8] focus:border-[#0074c8] py-3 border text-lg text-center tracking-widest"
                     placeholder="123456"
                     maxLength={6}
                   />
@@ -215,7 +233,7 @@ export default function LoginPage() {
                     setError('');
                     setTurnstileToken('');
                   }}
-                  className="font-medium text-orange-600 hover:text-orange-500"
+                  className="font-medium text-[#0074c8] hover:text-blue-800"
                 >
                   {isOtpMode ? 'Sign in with Password instead' : 'Sign in with Email OTP Code instead'}
                 </button>
@@ -243,7 +261,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 transition-colors"
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-[#0074c8] hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0074c8] disabled:opacity-50 transition-colors"
               >
                 {loading
                   ? (isOtpMode && !otpSent ? 'Sending OTP...' : 'Signing in...')
@@ -266,7 +284,7 @@ export default function LoginPage() {
               <button
                 onClick={handleGoogleSignIn}
                 type="button"
-                className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors"
+                className="w-full flex justify-center items-center py-3 px-4 border border-gray-300 rounded-md shadow-sm bg-white text-lg font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0074c8] transition-colors"
               >
                 <svg className="h-6 w-6 mr-2" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>

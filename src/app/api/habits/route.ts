@@ -93,7 +93,7 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<H
   } catch (error: any) {
     console.error('Error creating habit:', error);
     if (error.name === 'ZodError') {
-      return NextResponse.json({ success: false, error: 'Validation Error', details: error.errors }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Validation Error', details: error.issues }, { status: 400 });
     }
     return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }

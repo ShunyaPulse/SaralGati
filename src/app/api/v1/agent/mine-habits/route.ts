@@ -79,22 +79,20 @@ Return a strict JSON array of objects with keys: rule_type (string), rule_payloa
         if (Array.isArray(extracted) && extracted.length > 0) {
           // 4. Save to habit_rules
           for (const habit of extracted) {
-            // habit_rules has no unique constraint, so `ON CONFLICT DO NOTHING`
-            // never fired and every flywheel run appended the same mined habit
-            // again - those duplicates then all got injected into the prompt.
-            // Guard the insert explicitly instead of relying on a constraint.
             if (!ALLOWED_RULE_TYPES.has(habit?.rule_type)) continue;
             if (!habit.rule_payload || typeof habit.rule_payload !== "object") {
               continue;
             }
 
+            // migrations/007 added the unique index on
+            // (elder_id, rule_type, rule_payload), so ON CONFLICT now actually
+            // fires and a repeat flywheel run can no longer append the same
+            // mined habit again. No conflict target is given so the insert keeps
+            // working on a database that has not run 007 yet.
             const inserted = await query<{ id: string }>(
               `INSERT INTO habit_rules (elder_id, rule_type, rule_payload, confidence, updated_at)
-               SELECT $1, $2, $3::jsonb, $4, NOW()
-               WHERE NOT EXISTS (
-                 SELECT 1 FROM habit_rules
-                 WHERE elder_id = $1 AND rule_type = $2 AND rule_payload = $3::jsonb
-               )
+               VALUES ($1, $2, $3::jsonb, $4, NOW())
+               ON CONFLICT DO NOTHING
                RETURNING id`,
               [
                 elder_id,

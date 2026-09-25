@@ -37,17 +37,23 @@ export async function POST(request: Request) {
         
         // We will just store the entire payload in the rule_payload JSONB field
         // with a default confidence
-        await client.query(`
+        // A phone payload can repeat the same habit; the unique index added in
+        // migrations/007 would otherwise abort the whole transaction (and with
+        // it the battery/heartbeat update below). Skip the repeat instead and
+        // only count rows that were really written.
+        const inserted = await client.query(`
           INSERT INTO habit_rules (
             elder_id, rule_type, rule_payload, confidence, updated_at
           ) VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT DO NOTHING
+          RETURNING id
         `, [
           elderId,
           ruleType,
           habit.payload ? JSON.stringify(habit.payload) : '{}',
           0.8 // default confidence
         ]);
-        syncedCount++;
+        syncedCount += inserted.rowCount ?? 0;
       }
     });
 

@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect } from 'react';
 import { useHabitStore } from '@/stores/habit-store';
+import { parseGeofence } from '@/lib/geo';
 import { HabitRule } from '@/types';
 
 /** The stored enum values are not meant to be read by a caregiver. */
@@ -27,24 +28,34 @@ export function HabitRulesList({ elderId }: { elderId: string }) {
 
   return (
     <div className="space-y-3">
-      {rules.map((rule) => (
-        <div key={rule.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
-          <div>
-            <p className="text-sm font-medium text-gray-900">{ruleTypeLabel(rule.rule_type)}</p>
-            <p className="text-xs text-gray-500">Confidence: {Math.round(rule.confidence * 100)}%</p>
+      {rules.map((rule) => {
+        // A safe zone is also a habit rule, but "Location trigger / Confidence
+        // 100%" tells the caregiver nothing about the zone they are relying on.
+        const zone = rule.rule_type === 'location_trigger' ? parseGeofence(rule.rule_payload) : null;
+
+        return (
+          <div key={rule.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {zone ? `Safe zone: ${zone.label}` : ruleTypeLabel(rule.rule_type)}
+              </p>
+              <p className="text-xs text-gray-500">
+                {zone ? `${zone.radius_m} m radius` : `Confidence: ${Math.round(rule.confidence * 100)}%`}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => toggleRule(rule.id)}
+              // Conveys the on/off state to assistive tech; the colour and the word
+              // alone do not tell a screen reader this is a toggle.
+              aria-pressed={rule.is_active}
+              className={`px-3 py-1 text-xs rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}
+            >
+              {rule.is_active ? 'Active' : 'Inactive'}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => toggleRule(rule.id)}
-            // Conveys the on/off state to assistive tech; the colour and the word
-            // alone do not tell a screen reader this is a toggle.
-            aria-pressed={rule.is_active}
-            className={`px-3 py-1 text-xs rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}
-          >
-            {rule.is_active ? 'Active' : 'Inactive'}
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

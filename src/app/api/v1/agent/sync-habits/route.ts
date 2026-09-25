@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { validateDeviceToken } from '@/lib/agent-auth';
 import { queryOne, transaction } from '@/lib/db';
 import { cacheDelete, invalidatePattern, rateLimiter } from '@/lib/redis';
+import { planSyncedHabits } from '@/lib/habits';
 import { syncHabitsSchema } from '@/lib/validations';
 
 export async function POST(request: Request) {
@@ -25,13 +26,33 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = syncHabitsSchema.parse(body);
 
+    // The companion app reports habit kinds beyond the four the schema stores
+    // (`device_preference`). Those rows used to abort the insert, which rolled the
+    // transaction back and returned a 500 the phone could only log - losing the
+    // battery telemetry that follows it. Keep what can be stored and tell the
+    // device what was skipped instead of failing the whole sync.
+    //
+    // `ownedRuleTypes` is what makes the DELETE below safe: it lifts only the rule
+    // types the device actually sends. Clearing every rule for the elder - what
+    // this route did before - deleted the caregiver's safe zone (a
+    // `location_trigger` row created in the dashboard) on the next check-in,
+    // silently switching off the geofence protection they had just set up.
+    const { storable: storableHabits, ownedRuleTypes, skippedRuleTypes } = planSyncedHabits(
+      validatedData.habits
+    );
+
     // Process habits
     let syncedCount = 0;
     
     await transaction(async (client) => {
       // Clear old habits before syncing to prevent duplicate explosion
-      await client.query('DELETE FROM habit_rules WHERE elder_id = $1', [elderId]);
-      for (const habit of validatedData.habits) {
+      if (ownedRuleTypes.length > 0) {
+        await client.query(
+          'DELETE FROM habit_rules WHERE elder_id = $1 AND rule_type = ANY($2::text[])',
+          [elderId, ownedRuleTypes]
+        );
+      }
+      for (const habit of storableHabits) {
         // Extract generic habit type
         const ruleType = habit.type;
         
@@ -68,7 +89,12 @@ export async function POST(request: Request) {
     await cacheDelete(`agent-config:${elderId}`);
     await invalidatePattern(`elders:${caregiverId}*`);
 
-    return NextResponse.json({ success: true, synced: syncedCount });
+    return NextResponse.json({
+      success: true,
+      synced: syncedCount,
+      // Named so the companion can stop sending the same unusable type for ever.
+      ...(skippedRuleTypes.length > 0 ? { skipped_rule_types: skippedRuleTypes } : {}),
+    });
   } catch (error: any) {
     console.error('Error syncing habits:', error);
     if (error.name === 'ZodError') {

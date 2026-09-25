@@ -65,6 +65,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 
 - **Zero-Friction QR Pairing**: Caregivers pair an elder's phone in seconds by scanning a secure pairing QR code from the dashboard.
 - **Live Device Telemetry**: Shows real-time battery percentage, charging state, companion service heartbeat, and app version.
+- **Live Location & Safe Zones**: The companion reports its last known fix with every heartbeat, so the dashboard shows where the elder is, how accurate that fix was, and how old it is. The caregiver can draw a safe-zone circle around home and gets an alert the moment the elder leaves it — with a one-tap map link to where it happened.
 - **Frequent Contact & Habit Insights**: Aggregates frequent contacts (e.g., _"Doctor Sharma"_, _"Ramesh Bhaiya"_) so the companion understands family context without personal data leaks.
 
 ### 6. Strict Privacy-First Commitment
@@ -72,6 +73,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 - ❌ **NO Screenshots Taken**: SaralGati never captures screenshots or screen recordings.
 - ❌ **NO Personal Chats Read**: Personal message bodies, photo galleries, and payment PINs are completely inaccessible.
 - ✅ **Accessibility Tree Only**: The app only reads interactive UI element roles (e.g., `[BUTTON] Send`, `[INPUT] Search`) solely to calculate coordinate targets.
+- ✅ **Location With Consent**: Only the *last known* position is stored — never a movement history — and only the caregiver who paired the phone can read it. Fixes are read passively at heartbeat time, so the companion never holds a location wake lock on the elder's phone.
 
 ---
 

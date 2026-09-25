@@ -15,6 +15,23 @@ export const MIN_GEOFENCE_RADIUS_M = 50;
 export const MAX_GEOFENCE_RADIUS_M = 20_000;
 export const DEFAULT_GEOFENCE_RADIUS_M = 500;
 
+/**
+ * `habit_rules` writers put the fence name in `assistance_logs.screen_name`
+ * (VARCHAR(255)) when the elder walks out, so an unbounded label from a mined
+ * payload would make the alert insert fail and the caregiver would never hear
+ * about the exit. The dashboard editor caps input at the same length.
+ */
+export const MAX_GEOFENCE_LABEL_LEN = 60;
+
+/**
+ * A GPS fix is a circle, not a point: fixes reported from indoors routinely
+ * carry 50-200 m of error. Without a margin, a fence alerted the family every
+ * few minutes while the elder sat at home, which is exactly how families learn
+ * to ignore an alert. The margin is the accuracy the phone reported, capped so a
+ * single bad fix can never more than double the distance that counts as an exit.
+ */
+export const MAX_FENCE_ACCURACY_MARGIN_M = 250;
+
 /** Repeats of the same "left the safe zone" alert are suppressed for this long. */
 export const GEOFENCE_ALERT_COOLDOWN_MS = 30 * 60 * 1000;
 
@@ -85,7 +102,17 @@ export function parseGeofence(payload: unknown): Geofence | null {
 
   const rawLabel = typeof record.label === 'string' ? record.label.trim() : '';
 
-  return { ...center, radius_m, label: rawLabel || 'Safe zone' };
+  return {
+    ...center,
+    radius_m,
+    label: rawLabel ? rawLabel.slice(0, MAX_GEOFENCE_LABEL_LEN) : 'Safe zone',
+  };
+}
+
+/** Reported accuracy in metres, clamped to a sane debounce margin. */
+export function fenceAccuracyMarginM(accuracyM: number | null | undefined): number {
+  if (typeof accuracyM !== 'number' || !Number.isFinite(accuracyM) || accuracyM <= 0) return 0;
+  return Math.min(Math.round(accuracyM), MAX_FENCE_ACCURACY_MARGIN_M);
 }
 
 /** Distance in metres from a point to the centre of a fence, rounded. */
@@ -93,8 +120,15 @@ export function distanceToFenceCenterM(point: GeoPoint, fence: Geofence): number
   return Math.round(haversineMeters(point, fence));
 }
 
-export function isOutsideGeofence(point: GeoPoint, fence: Geofence): boolean {
-  return haversineMeters(point, fence) > fence.radius_m;
+/**
+ * Whether a fix sits outside the fence. `marginM` widens the fence by the fix's
+ * own accuracy (never by more than its radius), so borderline noise does not
+ * count as leaving.
+ */
+export function isOutsideGeofence(point: GeoPoint, fence: Geofence, marginM = 0): boolean {
+  const margin =
+    Number.isFinite(marginM) && marginM > 0 ? Math.min(marginM, fence.radius_m) : 0;
+  return haversineMeters(point, fence) > fence.radius_m + margin;
 }
 
 /**
@@ -103,10 +137,20 @@ export function isOutsideGeofence(point: GeoPoint, fence: Geofence): boolean {
  * `previous` must exist and be inside: without that, saving a fence while the
  * elder is already away would fire an alert the moment the caregiver created it,
  * and a phone left outside would alert on every single heartbeat.
+ *
+ * The accuracy margin is applied to the outgoing fix only. Requiring the *previous*
+ * fix to be far inside as well would suppress genuine exits that start near the
+ * edge, and the cost of that mistake - a missed wander - is far worse than one
+ * extra alert.
  */
-export function isFenceExit(previous: GeoPoint | null, next: GeoPoint, fence: Geofence): boolean {
+export function isFenceExit(
+  previous: GeoPoint | null,
+  next: GeoPoint,
+  fence: Geofence,
+  marginM = 0
+): boolean {
   if (!previous) return false;
-  return !isOutsideGeofence(previous, fence) && isOutsideGeofence(next, fence);
+  return !isOutsideGeofence(previous, fence) && isOutsideGeofence(next, fence, marginM);
 }
 
 /**

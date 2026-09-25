@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_GEOFENCE_RADIUS_M,
   LOCATION_STALE_MS,
+  MAX_FENCE_ACCURACY_MARGIN_M,
+  MAX_GEOFENCE_LABEL_LEN,
   MAX_GEOFENCE_RADIUS_M,
   MIN_GEOFENCE_RADIUS_M,
   asCoordinate,
+  fenceAccuracyMarginM,
   distanceToFenceCenterM,
   haversineMeters,
   isFenceExit,
@@ -97,6 +100,51 @@ test('parseGeofence clamps silly radii and ignores unusable payloads', () => {
   assert.equal(parseGeofence({}), null);
   assert.equal(parseGeofence({ lat: 999, lng: 2 }), null);
   assert.equal(parseGeofence({ lat: 1, lng: 181 }), null);
+});
+
+test('an over-long fence label is truncated so the alert insert cannot fail', () => {
+  // The label is copied into assistance_logs.screen_name on every exit; an
+  // unbounded mined label would make that insert (VARCHAR(255)) throw and the
+  // caregiver would never be told about the exit at all.
+  const parsed = parseGeofence({ lat: 1, lng: 2, label: 'G'.repeat(400) });
+  assert.equal(parsed?.label.length, MAX_GEOFENCE_LABEL_LEN);
+  assert.equal(parseGeofence({ lat: 1, lng: 2, label: 'Ghar' })?.label, 'Ghar');
+});
+
+test('fenceAccuracyMarginM caps the debounce and rejects junk', () => {
+  assert.equal(fenceAccuracyMarginM(35.4), 35);
+  assert.equal(fenceAccuracyMarginM(0), 0, 'an exact fix gets no margin');
+  assert.equal(fenceAccuracyMarginM(-5), 0);
+  assert.equal(fenceAccuracyMarginM(null), 0);
+  assert.equal(fenceAccuracyMarginM(undefined), 0);
+  assert.equal(fenceAccuracyMarginM(NaN), 0);
+  assert.equal(fenceAccuracyMarginM(Infinity), 0);
+  assert.equal(fenceAccuracyMarginM(10_000), MAX_FENCE_ACCURACY_MARGIN_M);
+});
+
+test('the accuracy margin debounces a fix sitting on the fence edge', () => {
+  const fence = { ...DELHI, radius_m: 1000, label: 'Ghar' };
+  // ~1050 m north of the centre: outside the 1000 m circle, inside its noise band.
+  const justOutside = { latitude: DELHI.latitude + 0.00945, longitude: DELHI.longitude };
+  const distance = haversineMeters(justOutside, DELHI);
+  assert.ok(distance > 1000 && distance < 1100, `expected ~1050 m, got ${distance}`);
+
+  assert.equal(isOutsideGeofence(justOutside, fence), true);
+  assert.equal(isOutsideGeofence(justOutside, fence, fenceAccuracyMarginM(120)), false);
+  assert.equal(isFenceExit(DELHI, justOutside, fence, fenceAccuracyMarginM(120)), false, 'noise is not an exit');
+  assert.equal(isFenceExit(DELHI, justOutside, fence, fenceAccuracyMarginM(5)), true, 'a precise fix is believed');
+  assert.equal(isFenceExit(DELHI, NOIDA, fence, fenceAccuracyMarginM(120)), true, 'a real walk out still fires');
+});
+
+test('the margin can never more than double the exit distance', () => {
+  const smallFence = { ...DELHI, radius_m: MIN_GEOFENCE_RADIUS_M, label: 'Gate' };
+  // ~80 m out: outside a 50 m fence, inside the 100 m one the margin may reach.
+  const nearPoint = { latitude: DELHI.latitude + 0.00072, longitude: DELHI.longitude };
+  const distance = haversineMeters(nearPoint, DELHI);
+  assert.ok(distance > 50 && distance < 100, `expected 50-100 m, got ${distance}`);
+  assert.equal(isOutsideGeofence(nearPoint, smallFence, fenceAccuracyMarginM(250)), false);
+  // A garbage margin must never silently swallow every exit either.
+  assert.equal(isOutsideGeofence(nearPoint, smallFence, NaN), true);
 });
 
 test('isOutsideGeofence treats the radius as the boundary', () => {

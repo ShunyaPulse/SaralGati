@@ -1,5 +1,6 @@
 import React from 'react';
 import { AssistanceLog } from '@/types';
+import { alertTitle, isGeofenceExitAlert } from '@/lib/alerts';
 import { formatDistanceToNow } from 'date-fns';
 
 export function AssistanceLogsTimeline({ logs, loading }: { logs: AssistanceLog[], loading: boolean }) {
@@ -15,7 +16,12 @@ export function AssistanceLogsTimeline({ logs, loading }: { logs: AssistanceLog[
             <div className="w-px h-full bg-gray-200 my-1"></div>
           </div>
           <div>
-            <p className="text-sm font-medium text-gray-900">{log.event_type}</p>
+            {/* The raw enum read as "emergency" here too, so a safe-zone exit
+                looked identical to an SOS in the elder's activity list. */}
+            <p className="text-sm font-medium text-gray-900">{alertTitle(log)}</p>
+            {isGeofenceExitAlert(log) && (
+              <p className="text-xs text-amber-700">Location alert</p>
+            )}
             <p className="text-xs text-gray-500">{formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}</p>
           </div>
         </div>

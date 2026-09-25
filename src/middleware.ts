@@ -10,10 +10,13 @@ export default withAuth(
 
     // 2. CSP Nonce Generation
     const nonce = btoa(crypto.randomUUID());
+    // 'unsafe-eval' is only needed by the dev-time React refresh runtime; keeping
+    // it in production needlessly widened the policy.
+    const evalSource = process.env.NODE_ENV === 'development' ? "'unsafe-eval' " : '';
 
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval' https://challenges.cloudflare.com;
+      script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${evalSource}https://challenges.cloudflare.com;
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: https: blob:;
       font-src 'self' data:;
@@ -48,7 +51,9 @@ export default withAuth(
     resWithReqHeaders.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
     resWithReqHeaders.headers.set('X-Frame-Options', 'SAMEORIGIN');
     resWithReqHeaders.headers.set('X-Content-Type-Options', 'nosniff');
-    resWithReqHeaders.headers.set('X-XSS-Protection', '1; mode=block');
+    // The legacy XSS auditor is removed from every current browser and its
+    // filter mode introduced its own vulnerabilities; `0` is the OWASP guidance.
+    resWithReqHeaders.headers.set('X-XSS-Protection', '0');
     resWithReqHeaders.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     resWithReqHeaders.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), browsing-topics=()');
     resWithReqHeaders.headers.set('X-DNS-Prefetch-Control', 'on');

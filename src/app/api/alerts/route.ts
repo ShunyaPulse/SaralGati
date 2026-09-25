@@ -134,9 +134,11 @@ export async function POST(request: Request): Promise<NextResponse<ApiResponse<A
     await invalidatePattern(`alerts:${elder.caregiver_id}*`);
 
     return NextResponse.json({ success: true, data: newAlert as AssistanceLog }, { status: 201 });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating alert:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
+    // Do not pass the driver message straight back: a failed insert would echo
+    // column, table and constraint names to the caller.
+    return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
   }
 }
 

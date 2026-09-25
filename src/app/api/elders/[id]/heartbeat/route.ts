@@ -1,38 +1,46 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { queryOne } from '@/lib/db';
 import { invalidatePattern } from '@/lib/redis';
 
 import { validateDeviceToken } from '@/lib/agent-auth';
+
+const heartbeatSchema = z.object({
+  battery_level: z.number().min(0).max(100).nullish(),
+  phone_model: z.string().max(120).nullish(),
+  os_version: z.string().max(60).nullish(),
+});
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await validateDeviceToken(request);
     const { id: elderId } = await params;
-    let isAuthorized = auth.isAuthenticated && (auth.elderId === elderId || !auth.elderId);
+    const auth = await validateDeviceToken(request);
 
-    if (!isAuthorized) {
-      // Allow pairing handshake directly if valid active elder profile exists
-      const directMatch = await queryOne<{ id: string; caregiver_id: string }>(
-        `SELECT id, caregiver_id FROM elder_profiles WHERE id::text = $1 AND is_active = true`,
-        [elderId]
-      );
-      if (directMatch) {
-        isAuthorized = true;
-      }
-    }
-    
-    if (!isAuthorized) {
+    // Only the paired phone may report telemetry for its own elder. This route
+    // used to fall back to "any active elder profile whose UUID is passed in the
+    // URL", so an unauthenticated caller could forge battery and heartbeat
+    // values - and heartbeat is what the caregiver dashboard reads to decide a
+    // phone is online. The pairing window still works without that fallback: the
+    // app sends its elder id as the bearer token until it has a device token.
+    if (!auth.isAuthenticated || auth.elderId !== elderId) {
       return NextResponse.json({ success: false, error: 'Unauthorized device' }, { status: 401 });
     }
-    
+
     // For the mobile companion app, it sends a JSON body
-    const body = await request.json();
-    const batteryLevel = typeof body.battery_level === 'number' ? body.battery_level : null;
-    const phoneModel = typeof body.phone_model === 'string' && body.phone_model.trim() ? body.phone_model.trim() : null;
-    const osVersion = typeof body.os_version === 'string' && body.os_version.trim() ? body.os_version.trim() : null;
+    const parsedBody = heartbeatSchema.safeParse(
+      await request.json().catch(() => ({}))
+    );
+
+    if (!parsedBody.success) {
+      return NextResponse.json({ success: false, error: 'Invalid payload' }, { status: 400 });
+    }
+
+    const batteryLevel = parsedBody.data.battery_level ?? null;
+    const phoneModel = parsedBody.data.phone_model?.trim() || null;
+    const osVersion = parsedBody.data.os_version?.trim() || null;
 
     // 1. Update elder's battery, phone model, OS version, and online status
     const updatedElder = await queryOne<{ id: string; caregiver_id: string }>(

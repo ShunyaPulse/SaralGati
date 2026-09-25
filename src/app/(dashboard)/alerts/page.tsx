@@ -14,9 +14,12 @@ export default function AlertsPage() {
   const { alerts, loading: isLoading, fetchAlerts, resolveAlert } = useAlertStore();
   const { elders, fetchElders } = useElderStore();
   
-  const [filters, setFilters] = useState({
-    elder_id: searchParams.get('elder_id') || undefined,
-    status: searchParams.get('status') || 'active',
+  const [filters, setFilters] = useState<{ elder_id?: string; status: 'active' | 'resolved' | 'all' }>(() => {
+    const statusParam = searchParams.get('status');
+    return {
+      elder_id: searchParams.get('elder_id') || undefined,
+      status: statusParam === 'resolved' || statusParam === 'all' ? statusParam : 'active',
+    };
   });
   
   const [page, setPage] = useState(1);
@@ -27,11 +30,12 @@ export default function AlertsPage() {
   }, [fetchElders]);
 
   useEffect(() => {
-    fetchAlerts({ ...filters, limit });
+    const appliedFilters = { ...filters, page, limit };
+    fetchAlerts(appliedFilters);
     
     // Polling every 30 seconds
     const interval = setInterval(() => {
-      fetchAlerts({ ...filters, limit }); 
+      fetchAlerts(appliedFilters); 
     }, 30000);
     
     return () => clearInterval(interval);
@@ -95,7 +99,7 @@ export default function AlertsPage() {
         </div>
         
         {/* Simple Pagination */}
-        {alerts.length >= limit && (
+        {(page > 1 || alerts.length >= limit) && (
           <div className="border-t border-slate-200 p-4 flex items-center justify-between">
             <button
               onClick={() => setPage(p => Math.max(1, p - 1))}

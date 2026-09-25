@@ -26,6 +26,8 @@ yarn-error.log*
 
 # local env and secrets
 .env*
+# ...but keep the placeholder template tracked so setup stays reproducible
+!.env.example
 .shared-env*
 *.key
 *.pem

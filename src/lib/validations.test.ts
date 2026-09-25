@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { habitRuleSchema, heartbeatSchema } from './validations';
+import { elderPreferencesSchema, habitRuleSchema, heartbeatSchema } from './validations';
 
 const firstMessage = (result: { success: boolean; error?: { issues: Array<{ message: string }> } }) =>
   result.success ? '' : result.error!.issues[0]?.message;
@@ -59,6 +59,19 @@ test('a safe zone needs a usable centre', () => {
     const parsed = habitRuleSchema.safeParse({ ...base, rule_payload: payload });
     assert.equal(parsed.success, false, JSON.stringify(payload));
     assert.match(firstMessage(parsed), /latitude and longitude/);
+  }
+});
+
+test('the safe-zone email preference only accepts a real boolean', () => {
+  assert.deepEqual(elderPreferencesSchema.parse({ safe_zone_email_enabled: false }), {
+    safe_zone_email_enabled: false,
+  });
+  assert.equal(elderPreferencesSchema.parse({ safe_zone_email_enabled: true }).safe_zone_email_enabled, true);
+
+  // A string or an omission must not be coerced: `"false"` is truthy and would
+  // leave the elder unmuted while the switch in the UI reads as off.
+  for (const body of [{}, { safe_zone_email_enabled: 'false' }, { safe_zone_email_enabled: 0 }, null]) {
+    assert.equal(elderPreferencesSchema.safeParse(body).success, false, JSON.stringify(body));
   }
 });
 

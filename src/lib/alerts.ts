@@ -90,6 +90,18 @@ export function alertMapUrl(alert: AlertLike): string | null {
   return point ? mapsUrl(point) : null;
 }
 
+/**
+ * Whether a safe-zone exit should also be emailed.
+ *
+ * Only an explicit `false` mutes the mail. `null`/`undefined` means "the elder row
+ * has not been read or the column is not there yet" (see migrations/009), and
+ * muting on an unknown value would turn a missing preference into a silently
+ * disabled alert. The dashboard alert is recorded regardless of this setting.
+ */
+export function shouldEmailSafeZoneExit(preference: boolean | null | undefined): boolean {
+  return preference !== false;
+}
+
 export interface SafeZoneExitEmailInput {
   elderName: string;
   fence: Geofence;

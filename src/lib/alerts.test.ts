@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { fenceAccuracyMarginM, isFenceExit } from './geo';
 import {
   alertDescription,
   alertMapUrl,
@@ -8,6 +9,7 @@ import {
   alertTitle,
   isGeofenceExitAlert,
   safeZoneExitEmail,
+  shouldEmailSafeZoneExit,
 } from './alerts';
 
 /** The row the heartbeat route inserts when an elder crosses a fence. */
@@ -76,6 +78,15 @@ test('a battery alert explains itself from the recorded level', () => {
   assert.equal(alertMapUrl(battery), null);
 });
 
+test('only an explicit mute stops the safe-zone email', () => {
+  assert.equal(shouldEmailSafeZoneExit(true), true, 'the default is on');
+  assert.equal(shouldEmailSafeZoneExit(false), false, 'the caregiver muted it');
+  // An un-read or not-yet-migrated preference must fail safe: a missing column
+  // cannot be allowed to silence a wander alert.
+  assert.equal(shouldEmailSafeZoneExit(undefined), true);
+  assert.equal(shouldEmailSafeZoneExit(null), true);
+});
+
 test('the safe-zone exit email names the elder, the zone and where it happened', () => {
   const { subject, text } = safeZoneExitEmail({
     elderName: 'Suresh Kumar',
@@ -92,6 +103,30 @@ test('the safe-zone exit email names the elder, the zone and where it happened',
   // Rendered on the family's clock, not the server's.
   assert.match(text, /IST/);
   assert.ok(!text.includes('2026-09-25T14:05:00.000Z'), 'no raw ISO timestamp in the body');
+});
+
+test('a muted elder still raises the fence alert, only without the email', () => {
+  // The three decisions the heartbeat makes on a fence exit, in the order it
+  // makes them. Executable spec for "muting stops the mail, never the alert".
+  const fence = { latitude: 28.6139, longitude: 77.209, radius_m: 1000, label: 'Ghar' };
+  const previous = { latitude: 28.6145, longitude: 77.2095 };
+  const point = { latitude: 28.5355, longitude: 77.391 };
+  const accuracyMarginM = fenceAccuracyMarginM(30);
+
+  assert.equal(isFenceExit(previous, point, fence, accuracyMarginM), true, 'crossing is detected');
+
+  const mutedPreference: boolean | undefined = false;
+  assert.equal(shouldEmailSafeZoneExit(mutedPreference), false, 'muted: no mail');
+  assert.equal(
+    shouldEmailSafeZoneExit(mutedPreference)
+      ? safeZoneExitEmail({ elderName: 'Suresh', fence, distanceM: 12_000, point })
+      : null,
+    null,
+    'nothing is even composed for a muted elder'
+  );
+
+  // Un-muted (or a preference the server could not read) keeps mailing.
+  assert.equal(shouldEmailSafeZoneExit(true), true);
 });
 
 test('malformed metadata never throws', () => {

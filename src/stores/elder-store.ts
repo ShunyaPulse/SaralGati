@@ -18,6 +18,8 @@ interface ElderState {
   addElder: (data: ElderInput) => Promise<void>;
   updateElder: (id: string, data: Partial<ElderProfile>) => Promise<void>;
   removeElder: (id: string) => Promise<void>;
+  /** Returns false when the preference could not be persisted. */
+  setSafeZoneEmails: (id: string, enabled: boolean) => Promise<boolean>;
 }
 
 export const useElderStore = create<ElderState>()(
@@ -71,6 +73,42 @@ export const useElderStore = create<ElderState>()(
           }));
         } catch (err: any) {
           set({ error: err.message, loading: false });
+        }
+      },
+
+      setSafeZoneEmails: async (id, enabled) => {
+        const previous = get().elders;
+
+        // Optimistic: a switch that waits for a round trip feels broken. The
+        // server's copy replaces this one as soon as the response lands, so the
+        // column and the UI cannot disagree for longer than that.
+        set((state) => ({
+          elders: state.elders.map((elder) =>
+            elder.id === id ? { ...elder, safe_zone_email_enabled: enabled } : elder
+          ),
+          error: null,
+        }));
+
+        try {
+          const res = await fetch(`/api/elders/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ safe_zone_email_enabled: enabled }),
+          });
+          if (!res.ok) throw new Error('Failed to update the email preference');
+
+          const { data: updatedElder } = await res.json();
+          set((state) => ({
+            elders: state.elders.map((elder) =>
+              elder.id === id && updatedElder ? updatedElder : elder
+            ),
+          }));
+          return true;
+        } catch (err: any) {
+          // Put the switch back: leaving it flipped would tell the caregiver an
+          // alert is muted while the server still mails them.
+          set({ elders: previous, error: err.message });
+          return false;
         }
       },
 

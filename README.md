@@ -65,7 +65,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 
 - **Zero-Friction QR Pairing**: Caregivers pair an elder's phone in seconds by scanning a secure pairing QR code from the dashboard.
 - **Live Device Telemetry**: Shows real-time battery percentage, charging state, companion service heartbeat, and app version.
-- **Live Location & Safe Zones**: The companion reports its last known fix with every heartbeat, so the dashboard shows where the elder is, how accurate that fix was, and how old it is. The caregiver can draw a safe-zone circle around home and gets an alert the moment the elder leaves it — in the dashboard, and by email to the account address, with a one-tap map link to where it happened.
+- **Live Location & Safe Zones**: The companion reports its last known fix with every heartbeat, so the dashboard shows where the elder is, how accurate that fix was, and how old it is. The caregiver can draw a safe-zone circle around home and gets an alert the moment the elder leaves it — in the dashboard, and by email to the account address, with a one-tap map link to where it happened. Email can be muted per elder, and muting never suppresses the dashboard alert.
 - **Frequent Contact & Habit Insights**: Aggregates frequent contacts (e.g., _"Doctor Sharma"_, _"Ramesh Bhaiya"_) so the companion understands family context without personal data leaks.
 
 ### 6. Strict Privacy-First Commitment
@@ -189,8 +189,10 @@ cd SaralGati
 npm install --legacy-peer-deps
 
 # Configure environment variables
-cp .env.example .env.local
-# Add your DATABASE_URL, REDIS_URL, NEXTAUTH_SECRET, etc.
+# Create .env.local with your DATABASE_URL, REDIS_URL, NEXTAUTH_SECRET, SMTP_* values, etc.
+
+# Apply the database migrations (idempotent; tracked in the _migrations table)
+npm run db:migrate
 
 # Run the development server
 npm run dev

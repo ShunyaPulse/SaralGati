@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ExternalLink, MapPin, Navigation, ShieldCheck, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
+import { useElderStore } from '@/stores/elder-store';
 import { useHabitStore } from '@/stores/habit-store';
 import {
   DEFAULT_GEOFENCE_RADIUS_M,
@@ -26,6 +27,10 @@ import { Input } from '@/components/ui/input';
  */
 export function LiveLocationCard({ elder }: { elder: ElderProfile }) {
   const { rules, fetchRules, deleteRule } = useHabitStore();
+  const setSafeZoneEmails = useElderStore((state) => state.setSafeZoneEmails);
+
+  const [isSavingPreference, setIsSavingPreference] = useState(false);
+  const [preferenceMessage, setPreferenceMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [label, setLabel] = useState('Safe zone');
   const [radius, setRadius] = useState(String(DEFAULT_GEOFENCE_RADIUS_M));
@@ -125,6 +130,32 @@ export function LiveLocationCard({ elder }: { elder: ElderProfile }) {
     }
   };
 
+  /**
+   * A missing value means "not read yet", so it is treated as on: muting an
+   * unknown preference would silently switch off an alert the caregiver relies on.
+   */
+  const emailsEnabled = elder.safe_zone_email_enabled !== false;
+
+  const handleToggleEmails = async () => {
+    const next = !emailsEnabled;
+    setIsSavingPreference(true);
+    setPreferenceMessage(null);
+
+    const saved = await setSafeZoneEmails(elder.id, next);
+
+    setIsSavingPreference(false);
+    setPreferenceMessage(
+      saved
+        ? {
+            ok: true,
+            text: next
+              ? 'Safe-zone exits will be emailed to you.'
+              : 'Safe-zone emails are muted for this elder.',
+          }
+        : { ok: false, text: 'Could not save that - the setting is unchanged.' }
+    );
+  };
+
   const handleRemove = async () => {
     if (!fenceRule) return;
     if (!confirm('Delete this safe zone? The elder will no longer be watched against it.')) return;
@@ -210,6 +241,39 @@ export function LiveLocationCard({ elder }: { elder: ElderProfile }) {
         <p className="text-xs text-slate-500 mb-4">
           You get an alert as soon as the elder walks out of this circle.
         </p>
+
+        <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <label
+                htmlFor={`safe-zone-email-${elder.id}`}
+                className="text-sm font-medium text-slate-900"
+              >
+                Email me when the elder leaves the zone
+              </label>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Dashboard alerts are always recorded, even when email is off.
+              </p>
+            </div>
+            <input
+              id={`safe-zone-email-${elder.id}`}
+              type="checkbox"
+              role="switch"
+              checked={emailsEnabled}
+              disabled={isSavingPreference}
+              onChange={handleToggleEmails}
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-teal-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] focus-visible:ring-offset-2 disabled:cursor-wait disabled:opacity-50"
+            />
+          </div>
+          {preferenceMessage && (
+            <p
+              role="status"
+              className={`mt-2 text-xs ${preferenceMessage.ok ? 'text-emerald-700' : 'text-red-600'}`}
+            >
+              {preferenceMessage.text}
+            </p>
+          )}
+        </div>
 
         {fence && (
           <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3">

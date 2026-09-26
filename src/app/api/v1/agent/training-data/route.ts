@@ -114,6 +114,136 @@ Instructions:
       });
     }
 
+    // === MODE 1B: Anti-Fraud Sentinel Pipeline ===
+    // The web sentinel is a deterministic rule engine, so this is where it
+    // "learns": the cloud flywheel has Gemini label synthetic scam screens with
+    // a ground-truth threat level, calls /api/v1/agent/fraud-check, and every
+    // verdict is stored in fraud_training_cases. Exporting here turns those
+    // pairs into SFT samples (what the verdict should be) plus unmatched rows
+    // into DPO pairs (expected beats predicted), so the LoRA model picks up the
+    // same scam signal the rules already encode.
+    if (type === "fraud") {
+      const fraudRows = await query<{
+        id: string;
+        app_package: string | null;
+        screen_hash: string | null;
+        input_signals: Record<string, unknown>;
+        predicted_level: string;
+        predicted_category: string | null;
+        expected_level: string;
+        expected_category: string | null;
+        is_correct: boolean | null;
+        created_at: string;
+      }>(
+        `SELECT id, app_package, screen_hash, input_signals, predicted_level,
+                predicted_category, expected_level, expected_category, is_correct, created_at
+         FROM fraud_training_cases
+         WHERE expected_level IS NOT NULL
+         ORDER BY created_at DESC
+         LIMIT $1`,
+        [limit],
+      );
+
+      const FRAUD_SYSTEM_PROMPT = `You are SaralGati's anti-fraud analyst for Indian elders.
+You receive the visible signals of one Android screen or message batch: UI element labels, URLs, SMS/notification text and the elder's question.
+Classify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICAL) and one category among OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.
+Rules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.
+Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reasoning":"one short sentence"}.`;
+
+      const fraudSft = fraudRows.map((row) => ({
+        messages: [
+          { role: "system", content: FRAUD_SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: JSON.stringify(
+              {
+                app_package: row.app_package,
+                signals: row.input_signals,
+              },
+              null,
+              0,
+            ),
+          },
+          {
+            role: "assistant",
+            content: JSON.stringify({
+              threat_level: row.expected_level,
+              threat_category: row.expected_category ?? "NONE",
+            }),
+          },
+        ],
+        metadata: {
+          case_id: row.id,
+          screen_hash: row.screen_hash,
+          predicted_level: row.predicted_level,
+          predicted_category: row.predicted_category,
+          expected_level: row.expected_level,
+          is_correct: row.is_correct,
+          type: "fraud_ground_truth",
+          created_at: row.created_at,
+        },
+      }));
+
+      const fraudDpo = fraudRows
+        .filter((row) => row.is_correct === false)
+        .map((row) => ({
+          prompt: [
+            { role: "system", content: FRAUD_SYSTEM_PROMPT },
+            {
+              role: "user",
+              content: JSON.stringify({
+                app_package: row.app_package,
+                signals: row.input_signals,
+              }),
+            },
+          ],
+          chosen: [
+            {
+              role: "assistant",
+              content: JSON.stringify({
+                threat_level: row.expected_level,
+                threat_category: row.expected_category ?? "NONE",
+              }),
+            },
+          ],
+          rejected: [
+            {
+              role: "assistant",
+              content: JSON.stringify({
+                threat_level: row.predicted_level,
+                threat_category: row.predicted_category ?? "NONE",
+              }),
+            },
+          ],
+          metadata: {
+            case_id: row.id,
+            type: "fraud_sentinel_correction",
+            created_at: row.created_at,
+          },
+        }));
+
+      if (format === "jsonl") {
+        const jsonl = fraudSft.map((d) => JSON.stringify(d)).join("\n");
+        return new Response(jsonl, {
+          headers: {
+            "Content-Type": "application/x-ndjson",
+            "Content-Disposition":
+              'attachment; filename="saralgati_fraud_dataset.jsonl"',
+          },
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        mode: "fraud",
+        count: fraudSft.length,
+        dpo_count: fraudDpo.length,
+        correct: fraudRows.filter((row) => row.is_correct === true).length,
+        data: fraudSft,
+        dpo_data: fraudDpo,
+      });
+    }
+
     // === MODE 2: SFT / Supervised Instruction Tuning Pipeline ===
     let sqlQuery = `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
        FROM model_interactions

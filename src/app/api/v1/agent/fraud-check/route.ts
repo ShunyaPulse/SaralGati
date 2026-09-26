@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { z } from "zod";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
 import { analyzeForFraud } from "@/lib/fraudSentinel";
+import { query } from "@/lib/db";
 import { rateLimiter } from "@/lib/redis";
 
 /**
@@ -19,6 +21,14 @@ const fraudCheckRequestSchema = z
     urls: z.array(z.string().max(2000)).max(50).optional(),
     question: z.string().max(2000).optional(),
     app_package: z.string().max(200).optional(),
+    // Ground truth supplied only by the training flywheel. Live companions never
+    // send these, and the values are never trusted for the live verdict - they
+    // are stored purely as an SFT label for the LoRA flywheel.
+    expected_threat_level: z
+      .enum(["SAFE", "SUSPICIOUS", "DANGEROUS", "CRITICAL"])
+      .optional(),
+    expected_threat_category: z.string().max(50).optional(),
+    app_package_hint: z.string().max(200).optional(),
   })
   .refine(
     (value) =>
@@ -81,6 +91,54 @@ export async function POST(req: NextRequest) {
     }
 
     const verdict = analyzeForFraud(parseResult.data);
+
+    // Flywheel-only training capture: when Gemini supplies a ground-truth label,
+    // store the verdict against it so the LoRA export (type=fraud) can learn the
+    // same scam signals the deterministic rules already catch. Never blocks or
+    // changes the live verdict, and a persistence failure cannot fail the check.
+    if (isFlywheel && parseResult.data.expected_threat_level) {
+      try {
+        const { ui_elements, urls, messages, question, screen_text } =
+          parseResult.data;
+        const signals = {
+          ui_elements: ui_elements ?? [],
+          urls: urls ?? [],
+          messages: messages ?? [],
+          question: question ?? "",
+          screen_text: screen_text ?? "",
+        };
+        const screenHash = crypto
+          .createHash("sha256")
+          .update(JSON.stringify(signals))
+          .digest("hex")
+          .slice(0, 64);
+        const expectedLevel = parseResult.data.expected_threat_level;
+        const expectedCategory =
+          parseResult.data.expected_threat_category ?? null;
+
+        await query(
+          `INSERT INTO fraud_training_cases
+             (app_package, screen_hash, input_signals, verdict, predicted_level,
+              predicted_category, expected_level, expected_category, is_correct, source)
+           VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7, $8, $9, 'flywheel')`,
+          [
+            parseResult.data.app_package ??
+              parseResult.data.app_package_hint ??
+              null,
+            screenHash,
+            JSON.stringify(signals),
+            JSON.stringify(verdict),
+            verdict.threat_level,
+            verdict.threat_category ?? null,
+            expectedLevel,
+            expectedCategory,
+            verdict.threat_level === expectedLevel,
+          ],
+        );
+      } catch (persistError) {
+        console.error("Fraud training capture failed:", persistError);
+      }
+    }
 
     // Log only the verdict and reasoning, never the elder's raw screen text.
     if (verdict.threat_level === "DANGEROUS" || verdict.threat_level === "CRITICAL") {

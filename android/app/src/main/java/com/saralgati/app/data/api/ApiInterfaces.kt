@@ -45,6 +45,10 @@ interface AgentApi {
 
     @POST("api/v1/agent/sync-habits")
     suspend fun syncHabits(@Body request: com.saralgati.app.data.model.SyncHabitsRequest): Response<ApiResponse<Any>>
+
+    // The verdict is the whole response body (no {success, data} envelope).
+    @POST("api/v1/agent/fraud-check")
+    suspend fun checkFraud(@Body request: com.saralgati.app.data.model.FraudCheckRequest): Response<com.saralgati.app.data.model.FraudVerdict>
 }
 
 interface AppApi {

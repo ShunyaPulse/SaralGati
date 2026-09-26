@@ -8,6 +8,8 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AssistanceLog
+import com.saralgati.app.data.model.FraudCheckRequest
+import com.saralgati.app.data.model.FraudVerdict
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
@@ -31,6 +33,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private val recentClickTimes = ArrayDeque<Long>(RAGE_TAP_THRESHOLD)
     private var lastAlertTriggerTime: Long = 0
 
+    // Variables for the real-time anti-fraud sentinel
+    private var lastFraudScanAt = 0L
+    private var lastFraudSignature: String? = null
+    private var fraudScanInFlight = false
+
     // Variables for Continuous Learning Implicit Feedback Loop
     private var activeInteractionId: String? = null
     private var activeHighlightedIndex: Int? = null
@@ -46,6 +53,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         private const val RAGE_TAP_TIME_WINDOW_MS = 2000L // 3 clicks within 2 seconds
         private const val ALERT_COOLDOWN_MS = 15000L // 15 seconds cooldown between alerts
         private const val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
+        private const val FRAUD_SCAN_MIN_INTERVAL_MS = 2500L // at most one verdict request per screen burst
+        private const val FRAUD_SCAN_MAX_ELEMENTS = 300 // matches the API's per-request element cap
 
         const val ACTION_EXTRACT_SCREEN = "com.saralgati.app.ACTION_EXTRACT_SCREEN"
         const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
@@ -102,7 +111,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val pkg = event.packageName?.toString() ?: ""
                 val cls = event.className?.toString() ?: ""
                 Log.d(TAG, "Window switched: $pkg / $cls")
+                scanScreenForFraud(pkg)
                 handleWindowStateChanged(pkg, cls)
+            }
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                // Catches text that appears without a window switch (an incoming
+                // WhatsApp message, a payment sheet drawn over the same activity).
+                scanScreenForFraud(event.packageName?.toString() ?: "")
             }
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 handleViewClicked(event)
@@ -260,6 +275,73 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
         
         nodeInfo.recycle()
+    }
+
+    /**
+     * Real-time anti-fraud sentinel.
+     *
+     * The screen text the companion already reads for guidance is sent to
+     * /api/v1/agent/fraud-check before the elder acts on it. Throttled to one
+     * request per burst and skipped when the element set is unchanged, so
+     * scrolling or typing cannot exhaust the server's per-device rate limit.
+     */
+    private fun scanScreenForFraud(pkg: String) {
+        if (pkg.isEmpty() || pkg == packageName) return
+        if (!localPrefs.isPaired()) return
+        if (fraudScanInFlight) return
+        val now = System.currentTimeMillis()
+        if (now - lastFraudScanAt < FRAUD_SCAN_MIN_INTERVAL_MS) return
+        lastFraudScanAt = now
+        serviceScope.launch { runFraudScan(pkg) }
+    }
+
+    private suspend fun runFraudScan(pkg: String) {
+        fraudScanInFlight = true
+        try {
+            val rootNode = rootInActiveWindow ?: return
+            val elements = mutableListOf<String>()
+            val elementBounds = mutableListOf<android.graphics.Rect>()
+            if (rootNode.packageName?.toString() == pkg) {
+                traverseNode(rootNode, elements, elementBounds, relaxedForFraud = true)
+            }
+            rootNode.recycle()
+            if (elements.isEmpty()) return
+
+            val scanElements = elements.take(FRAUD_SCAN_MAX_ELEMENTS)
+            val scanBounds = elementBounds.take(FRAUD_SCAN_MAX_ELEMENTS)
+
+            // Identical text cannot produce a different verdict, and recording
+            // the signature before the call keeps a flaky network from retrying
+            // the same screen every few seconds.
+            val signature = scanElements.joinToString("|").hashCode().toString()
+            if (signature == lastFraudSignature) return
+            lastFraudSignature = signature
+
+            val response = NetworkModule.agentApi.checkFraud(FraudCheckRequest(pkg, scanElements))
+            val verdict = response.body()
+            if (!response.isSuccessful || verdict == null || !verdict.isDangerous) return
+
+            Log.w(TAG, "Fraud sentinel: ${verdict.threatLevel}/${verdict.threatCategory} on $pkg")
+            val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
+            warnElderAboutFraud(verdict, safeBounds)
+        } catch (e: Exception) {
+            Log.e(TAG, "Fraud scan failed: ${e.message}")
+        } finally {
+            fraudScanInFlight = false
+        }
+    }
+
+    private fun warnElderAboutFraud(verdict: FraudVerdict, safeBounds: android.graphics.Rect?) {
+        val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
+            action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_FRAUD_WARNING
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_TITLE, verdict.userAlert.title)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, verdict.userAlert.messageHi)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_ADVICE, verdict.actionDecision.safeAdvice)
+        }
+        startService(intent)
+
+        // Point the spotlight at the button that gets the elder out of the trap.
+        if (safeBounds != null) broadcastVisualCue(safeBounds)
     }
 
     private fun triggerRageTapAlert(pkgName: String, viewId: String) {
@@ -565,7 +647,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private fun traverseNode(
         node: AccessibilityNodeInfo,
         elements: MutableList<String>,
-        elementBounds: MutableList<android.graphics.Rect>
+        elementBounds: MutableList<android.graphics.Rect>,
+        relaxedForFraud: Boolean = false
     ) {
         if (node.isPassword) return
         if (!node.isVisibleToUser) return
@@ -587,7 +670,14 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             val minPx = (16 * density).toInt()  // 16dp minimum
             val maxW = (300 * density).toInt()   // 300dp max width
             val maxH = (180 * density).toInt()   // 180dp max height
-            val isReasonableButtonSize = (w in minPx..maxW) && (h in minPx..maxH)
+            // Fraud scanning also needs the message text, which is usually bigger
+            // than a button; guidance still only targets tappable-sized nodes so a
+            // chat bubble is never spotlighted.
+            val isReasonableButtonSize = if (relaxedForFraud) {
+                w >= minPx && h >= minPx
+            } else {
+                (w in minPx..maxW) && (h in minPx..maxH)
+            }
             
             // Prefer clickable nodes or leaf nodes to prevent selecting massive layout parents
             val isInteractiveOrLeaf = node.isClickable || node.childCount == 0
@@ -601,7 +691,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         for (i in 0 until node.childCount) {
             node.getChild(i)?.let {
-                traverseNode(it, elements, elementBounds)
+                traverseNode(it, elements, elementBounds, relaxedForFraud)
                 it.recycle()
             }
         }

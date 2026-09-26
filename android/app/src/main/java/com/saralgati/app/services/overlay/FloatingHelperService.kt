@@ -41,6 +41,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     companion object {
         const val ACTION_SHOW_RAGE_TAP = "com.saralgati.app.ACTION_SHOW_RAGE_TAP"
+        const val ACTION_SHOW_FRAUD_WARNING = "com.saralgati.app.ACTION_SHOW_FRAUD_WARNING"
+        const val EXTRA_FRAUD_TITLE = "fraud_title"
+        const val EXTRA_FRAUD_MESSAGE = "fraud_message"
+        const val EXTRA_FRAUD_ADVICE = "fraud_advice"
         private const val TAG = "FloatingHelper"
         var isRunning = false
             private set
@@ -119,6 +123,16 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 title = "क्या आपको यहाँ कुछ सहायता चाहिए?",
                 speakMsg = "ऐसा लगता है कि आपको यहाँ कुछ परेशानी हो रही है। क्या मैं मदद करूँ?"
             )
+        } else if (intent?.action == ACTION_SHOW_FRAUD_WARNING) {
+            val title = intent.getStringExtra(EXTRA_FRAUD_TITLE) ?: "सावधान!"
+            val message = intent.getStringExtra(EXTRA_FRAUD_MESSAGE)
+            if (!message.isNullOrBlank()) {
+                showFraudWarning(
+                    title = title,
+                    message = message,
+                    advice = intent.getStringExtra(EXTRA_FRAUD_ADVICE).orEmpty()
+                )
+            }
         }
         return START_STICKY
     }
@@ -307,6 +321,16 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         headerRow.addView(btnCloseIcon)
         rootLayout.addView(headerRow)
 
+        // Body: only filled in for scam warnings, hidden on the normal helper card.
+        val bodyText = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Color.parseColor("#7F1D1D"))
+            tag = "bodyView"
+            visibility = View.GONE
+            setPadding(0, 0, 0, dp(10))
+        }
+        rootLayout.addView(bodyText)
+
         // Action Buttons Row (Side-by-side for ultra-compact vertical footprint)
         val actionsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -400,8 +424,36 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    /**
+     * Red warning card for a DANGEROUS / CRITICAL fraud verdict: title, the
+     * Hindi alert and the safe advice are all visible (and spoken), because the
+     * elder may have TTS muted.
+     */
+    private fun showFraudWarning(title: String, message: String, advice: String) {
+        val titleView = expandedView.findViewWithTag<TextView>("titleView")
+        val bodyText = expandedView.findViewWithTag<TextView>("bodyView")
+
+        titleView?.text = "⚠️ $title"
+        titleView?.setTextColor(Color.parseColor("#B91C1C"))
+        bodyText?.text = if (advice.isBlank()) message else "$message\n\n$advice"
+        bodyText?.visibility = View.VISIBLE
+
+        if (!isExpanded) {
+            windowManager.removeView(bubbleView)
+            windowManager.addView(expandedView, paramsExpanded)
+            isExpanded = true
+        }
+        speak(if (advice.isBlank()) message else "$message $advice")
+    }
+
     private fun collapseHelper() {
         if (isExpanded) {
+            // Reset the warning styling so the next normal card is not red.
+            expandedView.findViewWithTag<TextView>("titleView")?.setTextColor(Color.parseColor("#0F172A"))
+            expandedView.findViewWithTag<TextView>("bodyView")?.let {
+                it.text = ""
+                it.visibility = View.GONE
+            }
             windowManager.removeView(expandedView)
             windowManager.addView(bubbleView, paramsBubble)
             isExpanded = false

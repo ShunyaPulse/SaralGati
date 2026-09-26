@@ -10,6 +10,9 @@ updates:
     labels:
       - "dependencies"
       - "security"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: "gradle"
     directory: "/android"
@@ -21,6 +24,9 @@ updates:
     labels:
       - "dependencies"
       - "android"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -36,3 +42,6 @@ updates:
     labels:
       - "dependencies"
       - "actions"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]

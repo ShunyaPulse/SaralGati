@@ -5,7 +5,8 @@ import crypto from "crypto";
  * API_SECRET (or FLYWHEEL_SECRET). No placeholder fallbacks are permitted.
  */
 function getApiSecret(): string | null {
-  const secret = process.env.API_SECRET?.trim() || process.env.FLYWHEEL_SECRET?.trim();
+  const secret =
+    process.env.API_SECRET?.trim() || process.env.FLYWHEEL_SECRET?.trim();
   return secret && secret.length > 0 ? secret : null;
 }
 

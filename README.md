@@ -68,7 +68,14 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 - **Live Location & Safe Zones**: The companion reports its last known fix with every heartbeat, so the dashboard shows where the elder is, how accurate that fix was, and how old it is. The caregiver can draw a safe-zone circle around home and gets an alert the moment the elder leaves it — in the dashboard, and by email to the account address, with a one-tap map link to where it happened. Email can be muted per elder, and muting never suppresses the dashboard alert.
 - **Frequent Contact & Habit Insights**: Aggregates frequent contacts (e.g., _"Doctor Sharma"_, _"Ramesh Bhaiya"_) so the companion understands family context without personal data leaks.
 
-### 6. Strict Privacy-First Commitment
+### 6. Autonomous Anti-Fraud Sentinel
+
+- **Real-Time Scam Shield**: Every question and screen the companion sends is screened *before* any guidance is produced, so a scam screen never receives a placement hint. The taxonomy covers OTP theft, UPI-PIN / collect-request / deceptive-QR payment traps, remote-access coercion (AnyDesk, TeamViewer, RustDesk, QuickSupport, accessibility unlock), fake electricity / SIM / KYC / challan notices, fake virus & spin-wheel banners, sideloaded APKs, and unneeded contacts / SMS / camera permissions.
+- **Hindi + English Alerts**: DANGEROUS and CRITICAL screens are intercepted and answered with a simple Devanagari warning (which the companion speaks) plus plain English copy, and the spotlight is redirected to the visible way out (Cancel / Decline). Weaker signals still travel with the normal answer as a soft warning, so a legitimate payment screen stays usable.
+- **Deterministic & Auditable**: `src/lib/fraudSentinel.ts` is a pure rule ensemble with unit tests for every category. It keeps protecting the elder when Workers AI or Gemini are unreachable, and every verdict carries `risk_reasoning` for logs. Also exposed as `POST /api/v1/agent/fraud-check` (HMAC + device token, like the rest of the agent API) for the companion to poll on screen changes.
+- **Money Rule Enforced**: Receiving money never needs a UPI PIN, a QR scan or an approval - any "receive + PIN" combination is treated as theft, not as a payment.
+
+### 7. Strict Privacy-First Commitment
 
 - ❌ **NO Screenshots Taken**: SaralGati never captures screenshots or screen recordings.
 - ❌ **NO Personal Chats Read**: Personal message bodies, photo galleries, and payment PINs are completely inaccessible.
@@ -90,7 +97,11 @@ flowchart TD
 
     subgraph Server["⚡ SaralGati API Engine (Cloud Run)"]
         HMAC --> SG["Security Gate: Device Token Auth & Rate Limiter"]
-        SG --> C0{"Active Multi-Step Flow?"}
+        SG --> FRAUD{"Anti-Fraud Sentinel: DANGEROUS / CRITICAL?"}
+
+        %% Case 0: Scam intercept
+        FRAUD -- "Yes (Scam Screen)" --> ANS0["🛡️ CASE 0: Scam Intercept (<1ms)<br/>Hindi + English warning, safe button spotlighted, trap element blocked"]
+        FRAUD -- "No" --> C0{"Active Multi-Step Flow?"}
 
         %% Case 1: Multi-Step Flow
         C0 -- "Yes (Active Session)" --> ANS1["🎯 CASE 1: Flow Engine (~0ms)<br/>Advances multi-screen workflow (e.g., WhatsApp Call)"]
@@ -113,7 +124,8 @@ flowchart TD
         VAL -- "Hallucination / Noise Detected" --> ANS5["🛡️ CASE 5: Semantic Fallback Recovery<br/>Re-anchors target to nearest verified actionable button"]
 
         ANS4 --> PROMOTE["Promote to Redis Screen Cache"]
-        ANS1 --> RESP["Return Standard Response Payload to Android App"]
+        ANS0 --> RESP["Return Standard Response Payload to Android App"]
+        ANS1 --> RESP
         ANS2 --> RESP
         ANS3 --> RESP
         ANS4 --> RESP

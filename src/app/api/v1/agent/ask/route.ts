@@ -10,6 +10,11 @@ import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import {
+  analyzeForFraud,
+  sentinelExplanation,
+  shouldInterceptFraud,
+} from "@/lib/fraudSentinel";
 import { rateLimiter } from "@/lib/redis";
 
 const askRequestSchema = z.object({
@@ -164,30 +169,56 @@ export async function POST(req: NextRequest) {
       arbitration?: any;
     } | null = null;
 
-    // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
-    const flowResult = await evaluateMultiStepFlow(
-      effectiveElderId || undefined,
-      safeQuestion,
-      safeUIElements,
-    );
-    if (
-      flowResult &&
-      flowResult.isFlowActive &&
-      typeof flowResult.highlightIndex === "number" &&
-      flowResult.highlightIndex >= 0
-    ) {
+    // === SECURITY GATE: AUTONOMOUS ANTI-FRAUD SENTINEL ===
+    // Runs before any guidance (fast path, cache, LLM) because a scam screen must
+    // never receive a placement hint. Only DANGEROUS/CRITICAL verdicts intercept;
+    // a SUSPICIOUS verdict still travels with the normal answer as a soft warning.
+    const fraudVerdict = analyzeForFraud({
+      app_package: safeAppPackage,
+      question: safeQuestion,
+      ui_elements: safeUIElements,
+    });
+    if (shouldInterceptFraud(fraudVerdict)) {
       finalResult = {
-        explanation: flowResult.explanation || "",
-        highlightIndex: flowResult.highlightIndex,
-        source: "multi_step_flow",
-        modelUsed: flowResult.flowId || "multi_step_flow",
-        flow: {
-          flow_id: flowResult.flowId,
-          current_step: flowResult.currentStep,
-          total_steps: flowResult.totalSteps,
-          step_label: flowResult.stepLabel,
-        },
+        explanation: sentinelExplanation(fraudVerdict),
+        // Point the spotlight at the visible way out, not at the trap.
+        highlightIndex: fraudVerdict.action_decision.safe_action_index,
+        source: "fraud_sentinel",
+        modelUsed: "anti_fraud_sentinel",
       };
+      console.warn(
+        `Anti-fraud sentinel blocked guidance for elder ${effectiveElderId ?? "unknown"}: ` +
+          `${fraudVerdict.threat_level}/${fraudVerdict.threat_category} - ${fraudVerdict.risk_reasoning}`,
+      );
+    }
+    const safety = fraudVerdict.threat_level === "SAFE" ? null : fraudVerdict;
+
+    // === METHOD 0: MULTI-STEP FLOW ENGINE (Stateful Redis Sessions) ===
+    if (!finalResult) {
+      const flowResult = await evaluateMultiStepFlow(
+        effectiveElderId || undefined,
+        safeQuestion,
+        safeUIElements,
+      );
+      if (
+        flowResult &&
+        flowResult.isFlowActive &&
+        typeof flowResult.highlightIndex === "number" &&
+        flowResult.highlightIndex >= 0
+      ) {
+        finalResult = {
+          explanation: flowResult.explanation || "",
+          highlightIndex: flowResult.highlightIndex,
+          source: "multi_step_flow",
+          modelUsed: flowResult.flowId || "multi_step_flow",
+          flow: {
+            flow_id: flowResult.flowId,
+            current_step: flowResult.currentStep,
+            total_steps: flowResult.totalSteps,
+            step_label: flowResult.stepLabel,
+          },
+        };
+      }
     }
 
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
@@ -363,6 +394,7 @@ ${fewShots}`;
         ...(finalResult.arbitration
           ? { arbitration: finalResult.arbitration }
           : {}),
+        ...(safety ? { safety } : {}),
       },
     });
   } catch (error) {

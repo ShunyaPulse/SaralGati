@@ -100,7 +100,6 @@
         <!-- SaralGati On-Screen Floating Helper Service -->
         <service
             android:name=".services.overlay.FloatingHelperService"
-            android:foregroundServiceType="microphone"
             android:exported="false" />
 
         <!-- Receiver for PackageInstaller session -->

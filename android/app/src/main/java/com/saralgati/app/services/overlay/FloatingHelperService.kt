@@ -414,13 +414,18 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     private fun expandHelper(title: String, speakMsg: String) {
         if (!isExpanded) {
+            if (!android.provider.Settings.canDrawOverlays(this)) return
             val titleView = expandedView.findViewWithTag<TextView>("titleView")
             titleView?.text = title
-            
-            windowManager.removeView(bubbleView)
-            windowManager.addView(expandedView, paramsExpanded)
-            isExpanded = true
-            speak(speakMsg)
+
+            try {
+                windowManager.removeView(bubbleView)
+                windowManager.addView(expandedView, paramsExpanded)
+                isExpanded = true
+                speak(speakMsg)
+            } catch (e: WindowManager.BadTokenException) {
+                Log.e(TAG, "Failed to expand overlay: bad token", e)
+            }
         }
     }
 
@@ -439,9 +444,14 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         bodyText?.visibility = View.VISIBLE
 
         if (!isExpanded) {
-            windowManager.removeView(bubbleView)
-            windowManager.addView(expandedView, paramsExpanded)
-            isExpanded = true
+            if (!android.provider.Settings.canDrawOverlays(this)) return
+            try {
+                windowManager.removeView(bubbleView)
+                windowManager.addView(expandedView, paramsExpanded)
+                isExpanded = true
+            } catch (e: WindowManager.BadTokenException) {
+                Log.e(TAG, "Overlay token invalid: ${e.message}")
+            }
         }
         speak(if (advice.isBlank()) message else "$message $advice")
     }
@@ -454,10 +464,15 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 it.text = ""
                 it.visibility = View.GONE
             }
-            windowManager.removeView(expandedView)
-            windowManager.addView(bubbleView, paramsBubble)
-            isExpanded = false
-            tts.stop()
+            if (!android.provider.Settings.canDrawOverlays(this)) return
+            try {
+                windowManager.removeView(expandedView)
+                windowManager.addView(bubbleView, paramsBubble)
+                isExpanded = false
+                tts.stop()
+            } catch (e: WindowManager.BadTokenException) {
+                Log.e(TAG, "Failed to collapse overlay: bad token", e)
+            }
         }
     }
 
@@ -547,6 +562,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 y = top
             }
 
+            if (!android.provider.Settings.canDrawOverlays(this)) return
             try {
                 windowManager.addView(highlightView, params)
                 activeHighlightView = highlightView

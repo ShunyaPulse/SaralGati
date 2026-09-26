@@ -315,11 +315,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // the same screen every few seconds.
             val signature = scanElements.joinToString("|").hashCode().toString()
             if (signature == lastFraudSignature) return
-            lastFraudSignature = signature
 
             val response = NetworkModule.agentApi.checkFraud(FraudCheckRequest(pkg, scanElements))
-            val verdict = response.body()
-            if (!response.isSuccessful || verdict == null || !verdict.isDangerous) return
+            if (!response.isSuccessful) return
+            val verdict = response.body() ?: return
+            lastFraudSignature = signature
+            if (!verdict.isDangerous) return
 
             Log.w(TAG, "Fraud sentinel: ${verdict.threatLevel}/${verdict.threatCategory} on $pkg")
             val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
@@ -338,7 +339,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, verdict.userAlert.messageHi)
             putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_ADVICE, verdict.actionDecision.safeAdvice)
         }
-        startService(intent)
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start fraud warning overlay: ${e.message}")
+        }
 
         // Point the spotlight at the button that gets the elder out of the trap.
         if (safeBounds != null) broadcastVisualCue(safeBounds)
@@ -351,7 +356,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_RAGE_TAP
         }
-        startService(intent)
+        try {
+            startService(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start rage tap overlay: ${e.message}")
+        }
 
         serviceScope.launch {
             try {

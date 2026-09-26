@@ -27,6 +27,7 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = vCode
+        versionName = vName
         val secret = System.getenv("API_SECRET")?.takeIf { it.isNotBlank() } ?: "YOUR_API_SECRET"
         buildConfigField("String", "API_SECRET", "\"$secret\"")
 

@@ -35,6 +35,8 @@ object NetworkModule {
         val timestamp = System.currentTimeMillis().toString()
         val path = original.url.encodedPath
         val method = original.method
+        val message = "$method$path$timestamp"
+
         val requestBuilder = original.newBuilder()
             .header("X-App-Timestamp", timestamp)
 

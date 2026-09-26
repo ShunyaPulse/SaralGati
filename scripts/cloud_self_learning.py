@@ -42,52 +42,90 @@ def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_
     Models that returned 503 are in blacklisted_models and skipped; retried only in the final pass.
     """
     import random
-    popular_apps = [
-        "IRCTC Rail Connect (train ticket booking, PNR status, berth choice)",
-        "DigiLocker (Aadhaar card, driving license, vehicle RC, ration card)",
-        "Blinkit / Zepto / Instamart (10 min grocery, milk, bread, medicines, fresh vegetables)",
-        "JioCinema / Disney+ Hotstar (Live cricket match, Ramayan, old Hindi classics, news)",
-        "SBI YONO / HDFC Mobile / ICICI iMobile (Account balance check, money transfer, mini statement)",
-        "Uber / Ola / Rapido (Auto rickshaw booking, cab to hospital, railway station)",
-        "Aarogya Setu / CoWIN (Vaccine certificate, doctor appointment booking)",
-        "Tata 1mg / Apollo 247 / PharmEasy (Order BP/Sugar medicines, lab test booking)",
-        "Flipkart / Amazon India (Order kurta, track delivered parcel, easy return)",
-        "WhatsApp (Family group video call, forward bhajan, share photo)",
-        "PhonePe / Google Pay / Paytm (Pay electricity bill, gas cylinder, FASTag recharge)",
-        "UTS Indian Railways (Unreserved local train ticket, suburban monthly pass)",
-        "YouTube (Aarti bhajan live, old devotional songs, cooking recipes)",
-        "BHIM UPI (Scan QR code at local kirana store, check bank balance)",
-        "PostInfo (India Post tracking, Senior Citizen Savings Scheme)",
-        "mAadhaar (Update address, download e-Aadhaar, lock biometrics)",
-        "Google Maps (Directions to nearest hospital, find temple, share live location)"
-    ]
-    selected_apps = random.sample(popular_apps, min(count, len(popular_apps)))
-
     import datetime
-    hour_seed = datetime.datetime.utcnow().strftime("%Y-%m-%d-%H")
-    variation_contexts = [
-        "home screen", "settings page", "payment confirmation", "search results",
-        "order history", "profile page", "notification panel", "login screen",
-        "checkout page", "booking confirmation", "help section", "menu drawer"
+    import uuid
+
+    # AXIS 1: Elder Personas (Who is interacting?)
+    elder_personas = [
+        "Retired PSU / Govt employee (age 72) managing pension passbook, CGHS medical claims, and fixed deposit slips",
+        "Rural / Semi-urban elder managing PM-Kisan DBT subsidy, PDS ration card, and local mandi prices",
+        "Grandmother living with family, frequently doing WhatsApp video calls with kids, listening to devotional bhajans, and forwarding festival greetings",
+        "Elderly patient living alone, ordering monthly BP/Sugar medicines, booking auto/cab for clinic visits, and viewing lab reports",
+        "Active grandfather managing home utilities: paying electricity/water bills, gas cylinder booking, and FASTag recharge"
     ]
-    variation = random.choice(variation_contexts)
 
-    prompt = f"""You are a synthetic Android UI generator for SaralGati, an AI companion designed for Indian elders.
-Generate exactly {len(selected_apps)} realistic Android app screens for Indian apps based on these topics:
-{json.dumps(selected_apps)}
-Context variation: Show the {variation} view. Generation seed: {hour_seed}.
+    # AXIS 2: Cognitive Intent & Mental State (What is their mental frame?)
+    intent_states = [
+        "Routine habituated task: performing a familiar weekly action with confidence",
+        "Confused / Lost state: accidentally navigated to an unfamiliar tab or dialog, trying to find their way back",
+        "Frustrated / Stuck state: struggled to find the action button, asking in distress why it's not working",
+        "Time-critical urgency: needs to connect with family or book transit immediately, high anxiety",
+        "Exploratory curiosity: wants to check if money arrived or view an old photo without making a mistake"
+    ]
 
+    # AXIS 3: App Domain & Screen Topology (What app and view?)
+    app_domains = [
+        ("com.whatsapp", "WhatsApp (active family chat, media viewer, or call log view)"),
+        ("com.google.android.dialer", "Phone Dialer (keypad dial, recent incoming call, or contact details)"),
+        ("com.phonepe.app", "PhonePe / UPI (electricity bill pay, mobile recharge, or transaction history)"),
+        ("com.google.android.youtube", "YouTube (search results for old bhajans, aarti video player, or channel view)"),
+        ("cris.org.in.prs.ima", "IRCTC Rail Connect (train search, PNR status check, or passenger list)"),
+        ("com.sbi.lotusintouch", "SBI YONO (account balance passbook, mini-statement, or fund transfer)"),
+        ("com.aranoah.healthkart.plus", "Tata 1mg / Apollo (prescription medicine cart, address confirmation, or order status)"),
+        ("com.google.android.apps.maps", "Google Maps (search directions to hospital, find nearest temple, or live share location)"),
+        ("com.grofers.customerapp", "Blinkit / Instamart (10-min daily essentials: milk, bread, curd, vegetables checkout)"),
+        ("com.digilocker.android", "DigiLocker / mAadhaar (view digital Aadhaar, vehicle RC, or vaccination certificate)")
+    ]
+
+    # AXIS 4: Linguistic Speech Style (How does the elder ask?)
+    speech_styles = [
+        "Natural Conversational Hinglish (Hindi in Roman script: 'Beti ko video call kaise lagayein', 'Bijli ka bill kahan se bharein')",
+        "Pure Devanagari Hindi script ('पेंशन का पैसा आया या नहीं कैसे देखें', 'दवाई मंगवाने का बटन कहाँ है')",
+        "Colloquial / Indirect elder phrasing ('Doctor sahab ko phone milana hai', 'Ghar aane ke liye gaadi bulao')",
+        "Semi-literate / Keyword-action mix ('Train ticket PNR check', 'Gas cylinder booking karna')"
+    ]
+
+    # EVOL-INSTRUCT MUTATION (Adversarial challenge for model robustness)
+    evol_mutations = [
+        "In-Depth Complexity: Include prominent banner or dynamic notifications that could distract from the primary actionable button. Elder must still be guided to the exact actionable element.",
+        "Ambiguity Resolution: The screen contains multiple similar buttons (e.g. 'Audio Call' vs 'Video Call', or 'Pay Later' vs 'Pay Now'). The elder's query specifically demands one, testing element disambiguation.",
+        "Dialect & Slang Shift: Elder uses conversational Hindi idioms ('chasma nahi pehna', 'number lagao', 'paisa bhejna hai').",
+        "Target Actionability Enforcement: Subtitle counts, timestamps ('3 unread', 'Photo', '10:45 AM') and static headings must be present but NEVER targeted as the action."
+    ]
+
+    # Sample from each axis independently
+    persona = random.choice(elder_personas)
+    intent = random.choice(intent_states)
+    chosen_apps = random.sample(app_domains, min(count, len(app_domains)))
+    speech = random.choice(speech_styles)
+    mutation = random.choice(evol_mutations)
+    entropy_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
+
+    prompt = f"""You are an advanced synthetic UI generator for SaralGati, an AI companion designed for Indian elders.
+Generate exactly {len(chosen_apps)} realistic Android app screens based on this 4-Axis Combinatorial Space:
+
+=== 4-AXIS CONFIGURATION ===
+1. Elder Persona: {persona}
+2. Cognitive Intent: {intent}
+3. Speech / Query Style: {speech}
+4. Evol-Instruct Mutation: {mutation}
+5. Entropy Seed: {entropy_seed}
+
+Target Apps:
+{json.dumps([app[1] for app in chosen_apps])}
+
+=== SCREEN & SCENARIO SPECIFICATIONS ===
 For each screen:
-1. Provide "app_package" (e.g. 'cris.org.in.prs.ima', 'com.phonepe.app', 'com.sbi.lotusintouch').
-2. Provide "elements": a list of 8 to 14 elements formatted with their accessibility role:
-   - [BUTTON] for clickable buttons or icons
+1. Provide "app_package" (exact package, e.g. '{chosen_apps[0][0]}').
+2. Provide "elements": list of 8 to 14 elements formatted with their accessibility role:
+   - [BUTTON] for clickable buttons or interactive icons
    - [INPUT] for text input boxes
    - [TOGGLE] for checkboxes/switches
    - [TEXT] for static titles/headers
-   Format each element strictly as: "[index] [ROLE] Label" (e.g., "[0] [BUTTON] Scan QR", "[1] [INPUT] Enter mobile number")
-3. Provide "scenarios": 2 to 3 realistic Indian elder queries in natural Hinglish (Hindi in Roman English alphabet).
-   Example queries: 'Beti ko video call kaise karein', 'Bijli ka bill kahan se bharein', 'Train ka PNR check karna hai'.
-4. For each query, specify "expected" (the exact integer index number of the target element to tap).
+   Format: "[index] [ROLE] Label" (e.g., "[0] [BUTTON] Video Call", "[1] [INPUT] Search contacts")
+   *CRITICAL RULE*: Subtitles, timestamps, or media counters (e.g., '[TEXT] 3 unread') must NEVER be the target.
+3. Provide "scenarios": 2 to 3 realistic elder queries matching the selected Speech Style and Intent.
+4. For each query, specify "expected" (the exact integer index number of the actionable target element to tap).
 
 Respond ONLY with valid JSON array containing this exact structure (no markdown fences, no extra text):
 [
@@ -193,32 +231,89 @@ def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blackliste
     fraud_training_cases for the LoRA export (type=fraud).
     """
     import random
-    scam_families = [
-        "OTP theft - caller claims to be bank staff and asks for the OTP just received",
-        "PM-Kisan / pension subsidy payment link that demands the UPI PIN to receive money",
-        "fake electricity board disconnection SMS with a payment link",
-        "fake KYC expiry SMS asking the elder to re-verify on a phishing link",
-        "fake courier/FedEx delivery SMS with an APK download link",
-        "tech-support remote access: screen-share app install request",
-        "lottery/prize win demanding a 'processing fee' via UPI",
-        "impersonation of a relative asking for urgent money on a new number",
-        "fake government/court notice threatening legal action unless paid",
-        "benign control - family WhatsApp group asking for a video call",
-        "benign control - genuine bank balance check screen",
-        "benign control - genuine UPI payment to a known shop",
-    ]
-    selected = random.sample(scam_families, min(count, len(scam_families)))
+    import datetime
+    import uuid
 
-    prompt = f"""You are a synthetic fraud-scenario generator for SaralGati, an anti-fraud sentinel that protects Indian elders.
-Generate exactly {len(selected)} realistic scenarios based on these topics:
-{json.dumps(selected)}
+    # AXIS 1: Target Victim Persona (Who is being targeted?)
+    victim_personas = [
+        "Retired PSU / Senior citizen pension account holder (fears bank account freeze or pension stoppage)",
+        "Rural welfare DBT subsidy beneficiary (expecting PM-Kisan, Ladli Behna, or PDS food grain quota)",
+        "Grandparent living alone while adult children work in another city / abroad (anxious about family well-being)",
+        "Elderly homeowner managing utility meters and household expenses (vulnerable to disconnection threats)",
+        "Tech-anxious elder using smartphone UPI or mobile banking for the first time"
+    ]
+
+    # AXIS 2: Psychological Attack Vector (Social Engineering Trigger)
+    psych_triggers = [
+        "Intimidation & Authority (Digital Arrest): Fake CBI, Police, Supreme Court, or Cyber Crime Cell alleging illegal parcel, money laundering, or arrest warrant",
+        "Time-Critical Panic: Threatening immediate cutoff of electricity, mobile SIM, or gas connection within 2 hours",
+        "Financial Bait & Greed: Claiming uncredited pension arrears, lottery win, or expiring credit card reward points ready for cash redemption",
+        "Family Distress Impersonation: Pretending to be a grandchild or relative in hospital/police custody needing urgent UPI transfer",
+        "Routine Administrative Deception: Falsely claiming mandatory KYC expiry, PAN-Aadhaar linking deadline, or biometric update",
+        "Benign Everyday Control (Guaranteed 25% clean baseline): Legitimate shop payment, genuine balance check, IRCTC ticket SMS, or utility receipt"
+    ]
+
+    # AXIS 3: Technical Attack Vector (How the trap works)
+    attack_vectors = [
+        "Malicious Sideload APK link: Sending an .apk download link (e.g. 'mseb_bill.apk', 'echallan.apk', 'update.apk') over SMS/chat",
+        "UPI PIN Inversion Trap: Collect request demanding elder enter their UPI PIN under the lie that PIN is required to 'receive' money",
+        "OTP Harvesting / Impersonation: Caller or text asking for confidential OTP to 'unfreeze' account or 'cancel' an unauthorized transaction",
+        "Remote Access / Accessibility Exploit: Coercing elder to install AnyDesk, TeamViewer, or QuickSupport for 'customer support'",
+        "Deceptive Phishing Landing URL: Cloned bank or government portal hosted on suspicious TLD (.xyz, .top, .live, .in.net, bit.ly)",
+        "Clean Benign Screen: Zero malicious signals; clean legitimate UI or genuine bank notification"
+    ]
+
+    # AXIS 4: Delivery Disguise & Linguistic Packaging (What does the screen look like?)
+    delivery_disguises = [
+        "SMS inbox text alert with Indian alphanumeric sender header (e.g. 'VK-SBIINB', 'BZ-MSEBDL', 'AX-TRAIIN', 'CP-CYBERD')",
+        "WhatsApp chat message from an unknown number (+91 / +92 / +1) displaying an official bank or government seal as profile picture",
+        "System push notification banner popping up over the current app with urgent alert styling",
+        "Deceptive browser popup page claiming virus infection or lottery winning spin wheel",
+        "Caller audio transcript where an aggressive caller instructs the elder to follow up on a link or read out SMS code"
+    ]
+
+    # EVOL-INSTRUCT ADVERSARIAL MUTATION
+    evol_mutations = [
+        "Obfuscation Mutation: Scammer deliberately avoids trigger words like 'OTP' or 'PIN', instead saying 'confidential 6-digit verification code' or 'security passcode'.",
+        "Hyper-Realistic Indian Context: Inject precise rupee figures (e.g. ₹12,480 electricity dues, ₹2,000 PM-Kisan tranche), real bank names, and regional power utilities.",
+        "Contrastive Subtlety: Make the scenario subtle so it tests the model's discernment (e.g., looks almost like a genuine bank alert, but has an unofficial URL).",
+        "Strict Specificity Guard: If the scenario is benign (Benign Control), expected_threat_level MUST be SAFE and expected_threat_category MUST be NONE."
+    ]
+
+    persona = random.choice(victim_personas)
+    trigger = random.choice(psych_triggers)
+    vector = random.choice(attack_vectors)
+    disguise = random.choice(delivery_disguises)
+    mutation = random.choice(evol_mutations)
+    generation_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
+
+    prompt = f"""You are an advanced synthetic fraud-scenario generator for SaralGati, an anti-fraud sentinel that protects Indian elders.
+Generate exactly {count} realistic Android fraud/benign scenarios based on this 4-Axis Combinatorial Space:
+
+=== 4-AXIS COMBINATORIAL CONFIGURATION ===
+1. Target Victim Persona: {persona}
+2. Psychological Trigger: {trigger}
+3. Technical Attack Vector: {vector}
+4. Delivery Disguise: {disguise}
+5. Evol-Instruct Mutation: {mutation}
+6. Entropy Seed: {generation_seed}
+
+=== DIVERSITY & INTEGRITY RULES ===
+- Always include at least 1 BENIGN CONTROL scenario (threat_level: "SAFE", threat_category: "NONE") to prevent model paranoia.
+- Vary sender IDs (e.g. 'VK-SBIINB', 'BZ-MSEBDL', 'AX-TRAIIN', 'JM-POSTIN', 'CP-CYBERD').
+- Vary monetary amounts, phone numbers, and URLs (.xyz, .top, .live, .in.net, bit.ly, etc.).
+- Threat Level Rules:
+  * Only theft vectors (OTP theft, payment PIN fraud, remote access, malicious APK) may reach CRITICAL.
+  * Receiving money NEVER requires a UPI PIN or OTP.
+  * Secondary concerns (unneeded contacts/SMS access, minor spam) are SUSPICIOUS or DANGEROUS, never CRITICAL.
+  * Benign controls are strictly SAFE.
 
 For each scenario provide:
 1. "app_package": the Android app/context it appears in (e.g. 'com.android.mms', 'com.whatsapp', 'com.phonepe.app').
 2. "messages": the SMS / notification / caller-script lines the elder sees (1 to 4 plain strings, keep the scam wording realistic).
 3. "urls": any links in the message (empty list if none).
 4. "screen_text": a short description of the visible screen (may be empty string).
-5. "expected_threat_level": one of SAFE, SUSPICIOUS, DANGEROUS, CRITICAL. Only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may be CRITICAL. Remember: receiving money never needs a UPI PIN or OTP.
+5. "expected_threat_level": one of SAFE, SUSPICIOUS, DANGEROUS, CRITICAL.
 6. "expected_threat_category": one of OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.
 
 Respond ONLY with valid JSON array (no markdown fences, no extra text):
@@ -356,12 +451,16 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         return stats
 
     count = 0
+    limit_reached = False
     for screen in active_screens:
+        if limit_reached:
+            break
         pkg = screen["app_package"]
         elements = screen["elements"]
 
         for scenario in screen["scenarios"]:
             if max_cases and count >= max_cases:
+                limit_reached = True
                 break
 
             query = scenario["query"]
@@ -452,7 +551,8 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         print("\n" + "=" * 75)
         print(" 🛡️  ANTI-FRAUD SENTINEL TRAINING PHASE (Gemini ground truth)")
         print("=" * 75)
-        fraud_screens = generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6)
+        fraud_target = min(6, max_cases) if max_cases else 6
+        fraud_screens = generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=fraud_target, blacklisted_models=blacklisted_models)
         severity = {"SAFE": 0, "SUSPICIOUS": 1, "DANGEROUS": 2, "CRITICAL": 3}
         for fc_idx, case in enumerate(fraud_screens, start=1):
             expected_level = case["expected_threat_level"]
@@ -533,7 +633,15 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             timeout=15,
         )
         train_count = train_res.json().get("count", 0)
-        print(f" Flywheel Verified Pool    : {train_count} verified samples ready in Neon DB.")
+        print(f" Flywheel Verified Pool    : {train_count} verified interaction samples ready in Neon DB.")
+
+        fraud_res = requests.get(
+            urljoin(api_url, "/api/v1/agent/training-data?type=fraud&limit=5"),
+            headers=headers,
+            timeout=15,
+        )
+        fraud_count = fraud_res.json().get("count", 0)
+        print(f" Fraud Training Cases Pool : {fraud_count} fraud cases ready in Neon DB.")
     except Exception:
         # Ignore network errors or database connection drops during offline checks
         pass

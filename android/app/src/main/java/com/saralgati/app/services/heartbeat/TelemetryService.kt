@@ -33,10 +33,9 @@ class TelemetryService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val HEARTBEAT_INTERVAL_MS = 60000L // 1 minute
 
-        // A cached fix older than this is not reported at all: the dashboard
-        // shows a stale pin as "last known", and an hours-old coordinate would
-        // read as the elder's current position.
-        private const val MAX_FIX_AGE_MS = 10 * 60 * 1000L
+        // A cached fix older than this is not reported at all: aligned with
+        // the server's 15-minute staleness window.
+        private const val MAX_FIX_AGE_MS = 15 * 60 * 1000L
     }
 
     override fun onCreate() {
@@ -135,11 +134,16 @@ class TelemetryService : Service() {
         if (!fineGranted && !coarseGranted) return null
 
         val manager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
-        val providers = listOf(
-            LocationManager.GPS_PROVIDER,
-            LocationManager.NETWORK_PROVIDER,
-            LocationManager.PASSIVE_PROVIDER
-        )
+        val providers = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(LocationManager.FUSED_PROVIDER)
+            } else {
+                add("fused")
+            }
+            add(LocationManager.GPS_PROVIDER)
+            add(LocationManager.NETWORK_PROVIDER)
+            add(LocationManager.PASSIVE_PROVIDER)
+        }
 
         var newest: Location? = null
         for (provider in providers) {

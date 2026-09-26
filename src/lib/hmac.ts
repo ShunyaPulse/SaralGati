@@ -1,22 +1,12 @@
 import crypto from "crypto";
 
 /**
- * The Android companion signs every request with HMAC-SHA256 using a shared
- * secret. We support the configured secret from API_SECRET / FLYWHEEL_SECRET,
- * with fallback to the standard placeholder 'YOUR_API_SECRET' for transition
- * support with installed companion APKs.
+ * The Android companion signs every request with HMAC-SHA256 using the configured
+ * API_SECRET (or FLYWHEEL_SECRET). No placeholder fallbacks are permitted.
  */
-function getCandidateSecrets(): string[] {
-  const secrets: string[] = [];
-  const primary = process.env.API_SECRET?.trim() || process.env.FLYWHEEL_SECRET?.trim();
-  if (primary) {
-    secrets.push(primary);
-  }
-  const fallback = "YOUR_API_SECRET";
-  if (!secrets.includes(fallback)) {
-    secrets.push(fallback);
-  }
-  return secrets;
+function getApiSecret(): string | null {
+  const secret = process.env.API_SECRET?.trim() || process.env.FLYWHEEL_SECRET?.trim();
+  return secret && secret.length > 0 ? secret : null;
 }
 
 /** Constant-time comparison that tolerates unequal lengths instead of throwing. */
@@ -28,6 +18,14 @@ function timingSafeEqualString(a: string, b: string): boolean {
 }
 
 export function verifyAndroidHmac(request: Request): boolean {
+  const apiSecret = getApiSecret();
+  if (!apiSecret) {
+    console.error(
+      "API_SECRET is not configured - rejecting companion request with a signature",
+    );
+    return false;
+  }
+
   const timestamp = request.headers.get("X-App-Timestamp");
   const signature = request.headers.get("X-App-Signature");
 
@@ -47,17 +45,10 @@ export function verifyAndroidHmac(request: Request): boolean {
   const url = new URL(request.url);
   const message = `${request.method}${url.pathname}${timestamp}`;
 
-  const candidateSecrets = getCandidateSecrets();
-  for (const secret of candidateSecrets) {
-    const expectedSignature = crypto
-      .createHmac("sha256", secret)
-      .update(message)
-      .digest("base64");
+  const expectedSignature = crypto
+    .createHmac("sha256", apiSecret)
+    .update(message)
+    .digest("base64");
 
-    if (timingSafeEqualString(signature, expectedSignature)) {
-      return true;
-    }
-  }
-
-  return false;
+  return timingSafeEqualString(signature, expectedSignature);
 }

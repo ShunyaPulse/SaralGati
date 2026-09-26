@@ -13,6 +13,7 @@
   > _"Isme time aur token waste mat karo, baad me ek hi baar me pura clean aur organize kar denge."_
 - **Android Device Execution**: Do not attempt to run or simulate the Android device directly. Prepare code and give clear verification instructions for the user to test on device.
 - **Semantics**: Do not change '' to "" or vice versa where it does not cause error.
+- **No Legacy Backward-Compatibility Shims**: The application is in active development with no external users. Do NOT introduce transitional fallbacks, legacy compatibility bridges, or backward-compatibility workarounds (e.g. fallback secrets, legacy schema shims, or multi-version branching) to preserve obsolete client/APK versions. Always enforce clean, modern, and hardened cut-overs.
 
 ## 3. UI Grounding Rules (Elder Companion)
 

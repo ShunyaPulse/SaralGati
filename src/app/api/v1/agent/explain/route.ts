@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { generateAIResponse } from "@/lib/aiFallback";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import {
+  analyzeForFraud,
+  sentinelExplanation,
+  shouldInterceptFraud,
+} from "@/lib/fraudSentinel";
 import { rateLimiter } from "@/lib/redis";
 
 const explainRequestSchema = z.object({
@@ -60,6 +65,32 @@ export async function POST(req: NextRequest) {
     const { app_package: safeAppPackage, ui_elements: safeUIElements } =
       parseResult.data;
 
+    // === SECURITY GATE: AUTONOMOUS ANTI-FRAUD SENTINEL ===
+    // Screen explanations are pushed proactively, so a scam screen must be warned
+    // about here too instead of being politely described to the elder.
+    const fraudVerdict = analyzeForFraud({
+      app_package: safeAppPackage,
+      ui_elements: safeUIElements,
+    });
+    if (shouldInterceptFraud(fraudVerdict)) {
+      console.warn(
+        `Anti-fraud sentinel blocked screen explanation for elder ${auth.elderId ?? "unknown"}: ` +
+          `${fraudVerdict.threat_level}/${fraudVerdict.threat_category} - ${fraudVerdict.risk_reasoning}`,
+      );
+      return NextResponse.json({
+        success: true,
+        data: {
+          explanation: sentinelExplanation(fraudVerdict),
+          source: "fraud_sentinel",
+          model_used: "anti_fraud_sentinel",
+          safety: fraudVerdict,
+        },
+      });
+    }
+    // A softer verdict still travels with the explanation so the companion can
+    // show the advisory (SHOW_WARNING) without losing the screen guidance.
+    const safety = fraudVerdict.threat_level === "SAFE" ? null : fraudVerdict;
+
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
 The user is currently looking at an app with package name: ${safeAppPackage}.
 Here are the text elements visible on their screen:
@@ -80,6 +111,7 @@ Tell them where they are and what they can do next. Be comforting and respectful
         explanation: aiResult.text,
         source: aiResult.source,
         model_used: aiResult.modelUsed,
+        ...(safety ? { safety } : {}),
       },
     });
   } catch (error) {

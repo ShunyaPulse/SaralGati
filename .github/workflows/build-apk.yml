@@ -83,7 +83,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-          API_SECRET: ${{ secrets.API_SECRET }}
+          API_SECRET: ${{ secrets.API_SECRET || secrets.FLYWHEEL_SECRET }}
 
       - name: Prepare Release APK
         run: |

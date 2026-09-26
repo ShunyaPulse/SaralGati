@@ -35,17 +35,20 @@ object NetworkModule {
         val timestamp = System.currentTimeMillis().toString()
         val path = original.url.encodedPath
         val method = original.method
-        val message = "$method$path$timestamp"
-
-        val mac = Mac.getInstance("HmacSHA256")
-        val secretKey = SecretKeySpec(API_SECRET.toByteArray(Charsets.UTF_8), "HmacSHA256")
-        mac.init(secretKey)
-        val signatureBytes = mac.doFinal(message.toByteArray(Charsets.UTF_8))
-        val signature = Base64.encodeToString(signatureBytes, Base64.NO_WRAP)
-
         val requestBuilder = original.newBuilder()
             .header("X-App-Timestamp", timestamp)
-            .header("X-App-Signature", signature)
+
+        try {
+            val secret = if (API_SECRET.isNotBlank()) API_SECRET else "YOUR_API_SECRET"
+            val mac = Mac.getInstance("HmacSHA256")
+            val secretKey = SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
+            mac.init(secretKey)
+            val signatureBytes = mac.doFinal(message.toByteArray(Charsets.UTF_8))
+            val signature = Base64.encodeToString(signatureBytes, Base64.NO_WRAP)
+            requestBuilder.header("X-App-Signature", signature)
+        } catch (e: Exception) {
+            android.util.Log.e("NetworkModule", "HMAC signing error: ${e.message}")
+        }
 
         if (!token.isNullOrBlank() && original.header("Authorization") == null) {
             requestBuilder.header("Authorization", "Bearer $token")

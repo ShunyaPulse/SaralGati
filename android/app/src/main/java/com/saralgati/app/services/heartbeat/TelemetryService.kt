@@ -43,8 +43,20 @@ class TelemetryService : Service() {
         localPrefs = LocalPrefs(applicationContext)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildForegroundNotification())
-        Log.i(TAG, "TelemetryService created and running in foreground.")
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildForegroundNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, buildForegroundNotification())
+            }
+            Log.i(TAG, "TelemetryService created and running in foreground.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start foreground service: ${e.message}", e)
+        }
         
         startHeartbeatLoop()
     }

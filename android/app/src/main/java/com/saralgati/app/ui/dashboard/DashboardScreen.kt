@@ -68,11 +68,15 @@ fun DashboardScreen(
     }
 
     LaunchedEffect(Unit) {
-        val intent = Intent(context, com.saralgati.app.services.heartbeat.TelemetryService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
+        try {
+            val intent = Intent(context, com.saralgati.app.services.heartbeat.TelemetryService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("DashboardScreen", "Failed to start TelemetryService: ${e.message}")
         }
     }
 

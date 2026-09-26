@@ -27,8 +27,8 @@ android {
         minSdk = 24
         targetSdk = 37
         versionCode = vCode
-        versionName = vName
-        buildConfigField("String", "API_SECRET", "\"${System.getenv("API_SECRET") ?: "YOUR_API_SECRET"}\"")
+        val secret = System.getenv("API_SECRET")?.takeIf { it.isNotBlank() } ?: "YOUR_API_SECRET"
+        buildConfigField("String", "API_SECRET", "\"$secret\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

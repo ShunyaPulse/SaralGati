@@ -37,18 +37,30 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
     url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
+    fraud_url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000"
     print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
+    lines = []
     try:
         if not FLYWHEEL_SECRET:
             raise RuntimeError("FLYWHEEL_SECRET / API_SECRET is not available in this environment")
         res = requests.get(url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
         res.raise_for_status()
         content = res.text.strip()
-        lines = [l for l in content.split("\n") if l.strip()]
+        lines.extend([l for l in content.split("\n") if l.strip()])
         print(f"[Dataset] Downloaded {len(lines)} verified training interactions from live Flywheel.")
     except Exception as e:
-        print(f"[Dataset] Warning: Failed to fetch live data ({e}). Falling back to local/seed data.")
-        lines = []
+        print(f"[Dataset] Warning: Failed to fetch live interaction data ({e}).")
+
+    try:
+        if FLYWHEEL_SECRET:
+            f_res = requests.get(fraud_url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
+            if f_res.ok:
+                f_content = f_res.text.strip()
+                f_lines = [l for l in f_content.split("\n") if l.strip()]
+                print(f"[Dataset] Downloaded {len(f_lines)} fraud training cases from live Flywheel.")
+                lines.extend(f_lines)
+    except Exception as e:
+        print(f"[Dataset] Warning: Failed to fetch fraud data ({e}).")
 
     # Supplement with high-quality seed pairs if dataset is small
     if len(lines) < 20:
@@ -73,6 +85,27 @@ def fetch_live_dataset():
                     {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.youtube.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Search\n[1] [BUTTON] Voice Search\n[2] [BUTTON] Play Video भजन\n[3] [TEXT] Top Songs\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
                     {"role": "user", "content": "aarti bhajan sunna hai"},
                     {"role": "assistant", "content": "भजन सुनने के लिए यहाँ दबाएं। TARGET:2"}
+                ]
+            },
+            {
+                "messages": [
+                    {"role": "system", "content": "You are SaralGati's anti-fraud analyst for Indian elders.\nYou receive the visible signals of one Android screen or message batch: UI element labels, URLs, SMS/notification text and the elder's question.\nClassify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICAL) and one category among OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.\nRules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.\nRespond ONLY with JSON: {\"threat_level\":\"...\",\"threat_category\":\"...\",\"risk_reasoning\":\"one short sentence\"}."},
+                    {"role": "user", "content": json.dumps({"app_package": "com.android.mms", "signals": {"messages": ["SBI: Your net banking is locked. Share OTP 482910 to unlock immediately."], "urls": []}})},
+                    {"role": "assistant", "content": json.dumps({"threat_level": "CRITICAL", "threat_category": "OTP_THEFT", "risk_reasoning": "OTP kisi ke sath share mat karein, bank kabhi OTP nahi mangta."})}
+                ]
+            },
+            {
+                "messages": [
+                    {"role": "system", "content": "You are SaralGati's anti-fraud analyst for Indian elders.\nYou receive the visible signals of one Android screen or message batch: UI element labels, URLs, SMS/notification text and the elder's question.\nClassify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICAL) and one category among OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.\nRules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.\nRespond ONLY with JSON: {\"threat_level\":\"...\",\"threat_category\":\"...\",\"risk_reasoning\":\"one short sentence\"}."},
+                    {"role": "user", "content": json.dumps({"app_package": "com.phonepe.app", "signals": {"question": "pension ka paisa lene ke liye pin mang raha hai", "ui_elements": ["[0] [BUTTON] Enter UPI PIN to receive ₹5000", "[1] [BUTTON] Cancel"]}})},
+                    {"role": "assistant", "content": json.dumps({"threat_level": "CRITICAL", "threat_category": "PAYMENT_FRAUD", "risk_reasoning": "Paisa prapt karne ke liye kabhi UPI PIN nahi dalna hota."})}
+                ]
+            },
+            {
+                "messages": [
+                    {"role": "system", "content": "You are SaralGati's anti-fraud analyst for Indian elders.\nYou receive the visible signals of one Android screen or message batch: UI element labels, URLs, SMS/notification text and the elder's question.\nClassify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICAL) and one category among OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.\nRules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.\nRespond ONLY with JSON: {\"threat_level\":\"...\",\"threat_category\":\"...\",\"risk_reasoning\":\"one short sentence\"}."},
+                    {"role": "user", "content": json.dumps({"app_package": "com.whatsapp", "signals": {"messages": ["Electricity power cut tonight at 9:30 PM. Download bill update app immediately: https://bit.ly/mseb-bill.apk"], "urls": ["https://bit.ly/mseb-bill.apk"]}})},
+                    {"role": "assistant", "content": json.dumps({"threat_level": "CRITICAL", "threat_category": "MALICIOUS_APK", "risk_reasoning": "Anjaan APK file download na karein, yeh phone hack kar sakta hai."})}
                 ]
             }
         ]

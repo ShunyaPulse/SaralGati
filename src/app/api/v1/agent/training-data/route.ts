@@ -130,16 +130,19 @@ Instructions:
         input_signals: Record<string, unknown>;
         predicted_level: string;
         predicted_category: string | null;
-        expected_level: string;
+        expected_level: string | null;
         expected_category: string | null;
         is_correct: boolean | null;
+        risk_reasoning: string | null;
+        source: string;
         created_at: string;
       }>(
-        `SELECT id, app_package, screen_hash, input_signals, predicted_level,
-                predicted_category, expected_level, expected_category, is_correct, created_at
+        `SELECT DISTINCT ON (app_package, screen_hash)
+                id, app_package, screen_hash, input_signals, predicted_level,
+                predicted_category, expected_level, expected_category, is_correct,
+                verdict->>'risk_reasoning' AS risk_reasoning, source, created_at
          FROM fraud_training_cases
-         WHERE expected_level IS NOT NULL
-         ORDER BY created_at DESC
+         ORDER BY app_package, screen_hash, created_at DESC
          LIMIT $1`,
         [limit],
       );
@@ -150,6 +153,9 @@ Classify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICA
 Rules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.
 Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reasoning":"one short sentence"}.`;
 
+      // For device-sourced rows without ground-truth labels, the predicted
+      // verdict IS the best available label (sentinel was confident enough to
+      // flag DANGEROUS/CRITICAL).
       const fraudSft = fraudRows.map((row) => ({
         messages: [
           { role: "system", content: FRAUD_SYSTEM_PROMPT },
@@ -167,8 +173,10 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
           {
             role: "assistant",
             content: JSON.stringify({
-              threat_level: row.expected_level,
-              threat_category: row.expected_category ?? "NONE",
+              threat_level: row.expected_level ?? row.predicted_level,
+              threat_category:
+                row.expected_category ?? row.predicted_category ?? "NONE",
+              risk_reasoning: row.risk_reasoning ?? "Yahan dabayein.",
             }),
           },
         ],
@@ -179,6 +187,7 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
           predicted_category: row.predicted_category,
           expected_level: row.expected_level,
           is_correct: row.is_correct,
+          source: row.source,
           type: "fraud_ground_truth",
           created_at: row.created_at,
         },
@@ -203,6 +212,7 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
               content: JSON.stringify({
                 threat_level: row.expected_level,
                 threat_category: row.expected_category ?? "NONE",
+                risk_reasoning: "Yahan dabayein.",
               }),
             },
           ],
@@ -212,6 +222,7 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
               content: JSON.stringify({
                 threat_level: row.predicted_level,
                 threat_category: row.predicted_category ?? "NONE",
+                risk_reasoning: row.risk_reasoning ?? "Yahan dabayein.",
               }),
             },
           ],
@@ -223,7 +234,20 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
         }));
 
       if (format === "jsonl") {
-        const jsonl = fraudSft.map((d) => JSON.stringify(d)).join("\n");
+        const subMode = (searchParams.get("mode") || "sft").toLowerCase();
+        let exportRows: Record<string, unknown>[];
+        if (subMode === "dpo") {
+          exportRows = fraudDpo;
+        } else if (subMode === "all") {
+          exportRows = [
+            ...fraudSft.map((d) => ({ ...d, dataset_type: "sft" })),
+            ...fraudDpo.map((d) => ({ ...d, dataset_type: "dpo" })),
+          ];
+        } else {
+          // Default: pure SFT rows for SFTTrainer / HuggingFace datasets compatibility
+          exportRows = fraudSft;
+        }
+        const jsonl = exportRows.map((d) => JSON.stringify(d)).join("\n");
         return new Response(jsonl, {
           headers: {
             "Content-Type": "application/x-ndjson",

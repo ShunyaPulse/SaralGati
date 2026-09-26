@@ -61,7 +61,24 @@ jobs:
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
             "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" \
             -o dataset.jsonl
-          echo "Downloaded $(wc -l < dataset.jsonl) rows to dataset.jsonl"
+          echo "Downloaded $(wc -l < dataset.jsonl) SFT rows to dataset.jsonl"
+
+      - name: Download Fraud Training Dataset
+        if: steps.check_data.outputs.should_train == 'true'
+        env:
+          FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
+        run: |
+          curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl" \
+            -o fraud_dataset.jsonl 2>/dev/null || true
+          if [ -s fraud_dataset.jsonl ]; then
+            FRAUD_LINES=$(wc -l < fraud_dataset.jsonl)
+            echo "Downloaded $FRAUD_LINES fraud training rows"
+            cat fraud_dataset.jsonl >> dataset.jsonl
+          else
+            echo "No fraud training data available yet, skipping."
+          fi
+          echo "Total dataset: $(wc -l < dataset.jsonl) rows"
 
       - name: Upload Dataset Artifact
         if: steps.check_data.outputs.should_train == 'true'

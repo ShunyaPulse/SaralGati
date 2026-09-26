@@ -34,10 +34,10 @@ const fraudCheckRequestSchema = z
     (value) =>
       Boolean(
         value.ui_elements?.length ||
-          value.screen_text?.trim() ||
-          value.messages?.length ||
-          value.urls?.length ||
-          value.question?.trim(),
+        value.screen_text?.trim() ||
+        value.messages?.length ||
+        value.urls?.length ||
+        value.question?.trim(),
       ),
     { message: "At least one input source is required" },
   );
@@ -132,7 +132,8 @@ export async function POST(req: NextRequest) {
             verdict.threat_category ?? null,
             expectedLevel,
             expectedCategory,
-            verdict.threat_level === expectedLevel,
+            verdict.threat_level === expectedLevel &&
+              (!expectedCategory || verdict.threat_category === expectedCategory),
           ],
         );
       } catch (persistError) {
@@ -140,8 +141,61 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Live-device training capture: when the sentinel flags DANGEROUS/CRITICAL
+    // on a real elder screen, anonymise and store the verdict so the fraud
+    // training-data export can learn from production signals. No raw text is
+    // persisted – only derived signals + screen_hash.
+    if (
+      !isFlywheel &&
+      (verdict.threat_level === "DANGEROUS" ||
+        verdict.threat_level === "CRITICAL")
+    ) {
+      try {
+        const { ui_elements, urls, messages, question, screen_text } =
+          parseResult.data;
+        const signals = {
+          ui_elements: ui_elements ?? [],
+          urls: urls ?? [],
+          messages: messages ?? [],
+          question: question ?? "",
+          screen_text: screen_text ?? "",
+        };
+        const screenHash = crypto
+          .createHash("sha256")
+          .update(JSON.stringify(signals))
+          .digest("hex")
+          .slice(0, 64);
+
+        await query(
+          `INSERT INTO fraud_training_cases
+             (elder_id, app_package, screen_hash, input_signals, verdict,
+              predicted_level, predicted_category, is_correct, source)
+           SELECT $1, $2, $3, $4::jsonb, $5::jsonb, $6, $7, NULL, 'device'
+           WHERE NOT EXISTS (
+             SELECT 1 FROM fraud_training_cases WHERE screen_hash = $3
+           )`,
+          [
+            auth.elderId ?? null,
+            parseResult.data.app_package ??
+              parseResult.data.app_package_hint ??
+              null,
+            screenHash,
+            JSON.stringify(signals),
+            JSON.stringify(verdict),
+            verdict.threat_level,
+            verdict.threat_category ?? null,
+          ],
+        );
+      } catch (persistError) {
+        console.error("Device fraud capture failed:", persistError);
+      }
+    }
+
     // Log only the verdict and reasoning, never the elder's raw screen text.
-    if (verdict.threat_level === "DANGEROUS" || verdict.threat_level === "CRITICAL") {
+    if (
+      verdict.threat_level === "DANGEROUS" ||
+      verdict.threat_level === "CRITICAL"
+    ) {
       console.warn(
         `Anti-fraud sentinel: ${verdict.threat_level}/${verdict.threat_category} ` +
           `for elder ${auth.elderId ?? "unknown"} - ${verdict.risk_reasoning}`,

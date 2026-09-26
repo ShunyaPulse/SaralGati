@@ -519,6 +519,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val width = right - left
         val height = bottom - top
         if (width <= 0 || height <= 0) return
+        if (!android.provider.Settings.canDrawOverlays(this)) return
 
         highlightHandler.post {
             removeCurrentHighlight()
@@ -562,7 +563,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 y = top
             }
 
-            if (!android.provider.Settings.canDrawOverlays(this)) return
+            if (!android.provider.Settings.canDrawOverlays(this)) return@post
             try {
                 windowManager.addView(highlightView, params)
                 activeHighlightView = highlightView

@@ -1,0 +1,106 @@
+name: Android Checks
+
+# Compile gate for the Kotlin companion app.
+#
+# `build-apk.yml` only runs on pushes to main, so a Kotlin change (a broken
+# reference in the accessibility service, a Moshi model that no longer matches
+# the API response) reaches main before anything compiles it. This workflow
+# assembles the debug variant on pull requests, the same way `web-checks.yml`
+# typechecks and tests the dashboard before merge.
+#
+# Instead of a static `paths` filter it decides with a diff, because GitHub
+# cannot OR a `paths` filter with a branch condition: we want to compile (a)
+# when the change touches the Android project, or (b) whenever a pull request is
+# opened/updated from `feat/android-fraud-sentinel`, which is Android-only work.
+#
+# assembleDebug (not assembleRelease) on purpose: it needs no release keystore
+# and no secrets, so the gate also runs on forks and cannot fail for environment
+# reasons unrelated to the code.
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: android-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detect Android changes
+    runs-on: ubuntu-latest
+    outputs:
+      compile: ${{ steps.decide.outputs.compile }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether to compile
+        id: decide
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          # Explicit override: every pull request from this branch is Android
+          # work, so compile it even if the diff does not touch `android/**`.
+          if [ "${HEAD_REF:-}" = "feat/android-fraud-sentinel" ]; then
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Manual runs (`workflow_dispatch`) have no base revision: always compile.
+          if [ -z "${BASE_SHA:-}" ]; then
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Otherwise compile only when the change touches the Android project
+          # or this workflow.
+          if git diff --name-only "$BASE_SHA" "$HEAD_SHA" \
+              | grep -qE '^android/|^\.github/workflows/android-checks\.yml$'; then
+            echo "compile=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "compile=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Result
+        run: echo "compile=${{ steps.decide.outputs.compile }}"
+
+  compile:
+    name: Compile debug variant
+    needs: detect
+    if: needs.detect.outputs.compile == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+        working-directory: android
+
+      - name: Compile debug variant
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: android

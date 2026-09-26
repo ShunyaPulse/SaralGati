@@ -183,6 +183,117 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     return []
 
 
+def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blacklisted_models=None):
+    """Ask Gemini for synthetic scam / benign screens with a ground-truth label.
+
+    The deterministic sentinel has no learning loop of its own, so the flywheel
+    is where it is trained: Gemini writes the fraud scenario AND the expected
+    threat_level/threat_category, the caller posts it to
+    /api/v1/agent/fraud-check, and the verdict is stored in
+    fraud_training_cases for the LoRA export (type=fraud).
+    """
+    import random
+    scam_families = [
+        "OTP theft - caller claims to be bank staff and asks for the OTP just received",
+        "PM-Kisan / pension subsidy payment link that demands the UPI PIN to receive money",
+        "fake electricity board disconnection SMS with a payment link",
+        "fake KYC expiry SMS asking the elder to re-verify on a phishing link",
+        "fake courier/FedEx delivery SMS with an APK download link",
+        "tech-support remote access: screen-share app install request",
+        "lottery/prize win demanding a 'processing fee' via UPI",
+        "impersonation of a relative asking for urgent money on a new number",
+        "fake government/court notice threatening legal action unless paid",
+        "benign control - family WhatsApp group asking for a video call",
+        "benign control - genuine bank balance check screen",
+        "benign control - genuine UPI payment to a known shop",
+    ]
+    selected = random.sample(scam_families, min(count, len(scam_families)))
+
+    prompt = f"""You are a synthetic fraud-scenario generator for SaralGati, an anti-fraud sentinel that protects Indian elders.
+Generate exactly {len(selected)} realistic scenarios based on these topics:
+{json.dumps(selected)}
+
+For each scenario provide:
+1. "app_package": the Android app/context it appears in (e.g. 'com.android.mms', 'com.whatsapp', 'com.phonepe.app').
+2. "messages": the SMS / notification / caller-script lines the elder sees (1 to 4 plain strings, keep the scam wording realistic).
+3. "urls": any links in the message (empty list if none).
+4. "screen_text": a short description of the visible screen (may be empty string).
+5. "expected_threat_level": one of SAFE, SUSPICIOUS, DANGEROUS, CRITICAL. Only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may be CRITICAL. Remember: receiving money never needs a UPI PIN or OTP.
+6. "expected_threat_category": one of OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.
+
+Respond ONLY with valid JSON array (no markdown fences, no extra text):
+[
+  {{
+    "app_package": "string",
+    "messages": ["string"],
+    "urls": ["string"],
+    "screen_text": "string",
+    "expected_threat_level": "string",
+    "expected_threat_category": "string"
+  }}
+]"""
+
+    CANDIDATE_MODELS = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
+
+    if not gemini_keys_pool:
+        return []
+    if blacklisted_models is None:
+        blacklisted_models = set()
+
+    for model_name in CANDIDATE_MODELS:
+        if model_name in blacklisted_models:
+            continue
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        for key_idx, api_key in enumerate(gemini_keys_pool):
+            api_key = api_key.strip()
+            if not api_key:
+                continue
+            headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            try:
+                res = requests.post(url, json=payload, headers=headers, timeout=25)
+                if res.status_code in (500, 502, 503, 504):
+                    blacklisted_models.add(model_name)
+                    print(f"  ⚡ [fraud] {model_name} high demand ({res.status_code}). Fast-switching model...")
+                    break
+                if res.status_code == 429:
+                    continue
+                res.raise_for_status()
+                raw_text = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                clean_json = re.sub(r"^```(?:json)?", "", raw_text, flags=re.MULTILINE)
+                clean_json = re.sub(r"```$", "", clean_json, flags=re.MULTILINE).strip()
+                parsed_data = json.loads(clean_json)
+                if isinstance(parsed_data, list) and parsed_data:
+                    screens = [
+                        {
+                            "app_package": str(s.get("app_package", "com.android.mms")),
+                            "messages": [str(m) for m in s.get("messages", [])],
+                            "urls": [str(u) for u in s.get("urls", [])],
+                            "screen_text": str(s.get("screen_text", "")),
+                            "expected_threat_level": str(s.get("expected_threat_level", "SAFE")).upper(),
+                            "expected_threat_category": str(s.get("expected_threat_category", "NONE")).upper(),
+                        }
+                        for s in parsed_data
+                        if isinstance(s, dict)
+                    ]
+                    print(f"✨ [fraud] Synthesized {len(screens)} scam scenarios via {model_name} [key {key_idx+1}/{len(gemini_keys_pool)}]")
+                    return screens
+            except Exception as e:
+                print(f"  ⚠️ [fraud] Key [{key_idx+1}] / {model_name}: {e}. Trying next key...")
+                continue
+
+    print("⚠️ [fraud] All models and all keys exhausted for scam generation.")
+    return []
+
+
 def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max_cases=None):
     num_keys = len(gemini_keys_pool) if gemini_keys_pool else 0
     print("=" * 75)
@@ -211,7 +322,12 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         "corrections_injected": 0,
         "golden_cache_promotions": 0,
         "cache_evictions": 0,
-        "api_errors": 0
+        "api_errors": 0,
+        "fraud_scenarios": 0,
+        "fraud_correct": 0,
+        "fraud_missed": 0,
+        "fraud_false_alarms": 0,
+        "fraud_captured": 0
     }
 
     # Generate screens in 4 batches when keys available (more data per run)
@@ -329,6 +445,66 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             print("-" * 75)
             time.sleep(0.3)
 
+    # 4. Anti-Fraud Sentinel training phase: Gemini writes the scam screen and
+    #    its ground-truth label, the sentinel scores it, and the verdict is
+    #    persisted per case (fraud_training_cases) for the LoRA fraud export.
+    if gemini_keys_pool:
+        print("\n" + "=" * 75)
+        print(" 🛡️  ANTI-FRAUD SENTINEL TRAINING PHASE (Gemini ground truth)")
+        print("=" * 75)
+        fraud_screens = generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6)
+        severity = {"SAFE": 0, "SUSPICIOUS": 1, "DANGEROUS": 2, "CRITICAL": 3}
+        for fc_idx, case in enumerate(fraud_screens, start=1):
+            expected_level = case["expected_threat_level"]
+            payload = {
+                "app_package": case["app_package"],
+                "messages": case["messages"],
+                "urls": case["urls"],
+                "screen_text": case["screen_text"],
+                "expected_threat_level": expected_level,
+                "expected_threat_category": case["expected_threat_category"],
+            }
+            print(f"[{fc_idx}] {case['app_package']:<24} | Expected: {expected_level}/{case['expected_threat_category']}")
+            if case["messages"]:
+                print(f"    Message: \"{case['messages'][0][:100]}\"")
+            try:
+                f_res = requests.post(
+                    urljoin(api_url, "/api/v1/agent/fraud-check"),
+                    json=payload,
+                    headers=headers,
+                    timeout=20,
+                )
+                verdict = f_res.json()
+            except Exception as e:
+                print(f"    ❌ Network error: {e}")
+                stats["api_errors"] += 1
+                continue
+
+            predicted_level = verdict.get("threat_level")
+            if predicted_level not in severity:
+                print(f"    ❌ Unexpected verdict: {verdict}")
+                stats["api_errors"] += 1
+                continue
+
+            stats["fraud_scenarios"] += 1
+            stats["fraud_captured"] += 1  # server persisted a labelled fraud_training_cases row
+            if predicted_level == expected_level:
+                stats["fraud_correct"] += 1
+                print(f"    ✅ CORRECT: sentinel said {predicted_level}/{verdict.get('threat_category')}")
+            elif severity[predicted_level] < severity[expected_level]:
+                stats["fraud_missed"] += 1
+                print(f"    ⚠️  MISSED: sentinel said {predicted_level}, expected {expected_level}")
+            else:
+                stats["fraud_false_alarms"] += 1
+                print(f"    🚨 FALSE ALARM: sentinel said {predicted_level}, expected {expected_level}")
+            print(f"    🧠 {verdict.get('risk_reasoning', '')[:110]}")
+            print("-" * 75)
+            time.sleep(0.3)
+
+        if stats["fraud_scenarios"]:
+            print(f" Fraud cases captured for LoRA training: {stats['fraud_captured']} "
+                  f"(stored in fraud_training_cases via /api/v1/agent/fraud-check)")
+
     # Summary
     print("\n" + "=" * 75)
     print(" 📈 CLOUD SELF-LEARNING SESSION SUMMARY")
@@ -340,6 +516,13 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     print(f" Corrections Injected      : {stats['corrections_injected']}")
     print(f" Golden Cache Promotions   : {stats['golden_cache_promotions']}")
     print(f" Bad Caches Evicted        : {stats['cache_evictions']}")
+    if stats["fraud_scenarios"]:
+        f_total = stats["fraud_scenarios"]
+        f_acc = stats["fraud_correct"] / f_total * 100
+        print(f" Anti-Fraud Cases Scored   : {f_total}")
+        print(f" Fraud Verdict Accuracy    : {stats['fraud_correct']}/{f_total} ({f_acc:.1f}%)")
+        print(f" Missed Scams              : {stats['fraud_missed']}")
+        print(f" False Alarms              : {stats['fraud_false_alarms']}")
     print("=" * 75)
 
     # Check Training Flywheel Readiness

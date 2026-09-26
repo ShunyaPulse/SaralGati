@@ -1,0 +1,55 @@
+name: Android Checks
+
+# Compile gate for the Kotlin companion app.
+#
+# `build-apk.yml` only runs on pushes to main, so a Kotlin change (a broken
+# reference in the accessibility service, a Moshi model that no longer matches
+# the API response) reaches main before anything compiles it. This workflow
+# assembles the debug variant on every pull request that touches `android/**`,
+# the same way `web-checks.yml` typechecks the dashboard before merge.
+#
+# assembleDebug (not assembleRelease) on purpose: it needs no release keystore
+# and no secrets, so the gate also runs on forks and cannot fail for
+# environment reasons unrelated to the code.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "android/**"
+      - ".github/workflows/android-checks.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: android-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+        working-directory: android
+
+      - name: Compile debug variant
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: android

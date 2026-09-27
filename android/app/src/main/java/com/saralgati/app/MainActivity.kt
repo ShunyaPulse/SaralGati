@@ -32,6 +32,25 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private lateinit var localPrefs: LocalPrefs
 
+    /**
+     * The floating helper and its TTS are started with one language and would
+     * keep that voice forever. Tell the running service the moment the elder
+     * picks the other language, so the card and the voice follow immediately.
+     */
+    private fun notifyOverlayLanguageChanged() {
+        val overlay = com.saralgati.app.services.overlay.FloatingHelperService
+        if (!overlay.isRunning) return
+        try {
+            startService(
+                Intent(this, overlay::class.java).apply {
+                    action = overlay.ACTION_LANGUAGE_CHANGED
+                }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to notify language change: ${e.message}")
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -74,6 +93,7 @@ class MainActivity : ComponentActivity() {
                                 currentLanguage = lang
                                 hasSelectedLanguage = true
                                 showLanguageSelection = false
+                                notifyOverlayLanguageChanged()
                             }
                         )
                         return@Surface
@@ -184,14 +204,12 @@ class MainActivity : ComponentActivity() {
                             onDismissRequest = { availableUpdate = null },
                             title = {
                                 Text(
-                                    text = "नया अपडेट उपलब्ध है (v${update.versionName})",
+                                    text = AppStrings.updateTitle(currentLanguage, update.versionName),
                                     fontWeight = FontWeight.Bold
                                 )
                             },
                             text = {
-                                Text(
-                                    text = "SaralGati का नया वर्ज़न उपलब्ध है। बेहतर सुरक्षा और नए फ़ीचर्स के लिए अभी अपडेट करें।"
-                                )
+                                Text(AppStrings.updateBody(currentLanguage))
                             },
                             confirmButton = {
                                 Button(
@@ -199,7 +217,7 @@ class MainActivity : ComponentActivity() {
                                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !this@MainActivity.packageManager.canRequestPackageInstalls()) {
                                             android.widget.Toast.makeText(
                                                 this@MainActivity,
-                                                "Please allow 'Install Unknown Apps' to update",
+                                                AppStrings.allowUnknownSources(currentLanguage),
                                                 android.widget.Toast.LENGTH_LONG
                                             ).show()
                                             val intent =
@@ -214,7 +232,7 @@ class MainActivity : ComponentActivity() {
                                             availableUpdate = null
                                             android.widget.Toast.makeText(
                                                 this@MainActivity,
-                                                "Downloading update...",
+                                                AppStrings.downloadingUpdate(currentLanguage),
                                                 android.widget.Toast.LENGTH_SHORT
                                             ).show()
                                             scope.launch {
@@ -226,12 +244,12 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 ) {
-                                    Text("Update Now")
+                                    Text(AppStrings.updateNow(currentLanguage))
                                 }
                             },
                             dismissButton = {
                                 TextButton(onClick = { availableUpdate = null }) {
-                                    Text("Baad Mein")
+                                    Text(AppStrings.updateLater(currentLanguage))
                                 }
                             }
                         )

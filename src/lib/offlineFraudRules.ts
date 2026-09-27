@@ -43,8 +43,11 @@ export interface OfflineFraudRule {
 /** One rule with its resolved alert copy, exactly as the device consumes it. */
 export interface OfflineFraudAssetRule extends OfflineFraudRule {
   title: string;
+  title_en: string;
+  message_en: string;
   message_hi: string;
   safe_advice: string;
+  safe_advice_hi: string;
 }
 
 export interface OfflineFraudAsset {
@@ -60,8 +63,11 @@ export interface OfflineFraudMatch {
   category: OfflineThreatCategory;
   level: OfflineThreatLevel;
   title: string;
+  titleEn: string;
   messageHi: string;
+  messageEn: string;
   safeAdvice: string;
+  safeAdviceHi: string;
 }
 
 export const OFFLINE_FRAUD_RULES_VERSION = 1;
@@ -398,8 +404,11 @@ export function matchOfflineFraudRules(
           category: rule.category,
           level: rule.level,
           title: copy.title,
+          titleEn: copy.title_en,
           messageHi: copy.message_hi,
+          messageEn: copy.message_en,
           safeAdvice: copy.safe_advice,
+          safeAdviceHi: copy.safe_advice_hi,
         },
       };
     }
@@ -432,8 +441,11 @@ export function serializeOfflineFraudRules(): OfflineFraudAsset {
       return {
         ...rule,
         title: copy.title,
+        title_en: copy.title_en,
+        message_en: copy.message_en,
         message_hi: copy.message_hi,
         safe_advice: copy.safe_advice,
+        safe_advice_hi: copy.safe_advice_hi,
       };
     }),
   };

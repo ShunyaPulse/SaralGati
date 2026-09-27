@@ -147,12 +147,16 @@ data class FraudActionDecision(
     val action: String,
     @Json(name = "target_element_to_block") val targetElementToBlock: Int? = null,
     @Json(name = "safe_action_index") val safeActionIndex: Int? = null,
-    @Json(name = "safe_advice") val safeAdvice: String = ""
+    @Json(name = "safe_advice") val safeAdvice: String = "",
+    /** Devanagari advice; null only against an older server build. */
+    @Json(name = "safe_advice_hi") val safeAdviceHi: String? = null
 )
 
 @JsonClass(generateAdapter = true)
 data class FraudUserAlert(
+    /** Hindi title; `titleEn` is the same alert in English. */
     val title: String,
     @Json(name = "message_en") val messageEn: String,
-    @Json(name = "message_hi") val messageHi: String
+    @Json(name = "message_hi") val messageHi: String,
+    @Json(name = "title_en") val titleEn: String? = null
 )

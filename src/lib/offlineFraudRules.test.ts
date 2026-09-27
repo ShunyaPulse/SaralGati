@@ -128,6 +128,23 @@ test('the safe escape element can be located for the spotlight', () => {
   assert.equal(findOfflineSafeActionIndex(['[INPUT] Amount', 'Submit']), null);
 });
 
+const DEVANAGARI = /[\u0900-\u097F]/;
+
+test('every offline match carries copy for both languages', () => {
+  for (const { text } of MUST_CATCH) {
+    const match = matchOfflineFraudRules([text]);
+    assert.ok(match, `offline missed: ${text}`);
+    // The elder must never see a half-Hindi, half-English alert: each field is
+    // entirely one language.
+    assert.doesNotMatch(match.messageEn, DEVANAGARI, `English message has Devanagari: ${text}`);
+    assert.doesNotMatch(match.titleEn, DEVANAGARI, `English title has Devanagari: ${text}`);
+    assert.doesNotMatch(match.safeAdvice, DEVANAGARI, `English advice has Devanagari: ${text}`);
+    assert.match(match.messageHi, DEVANAGARI, `Hindi message lacks Devanagari: ${text}`);
+    assert.match(match.title, DEVANAGARI, `Hindi title lacks Devanagari: ${text}`);
+    assert.match(match.safeAdviceHi, DEVANAGARI, `Hindi advice lacks Devanagari: ${text}`);
+  }
+});
+
 test('the committed Android asset matches the ruleset', () => {
   assert.ok(
     fs.existsSync(ASSET_PATH),

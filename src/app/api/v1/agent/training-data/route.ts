@@ -3,6 +3,16 @@ import { query } from "@/lib/db";
 import { pruneUITree } from "@/lib/uiPruner";
 import { isFlywheelRequest } from "@/lib/agent-auth";
 import { FRAUD_ANALYST_SYSTEM_PROMPT } from "@/lib/fraudAdvisor";
+import {
+  normalizeGuidanceLang,
+  type GuidanceLang,
+} from "@/lib/guidanceLanguage";
+import {
+  buildDpoSample,
+  buildSftSample,
+  partitionTrainable,
+  summarizeLanguageCoverage,
+} from "@/lib/trainingDataExport";
 
 export async function GET(req: NextRequest) {
   try {
@@ -29,6 +39,11 @@ export async function GET(req: NextRequest) {
       ? Math.min(Math.max(requestedLimit, 1), 10000)
       : 500;
     const format = (searchParams.get("format") || "json").toLowerCase();
+    // Optional language slice, so a training run can pull one language (or check
+    // how much of each it has) without exporting the whole pool.
+    const langParam = searchParams.get("lang");
+    const wantedLang: GuidanceLang | null =
+      langParam === "hi" || langParam === "en" ? langParam : null;
 
     // === MODE 1: DPO (Direct Preference Optimization) Pipeline ===
     if (type === "dpo") {
@@ -41,59 +56,45 @@ export async function GET(req: NextRequest) {
         actual_tapped_index: number | null;
         explanation: string;
         feedback_status: string;
+        guidance_lang: string | null;
         created_at: string;
       }>(
-        `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
+        `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, guidance_lang, created_at
          FROM model_interactions
          WHERE feedback_status = 'rejected' 
            AND actual_tapped_index IS NOT NULL 
            AND suggested_index IS NOT NULL 
            AND actual_tapped_index != suggested_index
+           AND ($2::text IS NULL OR guidance_lang::text = $2)
          ORDER BY created_at DESC
          LIMIT $1`,
-        [limit],
+        [limit, wantedLang],
       );
 
-      const dpoDataset = dpoRows.map((row) => {
+      // Each pair is rebuilt in the language the elder was answered in, and a
+      // row whose answer contradicts its own language is dropped rather than
+      // taught (see src/lib/trainingDataExport.ts).
+      const { trainable, skippedWrongScript } = partitionTrainable(
+        dpoRows.map((row) => ({
+          ...row,
+          lang: normalizeGuidanceLang(row.guidance_lang),
+        })),
+      );
+
+      const dpoDataset = trainable.map((row) => {
         const { formattedString } = pruneUITree(row.ui_elements, row.question);
-
-        const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
-The user is looking at an Android app: ${row.app_package}.
-Here are the numbered interactive elements on their screen:
-${formattedString}
-
-Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
-2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).
-3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] or preview count noise.
-4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end.`;
-
-        return {
-          prompt: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: row.question },
-          ],
-          chosen: [
-            {
-              role: "assistant",
-              content: `${row.explanation} TARGET:${row.actual_tapped_index}`,
-            },
-          ],
-          rejected: [
-            {
-              role: "assistant",
-              content: `Ispe click karein. TARGET:${row.suggested_index}`,
-            },
-          ],
-          metadata: {
-            interaction_id: row.id,
-            app_package: row.app_package,
-            chosen_index: row.actual_tapped_index,
-            rejected_index: row.suggested_index,
-            type: "user_correction_preference",
-            created_at: row.created_at,
-          },
-        };
+        return buildDpoSample({
+          id: row.id,
+          lang: row.lang,
+          appPackage: row.app_package,
+          question: row.question,
+          elementsBlock: formattedString,
+          explanation: row.explanation,
+          targetIndex: row.actual_tapped_index,
+          rejectedIndex: row.suggested_index,
+          feedbackStatus: row.feedback_status,
+          createdAt: row.created_at,
+        });
       });
 
       if (format === "jsonl") {
@@ -111,6 +112,8 @@ Instructions:
         success: true,
         mode: "dpo",
         count: dpoDataset.length,
+        counts: summarizeLanguageCoverage(trainable),
+        skipped_wrong_script: skippedWrongScript.length,
         data: dpoDataset,
       });
     }
@@ -267,21 +270,23 @@ Instructions:
     }
 
     // === MODE 2: SFT / Supervised Instruction Tuning Pipeline ===
-    let sqlQuery = `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
+    let sqlQuery = `SELECT id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, guidance_lang, created_at
        FROM model_interactions
        WHERE feedback_status = $1
+         AND ($3::text IS NULL OR guidance_lang::text = $3)
        ORDER BY created_at DESC
        LIMIT $2`;
-    let queryParams: (string | number)[] = [status, limit];
+    let queryParams: (string | number | null)[] = [status, limit, wantedLang];
 
     if (includeCorrections) {
-      sqlQuery = `SELECT DISTINCT ON (app_package, screen_hash, question) id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, created_at
+      sqlQuery = `SELECT DISTINCT ON (app_package, screen_hash, question) id, app_package, question, ui_elements, suggested_index, actual_tapped_index, explanation, feedback_status, guidance_lang, created_at
        FROM model_interactions
-       WHERE feedback_status = 'verified' 
-          OR (feedback_status = 'rejected' AND actual_tapped_index IS NOT NULL)
+       WHERE (feedback_status = 'verified' 
+          OR (feedback_status = 'rejected' AND actual_tapped_index IS NOT NULL))
+         AND ($2::text IS NULL OR guidance_lang::text = $2)
        ORDER BY app_package, screen_hash, question, created_at DESC
        LIMIT $1`;
-      queryParams = [limit];
+      queryParams = [limit, wantedLang];
     }
 
     const rows = await query<{
@@ -293,11 +298,19 @@ Instructions:
       actual_tapped_index: number | null;
       explanation: string;
       feedback_status: string;
+      guidance_lang: string | null;
       created_at: string;
     }>(sqlQuery, queryParams);
 
-    // Convert into instruction-tuning format suitable for Unsloth / LoRA training
-    const dataset = rows.map((row) => {
+    // Convert into instruction-tuning format suitable for Unsloth / LoRA training,
+    // keeping every sample in the language it was answered in: the instruction
+    // block is the exported production prompt (src/lib/guidancePrompt.ts) built
+    // for that row's language.
+    const { trainable, skippedWrongScript } = partitionTrainable(
+      rows.map((row) => ({ ...row, lang: normalizeGuidanceLang(row.guidance_lang) })),
+    );
+
+    const dataset = trainable.map((row) => {
       const targetIndex =
         row.feedback_status === "verified"
           ? row.suggested_index
@@ -305,36 +318,17 @@ Instructions:
 
       const { formattedString } = pruneUITree(row.ui_elements, row.question);
 
-      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.
-The user is looking at an Android app: ${row.app_package}.
-Here are the numbered interactive elements on their screen:
-${formattedString}
-
-Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
-2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).
-3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] or preview count noise.
-4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end.`;
-
-      const assistantContent =
-        targetIndex !== null
-          ? `${row.explanation} TARGET:${targetIndex}`
-          : row.explanation;
-
-      return {
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: row.question },
-          { role: "assistant", content: assistantContent },
-        ],
-        metadata: {
-          interaction_id: row.id,
-          app_package: row.app_package,
-          target_index: targetIndex,
-          feedback_status: row.feedback_status,
-          created_at: row.created_at,
-        },
-      };
+      return buildSftSample({
+        id: row.id,
+        lang: row.lang,
+        appPackage: row.app_package,
+        question: row.question,
+        elementsBlock: formattedString,
+        explanation: row.explanation,
+        targetIndex,
+        feedbackStatus: row.feedback_status,
+        createdAt: row.created_at,
+      });
     });
 
     if (format === "jsonl") {
@@ -352,6 +346,8 @@ Instructions:
       success: true,
       mode: "sft",
       count: dataset.length,
+      counts: summarizeLanguageCoverage(trainable),
+      skipped_wrong_script: skippedWrongScript.length,
       data: dataset,
     });
   } catch (error) {

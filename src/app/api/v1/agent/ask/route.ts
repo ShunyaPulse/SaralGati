@@ -10,7 +10,9 @@ import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import { hasDevanagari } from "@/lib/guidanceLanguage";
+import { hasDevanagari, type GuidanceLang } from "@/lib/guidanceLanguage";
+import { buildAskSystemPrompt } from "@/lib/guidancePrompt";
+import { normalizeScreenQuestion, screenCacheKey } from "@/lib/screenCache";
 import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraudSentinel";
 import {
   analyzeForFraudWithAdvisor,
@@ -49,12 +51,18 @@ async function recordModelInteraction(params: {
   explanation: string;
   source: string;
   modelUsed?: string;
+  /**
+   * Which language this answer was produced in. The flywheel trains on the pair
+   * (instruction, answer), so a row without its language would be re-exported
+   * under the wrong instruction - see src/lib/trainingDataExport.ts.
+   */
+  guidanceLang: GuidanceLang;
 }) {
   try {
     await query(
       `INSERT INTO model_interactions 
-       (id, elder_id, app_package, screen_hash, question, ui_elements, suggested_index, explanation, source, model_used)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       (id, elder_id, app_package, screen_hash, question, ui_elements, suggested_index, explanation, source, model_used, guidance_lang)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        ON CONFLICT (id) DO NOTHING`,
       [
         params.interactionId,
@@ -67,10 +75,22 @@ async function recordModelInteraction(params: {
         params.explanation,
         params.source,
         params.modelUsed || "unknown",
+        params.guidanceLang,
       ],
     );
   } catch (err) {
-    console.error("Error recording interaction:", err);
+    // A missing guidance_lang column means migration 011 has not been applied.
+    // Say so here: the only other symptom is that the flywheel pool quietly
+    // stops growing, which is a confusing thing to debug later.
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("guidance_lang")) {
+      console.error(
+        "Error recording interaction (is migrations/011_add_guidance_lang.sql applied?):",
+        err,
+      );
+    } else {
+      console.error("Error recording interaction:", err);
+    }
   }
 }
 
@@ -146,24 +166,23 @@ export async function POST(req: NextRequest) {
       .digest("hex")
       .slice(0, 16);
 
-    const normalizedQuestion = safeQuestion
-      .trim()
-      .toLowerCase()
-      .replace(/[^\w\s\u0900-\u097F]/g, "")
-      .replace(/\s+/g, " ");
+    const normalizedQuestion = normalizeScreenQuestion(safeQuestion);
     const historyHash =
       safeConversationHistory.length > 0
         ? `:${crypto.createHash("sha256").update(JSON.stringify(safeConversationHistory)).digest("hex").slice(0, 8)}`
         : "";
-    // The language is part of the key. Without it a Hindi answer cached for a
-    // screen was handed straight back to an elder who had chosen English, which
-    // is exactly why "Everything in English" still spoke Hindi.
-    const cacheKeyRaw = `${guidanceLang}:${safeAppPackage}:${screenHash}:${normalizedQuestion}${historyHash}`;
-    const cacheKeyHash = crypto
-      .createHash("sha256")
-      .update(cacheKeyRaw)
-      .digest("hex");
-    const cacheKey = `screen_cache:${cacheKeyHash}`;
+    // The language is part of the key (see src/lib/screenCache.ts): without it a
+    // Hindi answer cached for a screen was handed straight back to an elder who
+    // had chosen English, which is exactly why "Everything in English" still
+    // spoke Hindi. The feedback route builds the same key to promote a verified
+    // answer or evict a bad one.
+    const cacheKey = screenCacheKey({
+      lang: guidanceLang,
+      appPackage: safeAppPackage,
+      screenHash,
+      normalizedQuestion,
+      historyHash,
+    });
 
     let finalResult: {
       explanation: string;
@@ -315,39 +334,15 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const langInstruction =
-        guidanceLang === "en"
-          ? `1. Answer the user's question in 1 or 2 simple, comforting English sentences. Write only in English words and Latin script, never in Hindi or Devanagari.
-2. Elements on screen are prefixed with their role:
-   - [BUTTON]: Clickable button or icon that can be tapped.
-   - [INPUT]: Text input box for typing.
-   - [TOGGLE]: Switch or checkbox.
-   - [TEXT]: Plain static non-clickable text or title.
-3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
-4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
-5. If no specific element needs to be tapped, do NOT output any TARGET tag.
-6. Do not mention that you are an AI. Only output the English sentence.`
-          : `1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
-2. Elements on screen are prefixed with their role:
-   - [BUTTON]: Clickable button or icon that can be tapped.
-   - [INPUT]: Text input box for typing.
-   - [TOGGLE]: Switch or checkbox.
-   - [TEXT]: Plain static non-clickable text or title.
-3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
-4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
-5. If no specific element needs to be tapped, do NOT output any TARGET tag.
-6. Do not mention that you are an AI. Only output the Hinglish sentence.`;
-
-      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.${knownHabitsStr}
-The user is looking at an Android app: ${safeAppPackage}.
-Here are the numbered interactive elements on their screen:
-${formattedElements}
-
-Instructions:
-${langInstruction}
-
-Few-shot Grounding Examples:
-${fewShots}`;
+      // Built by src/lib/guidancePrompt.ts, which the training-data export uses
+      // too: the adapter has to be fine-tuned on the prompt the app really sends.
+      const systemPrompt = buildAskSystemPrompt({
+        lang: guidanceLang,
+        appPackage: safeAppPackage,
+        elementsBlock: formattedElements,
+        habitsBlock: knownHabitsStr,
+        fewShotsBlock: fewShots,
+      });
 
       const aiResult = await generateAIResponse({
         systemPrompt,
@@ -418,6 +413,7 @@ ${fewShots}`;
       explanation: finalResult.explanation,
       source: finalResult.source,
       modelUsed: finalResult.modelUsed,
+      guidanceLang,
     });
 
     return NextResponse.json({

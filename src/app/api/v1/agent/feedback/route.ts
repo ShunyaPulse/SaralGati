@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { z } from 'zod';
 import { queryOne } from '@/lib/db';
 import redis, { cacheSet, rateLimiter } from '@/lib/redis';
 import { isFlywheelRequest, validateDeviceToken } from '@/lib/agent-auth';
+import { normalizeGuidanceLang } from '@/lib/guidanceLanguage';
+import { normalizeScreenQuestion, screenCacheKey } from '@/lib/screenCache';
 
 /**
  * Feedback drives the self-learning cache: a verified answer is promoted to a
@@ -60,6 +61,8 @@ export async function POST(req: NextRequest) {
 
     // 1. Update the interaction record in PostgreSQL. A paired device may only
     // touch its own elder's interactions; the flywheel is intentionally unscoped.
+    // The corrected answer has to be written in the language the elder chose, or
+    // the flywheel would train an English screen with a Hinglish correction.
     const updatedRow = await queryOne<{
       id: string;
       app_package: string;
@@ -67,6 +70,7 @@ export async function POST(req: NextRequest) {
       question: string;
       suggested_index: number | null;
       explanation: string;
+      guidance_lang: string | null;
     }>(
       `UPDATE model_interactions
        SET feedback_status = $1,
@@ -75,12 +79,13 @@ export async function POST(req: NextRequest) {
                ELSE COALESCE($2, actual_tapped_index) 
            END,
            explanation = CASE
-               WHEN $1 = 'rejected' AND $2 IS NOT NULL AND $2 != suggested_index THEN 'Yahan dabayein.'
+               WHEN $1 = 'rejected' AND $2 IS NOT NULL AND $2 != suggested_index
+                 THEN CASE WHEN guidance_lang = 'en' THEN 'Tap here.' ELSE 'Yahan dabayein.' END
                ELSE explanation
            END,
            updated_at = NOW()
        WHERE id = $3 AND ($4::uuid IS NULL OR elder_id = $4::uuid)
-       RETURNING id, app_package, screen_hash, question, suggested_index, explanation`,
+       RETURNING id, app_package, screen_hash, question, suggested_index, explanation, guidance_lang`,
       [newStatus, sanitizedIndex, interaction_id, elderId]
     );
 
@@ -94,16 +99,17 @@ export async function POST(req: NextRequest) {
     let evicted = false;
     let demoted = false;
 
-    const normalizedQuestion = updatedRow.question
-      .trim()
-      .toLowerCase()
-      .replace(/[^\w\s\u0900-\u097F]/g, '')
-      .replace(/\s+/g, ' ');
+    const normalizedQuestion = normalizeScreenQuestion(updatedRow.question);
 
     const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
-    const cacheKeyRaw = `${updatedRow.app_package}:${updatedRow.screen_hash}:${normalizedQuestion}`;
-    const cacheKeyHash = crypto.createHash('sha256').update(cacheKeyRaw).digest('hex');
-    const cacheKey = `screen_cache:${cacheKeyHash}`;
+    // Same builder the ask route uses, so a promotion/eviction lands on the key
+    // that route actually reads - and on the one for the elder's language.
+    const cacheKey = screenCacheKey({
+      lang: normalizeGuidanceLang(updatedRow.guidance_lang),
+      appPackage: updatedRow.app_package,
+      screenHash: updatedRow.screen_hash,
+      normalizedQuestion,
+    });
 
     // 2. Continuous Learning Loop
     if (feedback === 'tapped_highlight' && updatedRow.suggested_index !== null) {

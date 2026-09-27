@@ -12,6 +12,17 @@
 
 export type GuidanceLang = 'hi' | 'en';
 
+/**
+ * Reads a language off the wire or out of the database. Anything that is not
+ * 'en' is Hindi, which is also the right default for rows captured before the
+ * language was recorded at all.
+ */
+export function normalizeGuidanceLang(
+  value: string | null | undefined,
+): GuidanceLang {
+  return value === 'en' ? 'en' : 'hi';
+}
+
 /** Any Devanagari codepoint. Latin-script Hinglish does not count. */
 const DEVANAGARI = /[\u0900-\u097F]/;
 

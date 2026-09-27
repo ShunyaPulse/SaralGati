@@ -34,6 +34,76 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
         pass
 
 
+# The adapter is fine-tuned on the elder's own captured screens, and those now
+# come in two languages. Hinglish rows outnumber English ones simply because
+# Hinglish is the historical default, and a fine-tune that sees mostly Hinglish
+# drifts back to it - which is what made an English request fall back to the
+# general model. So the minority language is oversampled up to this share of the
+# language-tagged rows before training.
+MIN_MINORITY_LANGUAGE_SHARE = 0.4
+MAX_LANGUAGE_DUPLICATIONS = 4
+
+
+def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max_copies=MAX_LANGUAGE_DUPLICATIONS):
+    """Oversample the minority guidance language so the adapter stays bilingual.
+
+    Reads metadata.guidance_lang from every exported sample (fraud rows carry no
+    language and are excluded from the ratio). Rows are duplicated, never
+    rewritten, so no sample changes meaning - and the duplication is capped, so
+    a handful of English rows cannot become pure memorisation. Non-JSONL input
+    is passed through untouched.
+    """
+    tagged, untagged = [], []
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (TypeError, ValueError):
+            untagged.append(line)
+            continue
+        lang = (row.get("metadata") or {}).get("guidance_lang")
+        if lang in ("hi", "en"):
+            tagged.append((lang, line))
+        else:
+            untagged.append(line)
+
+    counts = {"hi": 0, "en": 0}
+    for lang, _ in tagged:
+        counts[lang] += 1
+
+    total = counts["hi"] + counts["en"]
+    if total < 2:
+        print(f"[Dataset] Language balance: only {total} language-tagged rows, left as is.")
+        return lines
+
+    minority = "en" if counts["en"] <= counts["hi"] else "hi"
+    minority_rows = [line for lang, line in tagged if lang == minority]
+    if not minority_rows:
+        print(f"[Dataset] Language balance: no {minority} rows to oversample (hi={counts['hi']} en={counts['en']}).")
+        return lines
+
+    # Duplicate round-robin until the minority reaches its share, or the cap bites.
+    # extras solves (minority + extras) >= min_share * (total + extras).
+    import math
+
+    needed = math.ceil(
+        (min_share * total - counts[minority]) / (1 - min_share)
+    )
+    extras = min(max(needed, 0), counts[minority] * (max_copies - 1))
+    if extras <= 0:
+        print(f"[Dataset] Language balance: hi={counts['hi']} en={counts['en']} already even enough.")
+        return lines
+
+    balanced = list(lines)
+    for i in range(extras):
+        balanced.append(minority_rows[i % len(minority_rows)])
+
+    print(
+        f"[Dataset] Language balance: oversampled {extras} '{minority}' row(s) "
+        f"(was hi={counts['hi']} en={counts['en']}) so both languages train."
+    )
+    return balanced
+
+
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
     url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
@@ -68,21 +138,21 @@ def fetch_live_dataset():
         seed_samples = [
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.whatsapp.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Audio Call\n[1] [BUTTON] Video Call\n[2] [BUTTON] Search\n[3] [TEXT] Recent chats\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.whatsapp.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Audio Call\n[1] [BUTTON] Video Call\n[2] [BUTTON] Search\n[3] [TEXT] Recent chats\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
                     {"role": "user", "content": "video call kaise lagau"},
                     {"role": "assistant", "content": "वीडियो कॉल करने के लिए यहाँ वीडियो कॉल पर दबाएं। TARGET:1"}
                 ]
             },
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.dialer.\nHere are the numbered interactive elements on their screen:\n[0] [INPUT] Search contacts\n[1] [BUTTON] Keypad Dial\n[2] [BUTTON] Favorites\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.dialer.\nHere are the numbered interactive elements on their screen:\n[0] [INPUT] Search contacts\n[1] [BUTTON] Keypad Dial\n[2] [BUTTON] Favorites\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
                     {"role": "user", "content": "naya number milana hai"},
                     {"role": "assistant", "content": "नंबर डायल करने के लिए यहाँ कीपैड दबाएं। TARGET:1"}
                 ]
             },
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.youtube.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Search\n[1] [BUTTON] Voice Search\n[2] [BUTTON] Play Video भजन\n[3] [TEXT] Top Songs\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hindi sentences.\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.youtube.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Search\n[1] [BUTTON] Voice Search\n[2] [BUTTON] Play Video भजन\n[3] [TEXT] Top Songs\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
                     {"role": "user", "content": "aarti bhajan sunna hai"},
                     {"role": "assistant", "content": "भजन सुनने के लिए यहाँ दबाएं। TARGET:2"}
                 ]
@@ -111,6 +181,10 @@ def fetch_live_dataset():
         ]
         for s in seed_samples:
             lines.append(json.dumps(s))
+
+    # Keep the two guidance languages in balance before the rows reach the
+    # trainer, so an English elder's screens are not drowned by Hinglish ones.
+    lines = balance_guidance_languages(lines)
 
     with open(dataset_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

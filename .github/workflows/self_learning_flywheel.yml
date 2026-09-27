@@ -36,6 +36,10 @@ jobs:
           API_SECRET: ${{ secrets.API_SECRET }}
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
           GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          # Optional operator lever: pin every synthetic batch to one guidance
+          # language ('hi' or 'en') to top up that half of the training pool.
+          # Unset, the generator picks per batch from recent failures.
+          FLYWHEEL_GUIDANCE_LANG: ${{ vars.FLYWHEEL_GUIDANCE_LANG }}
           EVENT_NAME: ${{ github.event_name }}
           INPUT_MAX_CASES: ${{ github.event.inputs.max_cases }}
         run: |

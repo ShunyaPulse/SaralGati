@@ -9,12 +9,12 @@ import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AssistanceLog
 import com.saralgati.app.data.model.FraudCheckRequest
-import com.saralgati.app.data.model.FraudVerdict
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.os.Build
 import com.saralgati.app.data.model.ScreenContextRequest
+import com.saralgati.app.services.fraud.OfflineFraudSentinel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -357,9 +357,18 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             val scanElements = elements.take(FRAUD_SCAN_MAX_ELEMENTS)
             val scanBounds = elementBounds.take(FRAUD_SCAN_MAX_ELEMENTS)
 
-            // Identical text cannot produce a different verdict, and recording
-            // the signature before the call keeps a flaky network from retrying
-            // the same screen every few seconds.
+            // 1. Instant, network-free check first: the elder is warned the moment
+            // the scam appears, even with no data or a server cold start.
+            val offline = OfflineFraudSentinel.analyze(this, scanElements)
+            if (offline != null) {
+                val safeBounds = OfflineFraudSentinel.findSafeActionIndex(scanElements)
+                    ?.let { scanBounds.getOrNull(it) }
+                warnAboutFraud(pkg, offline.level, offline.category, offline.title, offline.messageHi, offline.safeAdvice, safeBounds)
+            }
+
+            // 2. The server stays authoritative (and captures the flywheel case).
+            // Identical text cannot produce a different verdict, and recording the
+            // signature keeps a flaky network from retrying the same screen.
             val signature = scanElements.joinToString("|").hashCode().toString()
             if (signature == lastFraudSignature) return
 
@@ -370,27 +379,17 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
             if (!verdict.isDangerous) {
                 // The elder left the trap for a safe screen: take the lingering
-                // warning card down instead of leaving the scam alert on screen.
-                if (fraudWarnedPackage != null) {
+                // warning card down. Only a server-confirmed safe screen clears it -
+                // an offline hit the server has not judged yet must keep protecting.
+                if (offline == null && fraudWarnedPackage != null) {
                     fraudWarnedPackage = null
                     dismissFraudWarning()
                 }
                 return
             }
 
-            // Never re-announce the same trap. While a warning is active for this
-            // package nothing is spoken again, and a brand-new alert is throttled
-            // so a trap screen that keeps mutating cannot re-alert on every change.
-            val now = System.currentTimeMillis()
-            if (pkg == fraudWarnedPackage) return
-            if (now - lastFraudWarnedAt < FRAUD_WARNING_COOLDOWN_MS) return
-            if (!isScreenInteractive()) return
-
-            Log.w(TAG, "Fraud sentinel: ${verdict.threatLevel}/${verdict.threatCategory} on $pkg")
-            fraudWarnedPackage = pkg
-            lastFraudWarnedAt = now
             val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
-            warnElderAboutFraud(verdict, safeBounds)
+            warnAboutFraud(pkg, verdict.threatLevel, verdict.threatCategory, verdict.userAlert.title, verdict.userAlert.messageHi, verdict.actionDecision.safeAdvice, safeBounds)
         } catch (e: Exception) {
             Log.e(TAG, "Fraud scan failed: ${e.message}")
         } finally {
@@ -414,12 +413,37 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         return powerManager.isInteractive
     }
 
-    private fun warnElderAboutFraud(verdict: FraudVerdict, safeBounds: android.graphics.Rect?) {
+    /**
+     * Say one warning per trap. While a warning is active for this package
+     * nothing is spoken again, and a brand-new alert is throttled so a trap
+     * screen that keeps mutating cannot re-alert on every content change.
+     */
+    private fun warnAboutFraud(
+        pkg: String,
+        level: String,
+        category: String,
+        title: String,
+        messageHi: String,
+        advice: String,
+        safeBounds: android.graphics.Rect?,
+    ) {
+        if (pkg == fraudWarnedPackage) return
+        val now = System.currentTimeMillis()
+        if (now - lastFraudWarnedAt < FRAUD_WARNING_COOLDOWN_MS) return
+        if (!isScreenInteractive()) return
+
+        Log.w(TAG, "Fraud sentinel: $level/$category on $pkg")
+        fraudWarnedPackage = pkg
+        lastFraudWarnedAt = now
+        warnElderAboutFraud(title, messageHi, advice, safeBounds)
+    }
+
+    private fun warnElderAboutFraud(title: String, messageHi: String, advice: String, safeBounds: android.graphics.Rect?) {
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_FRAUD_WARNING
-            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_TITLE, verdict.userAlert.title)
-            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, verdict.userAlert.messageHi)
-            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_ADVICE, verdict.actionDecision.safeAdvice)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_TITLE, title)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, messageHi)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_ADVICE, advice)
         }
         try {
             startService(intent)

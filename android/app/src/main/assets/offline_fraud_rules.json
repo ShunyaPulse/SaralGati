@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "generated_by": "scripts/export-offline-fraud-rules.ts",
+  "safe_warning_patterns": [
+    "do not share[^.!?,\\u0964]*",
+    "don'?t share[^.!?,\\u0964]*",
+    "never share[^.!?,\\u0964]*",
+    "not share[^.!?,\\u0964]*",
+    "kisi ko (na|mat) [^.!?,\\u0964]*",
+    "share na karein[^.!?,\\u0964]*",
+    "किसी को न बताएं|किसी को न बताओ|साझा न करें|शेयर न करें"
+  ],
+  "rules": [
+    {
+      "id": "otp-share-request",
+      "category": "OTP_THEFT",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\botp\\b|o\\.t\\.p|one[ -]?time (password|code)|verification code|verify code|security code|sms code|\\b2fa\\b|two[ -]?factor|ओटीपी|वन टाइम पासवर्ड"
+      ],
+      "requires": [
+        "\\b(share|sharing|send|forward|tell|batao|bata do|bataiye|bhejo|bhej do|bhejna|read out|read it|padh kar|padhkar|disclose)\\b|भेज|बताओ|बता दो|बताएं|पढ़|साझा|शेयर"
+      ],
+      "strip_safe_warnings": true,
+      "title": "OTP किसी को न बताएं",
+      "message_hi": "कोई आपका OTP या बैंक पिन माँग रहा है। बैंक या सरकारी विभाग कभी OTP नहीं माँगते। OTP बता देने पर आपके खाते से पूरे पैसे निकल सकते हैं। किसी को भी OTP न बताएं।",
+      "safe_advice": "Do not share or enter the OTP; close this screen and call your bank or family on a number you already know."
+    },
+    {
+      "id": "otp-enter-for-reward",
+      "category": "OTP_THEFT",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\botp\\b|o\\.t\\.p|one[ -]?time (password|code)|verification code|verify code|security code|sms code|\\b2fa\\b|two[ -]?factor|ओटीपी|वन टाइम पासवर्ड"
+      ],
+      "requires": [
+        "\\b(enter|entering|type|fill|submit|daal|dalo|daalo|daal do|likho|likh do|lagao|confirm)\\b|डाल|लिख|दर्ज",
+        "\\b(receive|receiving|refund|cashback|cash back|reward|prize|lottery|lucky (draw|winner)|winner|won|money back)\\b|paise (aayenge|aane|wapas|milenge)|paisa (aayega|wapas)|पैसे (आएंगे|आएगा|वापस|मिलेंगे)|कैशबैक|इनाम|लॉटरी|रिफंड"
+      ],
+      "title": "OTP किसी को न बताएं",
+      "message_hi": "कोई आपका OTP या बैंक पिन माँग रहा है। बैंक या सरकारी विभाग कभी OTP नहीं माँगते। OTP बता देने पर आपके खाते से पूरे पैसे निकल सकते हैं। किसी को भी OTP न बताएं।",
+      "safe_advice": "Do not share or enter the OTP; close this screen and call your bank or family on a number you already know."
+    },
+    {
+      "id": "pin-receive-trap",
+      "category": "PAYMENT_FRAUD",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\b(?:upi|m|mpin|atm|card|bank|banking|transaction|debit|credit)[ -]?pin\\b|\\bmpin\\b|\\bpin\\b|पिन|यूपीआई"
+      ],
+      "requires": [
+        "\\b(receive|receiving|refund|cashback|cash back|reward|prize|lottery|lucky (draw|winner)|winner|won|money back)\\b|paise (aayenge|aane|wapas|milenge)|paisa (aayega|wapas)|पैसे (आएंगे|आएगा|वापस|मिलेंगे)|कैशबैक|इनाम|लॉटरी|रिफंड"
+      ],
+      "strip_safe_warnings": true,
+      "title": "पैसे लेने के लिए PIN नहीं लगता",
+      "message_hi": "यह पैसे ठगने की कोशिश है। पैसे लेने के लिए UPI पिन, QR स्कैन या request approve करना कभी ज़रूरी नहीं होता। पैसे आने के लिए पिन कभी नहीं डालते। request को Decline करें या स्क्रीन बंद कर दें। रिफंड, कैशबैक या इनाम के लिए पिन कभी न डालें।",
+      "safe_advice": "Decline the request and close the screen. Receiving money never needs a UPI PIN."
+    },
+    {
+      "id": "pin-share-request",
+      "category": "PAYMENT_FRAUD",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\b(?:upi|m|mpin|atm|card|bank|banking|transaction|debit|credit)[ -]?pin\\b|\\bmpin\\b|\\bpin\\b|पिन|यूपीआई"
+      ],
+      "requires": [
+        "\\b(share|sharing|send|forward|tell|batao|bata do|bataiye|bhejo|bhej do|bhejna|read out|read it|padh kar|padhkar|disclose)\\b|भेज|बताओ|बता दो|बताएं|पढ़|साझा|शेयर"
+      ],
+      "strip_safe_warnings": true,
+      "title": "पैसे लेने के लिए PIN नहीं लगता",
+      "message_hi": "यह पैसे ठगने की कोशिश है। पैसे लेने के लिए UPI पिन, QR स्कैन या request approve करना कभी ज़रूरी नहीं होता। पैसे आने के लिए पिन कभी नहीं डालते। request को Decline करें या स्क्रीन बंद कर दें। रिफंड, कैशबैक या इनाम के लिए पिन कभी न डालें।",
+      "safe_advice": "Decline the request and close the screen. Receiving money never needs a UPI PIN."
+    },
+    {
+      "id": "pin-collect-request",
+      "category": "PAYMENT_FRAUD",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\b(?:upi|m|mpin|atm|card|bank|banking|transaction|debit|credit)[ -]?pin\\b|\\bmpin\\b|\\bpin\\b|पिन|यूपीआई"
+      ],
+      "requires": [
+        "collect request|request money|money request|payment request|request(ed)? .{0,20}(money|payment|paise)|approve (the )?(request|payment)|accept (the )?request|request accept|paise (bhejne|bhejo?) ki (request|rikwest)|पैसे भेजने की रिक्वेस्ट"
+      ],
+      "title": "पैसे लेने के लिए PIN नहीं लगता",
+      "message_hi": "यह पैसे ठगने की कोशिश है। पैसे लेने के लिए UPI पिन, QR स्कैन या request approve करना कभी ज़रूरी नहीं होता। पैसे आने के लिए पिन कभी नहीं डालते। request को Decline करें या स्क्रीन बंद कर दें। रिफंड, कैशबैक या इनाम के लिए पिन कभी न डालें।",
+      "safe_advice": "Decline the request and close the screen. Receiving money never needs a UPI PIN."
+    },
+    {
+      "id": "qr-receive-trap",
+      "category": "PAYMENT_FRAUD",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\bqr\\b|qr code|scan (this|the|yeh)? ?qr|qr scan|scan karke|स्कैन|क्यूआर"
+      ],
+      "requires": [
+        "\\b(receive|receiving|refund|cashback|cash back|reward|prize|lottery|lucky (draw|winner)|winner|won|money back)\\b|paise (aayenge|aane|wapas|milenge)|paisa (aayega|wapas)|पैसे (आएंगे|आएगा|वापस|मिलेंगे)|कैशबैक|इनाम|लॉटरी|रिफंड"
+      ],
+      "title": "पैसे लेने के लिए PIN नहीं लगता",
+      "message_hi": "यह पैसे ठगने की कोशिश है। पैसे लेने के लिए UPI पिन, QR स्कैन या request approve करना कभी ज़रूरी नहीं होता। पैसे आने के लिए पिन कभी नहीं डालते। request को Decline करें या स्क्रीन बंद कर दें। रिफंड, कैशबैक या इनाम के लिए पिन कभी न डालें।",
+      "safe_advice": "Decline the request and close the screen. Receiving money never needs a UPI PIN."
+    },
+    {
+      "id": "collect-request",
+      "category": "PAYMENT_FRAUD",
+      "level": "DANGEROUS",
+      "patterns": [
+        "collect request|request money|money request|payment request|request(ed)? .{0,20}(money|payment|paise)|approve (the )?(request|payment)|accept (the )?request|request accept|paise (bhejne|bhejo?) ki (request|rikwest)|पैसे भेजने की रिक्वेस्ट"
+      ],
+      "title": "पैसे लेने के लिए PIN नहीं लगता",
+      "message_hi": "यह पैसे ठगने की कोशिश है। पैसे लेने के लिए UPI पिन, QR स्कैन या request approve करना कभी ज़रूरी नहीं होता। पैसे आने के लिए पिन कभी नहीं डालते। request को Decline करें या स्क्रीन बंद कर दें। रिफंड, कैशबैक या इनाम के लिए पिन कभी न डालें।",
+      "safe_advice": "Decline the request and close the screen. Receiving money never needs a UPI PIN."
+    },
+    {
+      "id": "remote-app-code-share",
+      "category": "REMOTE_ACCESS",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\bany ?desk\\b|एनी ?डेस्क|\\bteam ?viewer\\b|टीम ?व्यूअर|\\brust ?desk\\b|\\bquick ?support\\b|क्विक सपोर्ट|\\bsupremo\\b|\\bultraviewer\\b|\\bairdroid\\b|\\bawesun\\b|screen ?shar(e|ing) (app|code|karo|करो)|स्क्रीन शेयर"
+      ],
+      "requires": [
+        "(screen|remote|connection|sharing|support|anydesk|teamviewer|rustdesk)[ -]?(sharing )?code|\\b(9|10)[ -]?digit (code|number)\\b|\\b\\d{9,10}\\b.{0,15}\\bcode\\b|\\bcode\\b.{0,15}(batao|bhejo|share|डाल|बताओ)"
+      ],
+      "title": "स्क्रीन शेयर ऐप से बचें",
+      "message_hi": "कोई ठग AnyDesk, TeamViewer या RustDesk जैसी ऐप से आपके फोन को दूर से देखना और चलाना चाहता है। जुड़ जाने पर वह आपके OTP पढ़ सकता है और पैसे निकाल सकता है। यह ऐप इंस्टॉल न करें और कोई कोड किसी को न बताएं।",
+      "safe_advice": "Do not install the app or share any code; no bank ever asks for remote access."
+    },
+    {
+      "id": "remote-app-install-coercion",
+      "category": "REMOTE_ACCESS",
+      "level": "CRITICAL",
+      "patterns": [
+        "\\bany ?desk\\b|एनी ?डेस्क|\\bteam ?viewer\\b|टीम ?व्यूअर|\\brust ?desk\\b|\\bquick ?support\\b|क्विक सपोर्ट|\\bsupremo\\b|\\bultraviewer\\b|\\bairdroid\\b|\\bawesun\\b|screen ?shar(e|ing) (app|code|karo|करो)|स्क्रीन शेयर"
+      ],
+      "requires": [
+        "\\binstall\\b|\\bdownload\\b|\\bupdate\\b|इंस्टॉल|डाउनलोड|अपडेट",
+        "\\b(bank|account|refund|kyc|verification|verify|money|paise|problem|help|madad|support|sahayata|sbi|hdfc|icici|axis|pnb)\\b|पैसे|खाता|मदद|बैंक|सहायता|रिफंड"
+      ],
+      "title": "स्क्रीन शेयर ऐप से बचें",
+      "message_hi": "कोई ठग AnyDesk, TeamViewer या RustDesk जैसी ऐप से आपके फोन को दूर से देखना और चलाना चाहता है। जुड़ जाने पर वह आपके OTP पढ़ सकता है और पैसे निकाल सकता है। यह ऐप इंस्टॉल न करें और कोई कोड किसी को न बताएं।",
+      "safe_advice": "Do not install the app or share any code; no bank ever asks for remote access."
+    },
+    {
+      "id": "apk-sideload",
+      "category": "MALICIOUS_APK",
+      "level": "DANGEROUS",
+      "patterns": [
+        "\\.apk\\b|\\bapk\\b|unknown sources|install from (unknown|other) sources|अनजान स्रोत"
+      ],
+      "requires": [
+        "unknown sources|install from (unknown|other) sources|अनजान स्रोत|whatsapp|telegram|व्हाट्सएप|टेलीग्राम|\\b(bhej|send|bhijwa|भेज)\\b|\\binstall\\b.{0,20}(this|ye|\\.apk|apk|kar)"
+      ],
+      "title": "बाहर से ऐप इंस्टॉल न करें",
+      "message_hi": "कोई आपको WhatsApp या अनजान जगह से APK फाइल इंस्टॉल करने को कह रहा है। ऐसी ऐप आपके OTP और पैसे चुरा सकती है। अनजान स्रोत से ऐप इंस्टॉल न करें। ऐप केवल Play Store से लें और परिवार से पूछें।",
+      "safe_advice": "Do not install it; install apps only from the Play Store."
+    },
+    {
+      "id": "utility-cut-threat",
+      "category": "PHISHING_IMPERSONATION",
+      "level": "DANGEROUS",
+      "patterns": [
+        "(electricity|bijli|power|current|meter|बिजली|करंट).{0,60}(disconnect|disconnection|cut|kat|band|block|बंद|काट)|(disconnect|cut|kat|band|block|बंद|काट).{0,60}(electricity|bijli|power|current|meter|बिजली|करंट|connection|कनेक्शन)"
+      ],
+      "title": "फर्जी चेतावनी वाला लिंक",
+      "message_hi": "यह बिजली, सिम, KYC या चालान का डर दिखाकर भेजा गया फर्जी संदेश है। सरकारी विभाग और बैंक ऐसा लिंक भेजकर धमकी नहीं देते। लिंक पर क्लिक न करें और दिए नंबर पर कॉल न करें। जानकारी केवल असली विभाग या बैंक से लें।",
+      "safe_advice": "Ignore the link and the deadline; verify only through the official app or office."
+    },
+    {
+      "id": "sim-block-threat",
+      "category": "PHISHING_IMPERSONATION",
+      "level": "DANGEROUS",
+      "patterns": [
+        "(sim|सिम).{0,60}(block|blocked|band|deactivate|suspend|disconnect|बंद|ब्लॉक)|trai|दूरसंचार|सिम (बंद|ब्लॉक)"
+      ],
+      "title": "फर्जी चेतावनी वाला लिंक",
+      "message_hi": "यह बिजली, सिम, KYC या चालान का डर दिखाकर भेजा गया फर्जी संदेश है। सरकारी विभाग और बैंक ऐसा लिंक भेजकर धमकी नहीं देते। लिंक पर क्लिक न करें और दिए नंबर पर कॉल न करें। जानकारी केवल असली विभाग या बैंक से लें।",
+      "safe_advice": "Ignore the link and the deadline; verify only through the official app or office."
+    }
+  ]
+}

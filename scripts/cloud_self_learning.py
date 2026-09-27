@@ -5,6 +5,9 @@ SaralGati - 100% Cloud-Based Autonomous Self-Learning Pipeline
 Runs completely in the cloud (e.g. via GitHub Actions Cron).
 No local device, emulator, or laptop required.
 
+0. Mines recent failures first (fraud_training_cases is_correct=false and
+   model_interactions feedback_status='rejected') and steers generation toward
+   those weak apps, queries and threat categories, so the loop is recursive.
 1. Generates rich synthetic Android app screens & elder queries across major apps:
    - WhatsApp, PhonePe, Google Pay, YouTube, Swiggy, Uber, IRCTC, Settings, Dialer.
 2. Evaluates SaralGati (/api/v1/agent/ask).
@@ -33,7 +36,75 @@ except ImportError:
 
 
 
-def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None):
+def fetch_recent_failures(api_url, headers, limit=50):
+    """Mine the flywheel for recent failures so generation can target them.
+
+    Returns a focus dict used to bias both synthetic generators:
+      - weak_categories : threat categories the sentinel recently MISSED
+      - weak_apps       : apps involved in recent fraud misses / rejected picks
+      - weak_queries    : elder queries the companion recently answered wrongly
+      - fraud_misses / rejected_screens : how many of each failure type were pulled
+    """
+    focus = {
+        "weak_categories": [],
+        "weak_apps": [],
+        "weak_queries": [],
+        "fraud_misses": 0,
+        "rejected_screens": 0,
+    }
+
+    def remember(key, value):
+        if value and value not in focus[key]:
+            focus[key].append(value)
+
+    # 1. Fraud misses: fraud_training_cases rows where is_correct = false
+    #    (expected_category is the class the sentinel failed to raise).
+    try:
+        res = requests.get(
+            urljoin(api_url, f"/api/v1/agent/training-data?type=fraud&limit={limit}"),
+            headers=headers,
+            timeout=15,
+        )
+        for row in (res.json().get("data") or []):
+            meta = row.get("metadata") or {}
+            if meta.get("is_correct") is not False:
+                continue
+            focus["fraud_misses"] += 1
+            remember("weak_categories", meta.get("expected_category"))
+            # The fraud export carries the context in the user message JSON, not
+            # in metadata, so fall back to parsing it out of the sample.
+            app_pkg = meta.get("app_package")
+            if not app_pkg:
+                try:
+                    app_pkg = json.loads(row["messages"][1]["content"]).get("app_package")
+                except (KeyError, IndexError, TypeError, ValueError):
+                    app_pkg = None
+            remember("weak_apps", app_pkg)
+    except Exception as e:
+        print(f"  ⚠️ Failure mining skipped (fraud misses): {e}")
+
+    # 2. Rejected screen interactions: the companion picked the wrong element.
+    try:
+        res = requests.get(
+            urljoin(api_url, f"/api/v1/agent/training-data?status=rejected&limit={limit}"),
+            headers=headers,
+            timeout=15,
+        )
+        for row in (res.json().get("data") or []):
+            meta = row.get("metadata") or {}
+            focus["rejected_screens"] += 1
+            remember("weak_apps", meta.get("app_package"))
+            try:
+                remember("weak_queries", row["messages"][1]["content"])
+            except (KeyError, IndexError, TypeError):
+                pass
+    except Exception as e:
+        print(f"  ⚠️ Failure mining skipped (rejected picks): {e}")
+
+    return focus
+
+
+def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None, focus=None):
     """
     Multi-key pool with MODEL-FIRST exhaustive rotation:
     Exhaust ALL keys on gemini-3.8-flash first, then ALL keys on gemini-3.7-flash, etc.
@@ -96,10 +167,36 @@ def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_
     # Sample from each axis independently
     persona = random.choice(elder_personas)
     intent = random.choice(intent_states)
-    chosen_apps = random.sample(app_domains, min(count, len(app_domains)))
+
+    # Failure-aware prioritization: apps that recently produced wrong answers are
+    # placed first so this batch deliberately re-challenges known weaknesses
+    # instead of blindly re-rolling the same uniform distribution.
+    weak_apps = (focus or {}).get("weak_apps", [])
+    priority_apps = [a for a in app_domains if a[0] in weak_apps]
+    other_apps = [a for a in app_domains if a[0] not in weak_apps]
+    random.shuffle(other_apps)
+    chosen_apps = (priority_apps + other_apps)[:min(count, len(app_domains))]
+
     speech = random.choice(speech_styles)
     mutation = random.choice(evol_mutations)
     entropy_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
+
+    # Turn mined failures into explicit generator instructions.
+    weak_queries = (focus or {}).get("weak_queries", [])
+    focus_block = ""
+    if priority_apps or weak_queries:
+        focus_block = "\n=== FAILURE-DRIVEN PRIORITY (adaptive recursion) ===\n"
+        if priority_apps:
+            focus_block += (
+                "- Apps where SaralGati recently gave the WRONG answer "
+                f"(these must dominate this batch): {[a[0] for a in priority_apps]}\n"
+            )
+        if weak_queries:
+            focus_block += (
+                "- Queries answered incorrectly before; build fresh screens that re-challenge "
+                f"the same confusion with different layouts: {weak_queries[:3]}\n"
+            )
+        focus_block += "- At least half of the generated screens MUST use the priority apps above.\n"
 
     prompt = f"""You are an advanced synthetic UI generator for SaralGati, an AI companion designed for Indian elders.
 Generate exactly {len(chosen_apps)} realistic Android app screens based on this 4-Axis Combinatorial Space:
@@ -110,7 +207,7 @@ Generate exactly {len(chosen_apps)} realistic Android app screens based on this 
 3. Speech / Query Style: {speech}
 4. Evol-Instruct Mutation: {mutation}
 5. Entropy Seed: {entropy_seed}
-
+{focus_block}
 Target Apps:
 {json.dumps([app[1] for app in chosen_apps])}
 
@@ -221,7 +318,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     return []
 
 
-def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blacklisted_models=None):
+def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blacklisted_models=None, focus=None):
     """Ask Gemini for synthetic scam / benign screens with a ground-truth label.
 
     The deterministic sentinel has no learning loop of its own, so the flywheel
@@ -287,6 +384,23 @@ def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blackliste
     mutation = random.choice(evol_mutations)
     generation_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
 
+    # Failure-aware prioritization: the categories the sentinel recently MISSED
+    # are forced back into the batch, and contexts that produced failures are
+    # preferred, so the flywheel re-tests its own blind spots every run.
+    weak_categories = (focus or {}).get("weak_categories", [])
+    weak_apps = (focus or {}).get("weak_apps", [])
+    focus_block = ""
+    if weak_categories or weak_apps:
+        focus_block = "\n=== FAILURE-DRIVEN PRIORITY (adaptive recursion) ===\n"
+        if weak_categories:
+            focus_block += (
+                "- The sentinel recently MISSED these categories: "
+                f"{weak_categories}. You MUST cover each one at least once, worded harder "
+                "than typical (closer to a benign-looking message, less obvious trigger words).\n"
+            )
+        if weak_apps:
+            focus_block += f"- Recent failures appeared in these contexts: {weak_apps}. Prefer them.\n"
+
     prompt = f"""You are an advanced synthetic fraud-scenario generator for SaralGati, an anti-fraud sentinel that protects Indian elders.
 Generate exactly {count} realistic Android fraud/benign scenarios based on this 4-Axis Combinatorial Space:
 
@@ -297,7 +411,7 @@ Generate exactly {count} realistic Android fraud/benign scenarios based on this 
 4. Delivery Disguise: {disguise}
 5. Evol-Instruct Mutation: {mutation}
 6. Entropy Seed: {generation_seed}
-
+{focus_block}
 === DIVERSITY & INTEGRITY RULES ===
 - Always include at least 1 BENIGN CONTROL scenario (threat_level: "SAFE", threat_category: "NONE") to prevent model paranoia.
 - Vary sender IDs (e.g. 'VK-SBIINB', 'BZ-MSEBDL', 'AX-TRAIIN', 'JM-POSTIN', 'CP-CYBERD').
@@ -411,6 +525,19 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         "Authorization": f"Bearer {flywheel_secret}"
     }
 
+    # 0. Failure mining: pull recent misses BEFORE generating anything, so this
+    #    run deliberately targets known weaknesses instead of re-rolling blind.
+    print("[Failure Mining] Pulling recent misses from the flywheel...")
+    focus = fetch_recent_failures(api_url, headers)
+    print(f"[Failure Mining] Fraud misses: {focus['fraud_misses']} | Rejected picks: {focus['rejected_screens']}")
+    if focus["weak_categories"]:
+        print(f"[Failure Mining] Weak fraud categories : {', '.join(focus['weak_categories'])}")
+    if focus["weak_apps"]:
+        print(f"[Failure Mining] Weak apps             : {', '.join(focus['weak_apps'][:6])}")
+    if not (focus["fraud_misses"] or focus["rejected_screens"]):
+        print("[Failure Mining] No prior failures yet - generating a clean exploratory batch.")
+    print()
+
     stats = {
         "total_scenarios": 0,
         "correct_grounding": 0,
@@ -432,7 +559,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         blacklisted_models = set()  # Shared across all batches in this run
         for batch_num in range(1, num_batches + 1):
             print(f"[Generator] Requesting batch {batch_num}/{num_batches} of dynamic app screens...")
-            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=blacklisted_models)
+            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=blacklisted_models, focus=focus)
             if dynamic_screens:
                 active_screens.extend(dynamic_screens)
             if batch_num < num_batches:
@@ -441,7 +568,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         # Final retry pass: give blacklisted 503 models one last chance at the end
         if blacklisted_models:
             print(f"[Generator] Final retry pass for {len(blacklisted_models)} blacklisted model(s): {', '.join(sorted(blacklisted_models))}")
-            retry_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=set())
+            retry_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=set(), focus=focus)
             if retry_screens:
                 active_screens.extend(retry_screens)
                 print(f"[Generator] Final retry yielded {len(retry_screens)} additional screens.")
@@ -552,7 +679,10 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         print(" 🛡️  ANTI-FRAUD SENTINEL TRAINING PHASE (Gemini ground truth)")
         print("=" * 75)
         fraud_target = min(6, max_cases) if max_cases else 6
-        fraud_screens = generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=fraud_target, blacklisted_models=blacklisted_models)
+        # Guarantee room for every recently missed category so the retest is real.
+        if focus["weak_categories"]:
+            fraud_target = max(fraud_target, min(len(focus["weak_categories"]) + 1, 10))
+        fraud_screens = generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=fraud_target, blacklisted_models=blacklisted_models, focus=focus)
         severity = {"SAFE": 0, "SUSPICIOUS": 1, "DANGEROUS": 2, "CRITICAL": 3}
         for fc_idx, case in enumerate(fraud_screens, start=1):
             expected_level = case["expected_threat_level"]

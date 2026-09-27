@@ -21,6 +21,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.saralgati.app.data.local.LocalPrefs
+import com.saralgati.app.data.local.AppStrings
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import java.util.Locale
@@ -30,10 +31,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private lateinit var windowManager: WindowManager
     private lateinit var bubbleView: View
     private lateinit var expandedView: View
-    
+
     private var paramsBubble: WindowManager.LayoutParams? = null
     private var paramsExpanded: WindowManager.LayoutParams? = null
-    
+
     private var isExpanded = false
     private lateinit var tts: TextToSpeech
     private var speechRecognizer: android.speech.SpeechRecognizer? = null
@@ -59,20 +60,24 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action
             if (action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SPEAK_EXPLANATION ||
-                action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION") {
-                val text = intent.getStringExtra(com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.EXTRA_EXPLANATION_TEXT)
-                    ?: intent.getStringExtra("explanation_text")
+                action == "com.saralgati.app.ACTION_SPEAK_EXPLANATION"
+            ) {
+                val text =
+                    intent.getStringExtra(com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.EXTRA_EXPLANATION_TEXT)
+                        ?: intent.getStringExtra("explanation_text")
                 if (!text.isNullOrEmpty()) {
                     speak(text, true)
-                    
+
                     // Reset title if it was loading
                     val titleView = expandedView.findViewWithTag<TextView>("titleView")
-                    if (titleView?.text == "सोच रहा है...") {
-                        titleView.text = "सरलगति सहायक"
+                    val curLang = localPrefs.getAppLanguage()
+                    if (titleView?.text == "सोच रहा है..." || titleView?.text == "Thinking...") {
+                        titleView.text = AppStrings.assistantTitle(curLang)
                     }
                 }
             } else if (action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SHOW_VISUAL_CUE ||
-                       action == "com.saralgati.app.ACTION_SHOW_VISUAL_CUE") {
+                action == "com.saralgati.app.ACTION_SHOW_VISUAL_CUE"
+            ) {
                 val left = intent.getIntExtra("bounds_left", 0)
                 val top = intent.getIntExtra("bounds_top", 0)
                 val right = intent.getIntExtra("bounds_right", 0)
@@ -96,7 +101,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         localPrefs = LocalPrefs(applicationContext)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         tts = TextToSpeech(this, this)
-        
+
         val filter = IntentFilter().apply {
             addAction("com.saralgati.app.ACTION_SPEAK_EXPLANATION")
             addAction("com.saralgati.app.ACTION_SHOW_VISUAL_CUE")
@@ -108,10 +113,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         } else {
             registerReceiver(explanationReceiver, filter)
         }
-        
+
         createBubbleView()
         createExpandedView()
-        
+
         if (!android.provider.Settings.canDrawOverlays(this)) {
             stopSelf()
             return
@@ -130,9 +135,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             if (this::tts.isInitialized) tts.stop()
             collapseHelper()
         } else if (intent?.action == ACTION_SHOW_RAGE_TAP) {
+            val lang = localPrefs.getAppLanguage()
             expandHelper(
-                title = "क्या आपको यहाँ कुछ सहायता चाहिए?",
-                speakMsg = "ऐसा लगता है कि आपको यहाँ कुछ परेशानी हो रही है। क्या मैं मदद करूँ?"
+                title = AppStrings.rageTapTitle(lang),
+                speakMsg = AppStrings.rageTapMessage(lang)
             )
         } else if (intent?.action == ACTION_SHOW_FRAUD_WARNING) {
             val title = intent.getStringExtra(EXTRA_FRAUD_TITLE) ?: "सावधान!"
@@ -150,13 +156,13 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val langPref = localPrefs.getString("pref_lang", "hi")
+            val langPref = localPrefs.getAppLanguage()
             val locale = if (langPref == "en") Locale.ENGLISH else Locale("hi", "IN")
             val result = tts.setLanguage(locale)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
                 Log.e(TAG, "TTS Language not supported")
             }
-            
+
             tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
                 override fun onDone(utteranceId: String?) {
@@ -167,6 +173,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                         }
                     }
                 }
+
                 override fun onError(utteranceId: String?) {}
             })
         }
@@ -188,15 +195,18 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     // Turn floating bubble red to indicate recording
                     resetBubbleColor(android.graphics.Color.RED)
                 }
+
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {
                     resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
                 }
+
                 override fun onError(error: Int) {
                     resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
                 }
+
                 override fun onResults(results: android.os.Bundle?) {
                     resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
                     val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
@@ -209,16 +219,26 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                         sendBroadcast(extractIntent)
                     }
                 }
+
                 override fun onPartialResults(partialResults: android.os.Bundle?) {}
                 override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
             })
         }
-        
+
+        val langPref = localPrefs.getAppLanguage()
+        val speechLang = if (langPref == "en") "en-IN" else "hi-IN"
         val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            putExtra(
+                android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+            )
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, speechLang)
         }
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.RECORD_AUDIO
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
             return
         }
         speechRecognizer?.startListening(intent)
@@ -237,12 +257,12 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val icon = ImageView(this)
         icon.setImageResource(android.R.drawable.ic_menu_help) // Fallback Android icon
         icon.setColorFilter(Color.WHITE)
-        
+
         val background = GradientDrawable()
         background.shape = GradientDrawable.OVAL
         background.setColor(Color.parseColor("#0074c8")) // Primary blue
         icon.background = background
-        
+
         val p = FrameLayout.LayoutParams(140, 140)
         p.gravity = Gravity.CENTER
         layout.addView(icon, p)
@@ -268,9 +288,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
         setupDrag(bubbleView, paramsBubble!!) {
             // On click
+            val lang = localPrefs.getAppLanguage()
             expandHelper(
-                title = "सरलगति सहायक",
-                speakMsg = "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ?"
+                title = AppStrings.assistantTitle(lang),
+                speakMsg = if (lang == "en") "Hello, how can I help you today?" else "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ?"
             )
         }
     }
@@ -282,7 +303,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(16))
-            
+
             val bgDrawable = GradientDrawable().apply {
                 setColor(Color.WHITE)
                 cornerRadius = dp(24).toFloat()
@@ -304,8 +325,11 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             }
         }
 
+        val lang = localPrefs.getAppLanguage()
+        val isEn = lang == "en"
+
         val titleText = TextView(this).apply {
-            text = "सरलगति सहायक"
+            text = AppStrings.assistantTitle(lang)
             textSize = 16f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#0F172A"))
@@ -353,7 +377,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
         // Button 1: Explain Screen
         val btnExplain = Button(this).apply {
-            text = "🔍 स्क्रीन समझाइए\n(Explain Screen)"
+            text = if (isEn) "🔍 Explain Screen" else "🔍 स्क्रीन समझाइए\n(Explain Screen)"
             textSize = 12f
             setTextColor(Color.WHITE)
             isAllCaps = false
@@ -366,7 +390,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 marginEnd = dp(6)
             }
             setOnClickListener {
-                speak("एक सेकंड रुकिए, मैं देख रहा हूँ...")
+                val curLang = localPrefs.getAppLanguage()
+                speak(if (curLang == "en") "One moment, let me see..." else "एक सेकंड रुकिए, मैं देख रहा हूँ...")
                 collapseHelper()
                 val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_SCREEN").apply {
                     setPackage(packageName)
@@ -378,7 +403,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
         // Button 2: Ask a Question
         val btnNext = Button(this).apply {
-            text = "🎙️ सवाल पूछें\n(Ask a Question)"
+            text = if (isEn) "🎙️ Ask Question" else "🎙️ सवाल पूछें\n(Ask a Question)"
             textSize = 12f
             setTextColor(Color.WHITE)
             isAllCaps = false
@@ -510,6 +535,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     isClick = true
                     true
                 }
+
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - initialTouchX
                     val dy = event.rawY - initialTouchY
@@ -521,12 +547,14 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     windowManager.updateViewLayout(view, params)
                     true
                 }
+
                 MotionEvent.ACTION_UP -> {
                     if (isClick) {
                         onClick()
                     }
                     true
                 }
+
                 else -> false
             }
         }
@@ -570,9 +598,9 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 height,
                 overlayType,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.saralgati.app.data.local.LocalPrefs
+import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.data.api.NetworkModule
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -23,6 +24,8 @@ import org.json.JSONObject
 @Composable
 fun PairingScreen(
     localPrefs: LocalPrefs,
+    currentLang: String = "hi",
+    onChangeLanguage: () -> Unit = {},
     onPairedSuccess: () -> Unit
 ) {
     var elderIdInput by remember { mutableStateOf("") }
@@ -39,7 +42,8 @@ fun PairingScreen(
                 isScanning = true
                 errorMessage = null
             } else {
-                errorMessage = "Camera permission is required to scan QR codes."
+                errorMessage =
+                    if (currentLang == "en") "Camera permission is required to scan QR code." else "QR कोड स्कैन करने के लिए कैमरा अनुमति आवश्यक है।"
             }
         }
     )
@@ -53,7 +57,7 @@ fun PairingScreen(
                         val elderId = json.getString("elder_id")
                         val deviceToken = json.optString("device_token", "caregiver_live")
                         localPrefs.savePairingInfo(elderId, "caregiver_live", deviceToken)
-                        
+
                         // Auto-detect and push device model & OS version
                         val phoneModel = getDevicePhoneModel()
                         val osVersion = getDeviceOsVersion()
@@ -66,13 +70,14 @@ fun PairingScreen(
                                         "os_version" to osVersion
                                     )
                                 )
-                            } catch (_: Exception) {}
+                            } catch (_: Exception) {
+                            }
                         }
 
                         isScanning = false
                         onPairedSuccess()
                     } catch (e: Exception) {
-                        errorMessage = "Invalid QR Code format"
+                        errorMessage = if (currentLang == "en") "Invalid QR Code format" else "अमान्य QR कोड प्रारूप"
                         isScanning = false
                     }
                 }
@@ -81,7 +86,7 @@ fun PairingScreen(
                 onClick = { isScanning = false },
                 modifier = Modifier.align(Alignment.BottomCenter).padding(32.dp)
             ) {
-                Text("Cancel Scan")
+                Text(AppStrings.cancelScan(currentLang))
             }
         }
         return
@@ -94,16 +99,33 @@ fun PairingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            OutlinedButton(
+                onClick = onChangeLanguage,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+            ) {
+                Text(
+                    text = if (currentLang == "hi") "🌐 English" else "🌐 हिंदी",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
         Text(
-            text = "SaralGati Setup",
+            text = AppStrings.setupTitle(currentLang),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        
+
         Text(
-            text = "Link this device to the live Caregiver Dashboard.",
+            text = AppStrings.setupSubtitle(currentLang),
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(bottom = 24.dp)
@@ -111,7 +133,11 @@ fun PairingScreen(
 
         Button(
             onClick = {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                if (ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.CAMERA
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
                     isScanning = true
                     errorMessage = null
                 } else {
@@ -121,15 +147,16 @@ fun PairingScreen(
             modifier = Modifier.fillMaxWidth().height(64.dp).padding(bottom = 16.dp),
             enabled = !isLoading
         ) {
-            Text("Scan QR Code to Pair", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(AppStrings.scanQrBtn(currentLang), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
         }
 
-        Text("OR", modifier = Modifier.padding(vertical = 16.dp))
+        Text(AppStrings.orText(currentLang), modifier = Modifier.padding(vertical = 16.dp))
 
         OutlinedTextField(
             value = elderIdInput,
             onValueChange = { elderIdInput = it },
-            label = { Text("Elder ID (from Dashboard URL)") },
+            label = { Text(AppStrings.enterCodeLabel(currentLang)) },
+            placeholder = { Text(AppStrings.enterElderIdPlaceholder(currentLang)) },
             modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             singleLine = true,
             enabled = !isLoading
@@ -139,7 +166,8 @@ fun PairingScreen(
             Text(
                 text = errorMessage!!,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier.padding(bottom = 16.dp),
+                textAlign = TextAlign.Center
             )
         }
 
@@ -147,7 +175,8 @@ fun PairingScreen(
             onClick = {
                 val cleanId = elderIdInput.trim()
                 if (cleanId.isBlank()) {
-                    errorMessage = "Please provide an Elder ID."
+                    errorMessage =
+                        if (currentLang == "en") "Please provide a Pairing Code." else "कृपया पेयरिंग कोड दर्ज करें।"
                     return@OutlinedButton
                 }
 
@@ -158,7 +187,7 @@ fun PairingScreen(
                         val response = NetworkModule.eldersApi.getElderStatus(cleanId)
                         if (response.isSuccessful && response.body()?.success == true) {
                             localPrefs.savePairingInfo(cleanId, "caregiver_live")
-                            
+
                             // Auto-detect and push device model & OS version
                             val phoneModel = getDevicePhoneModel()
                             val osVersion = getDeviceOsVersion()
@@ -170,14 +199,17 @@ fun PairingScreen(
                                         "os_version" to osVersion
                                     )
                                 )
-                            } catch (_: Exception) {}
+                            } catch (_: Exception) {
+                            }
 
                             onPairedSuccess()
                         } else {
-                            errorMessage = "Elder ID not found. Please create one on saralgati.com first."
+                            errorMessage =
+                                if (currentLang == "en") "Pairing Code not found or expired. Check dashboard." else "पेयरिंग कोड नहीं मिला या समय समाप्त हो गया। डैशबोर्ड देखें।"
                         }
                     } catch (e: Exception) {
-                        errorMessage = "Network error. Please check internet connection."
+                        errorMessage =
+                            if (currentLang == "en") "Network error. Please check your internet connection." else "नेटवर्क में दिक्कत है। कृपया इंटरनेट कनेक्शन जांचें।"
                     } finally {
                         isLoading = false
                     }
@@ -189,15 +221,15 @@ fun PairingScreen(
             if (isLoading) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), color = MaterialTheme.colorScheme.primary)
             } else {
-                Text("Link Device Manually", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                Text(AppStrings.connectBtn(currentLang), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
 private fun getDevicePhoneModel(): String {
-    val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar { 
-        if (it.isLowerCase()) it.titlecase() else it.toString() 
+    val manufacturer = android.os.Build.MANUFACTURER.replaceFirstChar {
+        if (it.isLowerCase()) it.titlecase() else it.toString()
     }
     val model = android.os.Build.MODEL
     return if (model.startsWith(manufacturer, ignoreCase = true)) {

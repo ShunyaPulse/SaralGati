@@ -11,7 +11,16 @@ class LocalPrefs(context: Context) {
         private const val KEY_CAREGIVER_ID = "caregiver_id"
         private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_IS_PAIRED = "is_paired"
+        private const val KEY_PREF_LANG = "pref_lang"
     }
+
+    fun setAppLanguage(lang: String) {
+        prefs.edit().putString(KEY_PREF_LANG, lang).apply()
+    }
+
+    fun getAppLanguage(): String = prefs.getString(KEY_PREF_LANG, "hi") ?: "hi"
+
+    fun hasSelectedLanguage(): Boolean = prefs.contains(KEY_PREF_LANG)
 
     fun savePairingInfo(elderId: String, caregiverId: String, deviceToken: String? = null) {
         val editor = prefs.edit()
@@ -33,9 +42,9 @@ class LocalPrefs(context: Context) {
     fun getAuthToken(): String? = getDeviceToken() ?: getElderId()
 
     fun getElderId(): String? = prefs.getString(KEY_ELDER_ID, null)
-    
+
     fun isPaired(): Boolean = prefs.getBoolean(KEY_IS_PAIRED, false)
-    
+
     fun clear() {
         prefs.edit().clear().apply()
     }

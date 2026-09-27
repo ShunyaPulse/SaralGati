@@ -27,19 +27,22 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.saralgati.app.data.local.LocalPrefs
+import com.saralgati.app.data.local.AppStrings
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PhoneDoctorScreen() {
+fun PhoneDoctorScreen(
+    currentLang: String = "hi"
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val localPrefs = remember { LocalPrefs(context) }
-    
+
     var showSettings by remember { mutableStateOf(false) }
     var hasWritePermission by remember { mutableStateOf(canWriteSettings(context)) }
     var hasDndPermission by remember { mutableStateOf(canAccessDnd(context)) }
-    
+
     // Auto-refresh permission state when returning from system settings
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -53,7 +56,7 @@ fun PhoneDoctorScreen() {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
-    
+
     // Checkbox states (Caregiver configures these)
     var fixRinger by remember { mutableStateOf(localPrefs.getBoolean("doctor_fix_ringer", true)) }
     var fixMedia by remember { mutableStateOf(localPrefs.getBoolean("doctor_fix_media", true)) }
@@ -69,17 +72,17 @@ fun PhoneDoctorScreen() {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            
+
             Text(
-                text = "Phone Doctor",
+                text = AppStrings.doctorTitle(currentLang),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            
+
             Text(
-                text = "Agar phone me awaaz ya roshni ki dikkat hai, toh ek button dabayein.",
+                text = AppStrings.doctorSubtitle(currentLang),
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
                 color = Color.Gray,
@@ -89,7 +92,7 @@ fun PhoneDoctorScreen() {
             // Giant "Sab Theek Karo" Button
             Button(
                 onClick = {
-                    executeFixes(context, localPrefs)
+                    executeFixes(context, localPrefs, currentLang)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)), // Green
                 shape = CircleShape,
@@ -101,7 +104,7 @@ fun PhoneDoctorScreen() {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("🛠️", fontSize = 48.sp, modifier = Modifier.padding(bottom = 8.dp))
                     Text(
-                        "Sab Theek\nKaro",
+                        AppStrings.fixAllBtn(currentLang),
                         fontSize = 24.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color.White,
@@ -133,14 +136,23 @@ fun PhoneDoctorScreen() {
             title = { Text("Caregiver Settings\n(Button Actions)", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    Text("Select what 'Sab Theek Karo' will fix:", fontSize = 14.sp, color = Color.Gray, modifier = Modifier.padding(bottom = 8.dp))
-                    
+                    Text(
+                        "Select what 'Sab Theek Karo' will fix:",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = fixRinger, onCheckedChange = { fixRinger = it; localPrefs.saveBoolean("doctor_fix_ringer", it) })
+                        Checkbox(
+                            checked = fixRinger,
+                            onCheckedChange = { fixRinger = it; localPrefs.saveBoolean("doctor_fix_ringer", it) })
                         Text("Max Ringer (Awaaz Full)", fontSize = 15.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = fixMedia, onCheckedChange = { fixMedia = it; localPrefs.saveBoolean("doctor_fix_media", it) })
+                        Checkbox(
+                            checked = fixMedia,
+                            onCheckedChange = { fixMedia = it; localPrefs.saveBoolean("doctor_fix_media", it) })
                         Text("Max Video/Media Volume", fontSize = 15.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -223,7 +235,12 @@ fun PhoneDoctorScreen() {
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.fillMaxWidth().height(36.dp).padding(bottom = 4.dp)
                                     ) {
-                                        Text("Allow Modify Settings (Roshni)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(
+                                            "Allow Modify Settings (Roshni)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
                                 }
                                 if (needsDnd) {
@@ -233,7 +250,12 @@ fun PhoneDoctorScreen() {
                                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                                         modifier = Modifier.fillMaxWidth().height(36.dp)
                                     ) {
-                                        Text("Allow DND Access (Silent)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        Text(
+                                            "Allow DND Access (Silent)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
                                     }
                                 }
                             }
@@ -268,7 +290,8 @@ private fun openWriteSettingsPermission(context: Context) {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(fallback)
-            } catch (ignored: Exception) {}
+            } catch (ignored: Exception) {
+            }
         }
     }
 }
@@ -288,16 +311,17 @@ private fun openDndSettings(context: Context) {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             context.startActivity(intent)
-        } catch (ignored: Exception) {}
+        } catch (ignored: Exception) {
+        }
     }
 }
 
-private fun executeFixes(context: Context, prefs: LocalPrefs) {
+private fun executeFixes(context: Context, prefs: LocalPrefs, currentLang: String = "hi") {
     try {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         var fixedItems = 0
-        
+
         // Fix DND First so audio levels can be changed safely
         if (prefs.getBoolean("doctor_fix_dnd", false)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -305,16 +329,18 @@ private fun executeFixes(context: Context, prefs: LocalPrefs) {
                     try {
                         nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
                         fixedItems++
-                    } catch (e: Exception) {}
+                    } catch (e: Exception) {
+                    }
                 }
             }
         }
-        
+
         if (prefs.getBoolean("doctor_fix_ringer", true)) {
             try {
                 audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-            } catch (e: Exception) {}
-            
+            } catch (e: Exception) {
+            }
+
             val maxRinger = audioManager.getStreamMaxVolume(AudioManager.STREAM_RING)
             audioManager.setStreamVolume(AudioManager.STREAM_RING, maxRinger, 0)
             // Also fix notification volume if independent
@@ -322,7 +348,7 @@ private fun executeFixes(context: Context, prefs: LocalPrefs) {
             audioManager.setStreamVolume(AudioManager.STREAM_NOTIFICATION, maxNotif, 0)
             fixedItems++
         }
-        
+
         if (prefs.getBoolean("doctor_fix_media", true)) {
             val maxMedia = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (maxMedia * 0.85).toInt(), 0)
@@ -365,10 +391,12 @@ private fun executeFixes(context: Context, prefs: LocalPrefs) {
                 }
             }
         }
-        
-        Toast.makeText(context, "✅ Sab Theek Ho Gaya!", Toast.LENGTH_SHORT).show()
+
+        val successToast = if (currentLang == "en") "✅ All settings fixed!" else "✅ सब ठीक हो गया!"
+        Toast.makeText(context, successToast, Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        Toast.makeText(context, "Kuch theek karne me dikkat aayi.", Toast.LENGTH_SHORT).show()
+        val errorToast = if (currentLang == "en") "Error adjusting settings." else "कुछ ठीक करने में दिक्कत आई।"
+        Toast.makeText(context, errorToast, Toast.LENGTH_SHORT).show()
     }
 }
 

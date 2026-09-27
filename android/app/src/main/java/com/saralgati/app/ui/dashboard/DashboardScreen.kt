@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.saralgati.app.data.api.NetworkModule
+import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AssistanceLog
 import com.saralgati.app.services.accessibility.SaralGatiAccessibilityService
@@ -32,6 +33,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun DashboardScreen(
+    currentLang: String = "hi",
+    onChangeLanguage: () -> Unit = {},
     onUnpair: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -91,15 +94,32 @@ fun DashboardScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(
-                text = "SaralGati Protection",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = AppStrings.title(currentLang),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                OutlinedButton(
+                    onClick = onChangeLanguage,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text(
+                        text = if (currentLang == "hi") "🌐 English" else "🌐 हिंदी",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Surface(
                 color = MaterialTheme.colorScheme.primaryContainer,
                 shape = RoundedCornerShape(12.dp),
@@ -110,7 +130,7 @@ fun DashboardScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Text(
-                        text = "✅ App is Connected",
+                        text = AppStrings.appConnected(currentLang),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -132,7 +152,7 @@ fun DashboardScreen(
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
                         modifier = Modifier.height(36.dp)
                     ) {
-                        Text("Disconnect App", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(AppStrings.disconnect(currentLang), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -148,13 +168,13 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Enable Accessibility Permission")
+                    Text(AppStrings.enableAccessibility(currentLang))
                 }
-                
+
                 if (Build.VERSION.SDK_INT >= 33) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        "If Accessibility says 'Restricted': Open App Info -> Top 3 Dots -> Allow restricted settings",
+                        AppStrings.restrictedAccessibility(currentLang),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -168,7 +188,7 @@ fun DashboardScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Open App Info (To Unlock)")
+                        Text(AppStrings.openAppInfo(currentLang))
                     }
                 }
             }
@@ -186,7 +206,7 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Grant Overlay (Floating) Permission")
+                    Text(AppStrings.grantOverlay(currentLang))
                 }
             }
 
@@ -202,7 +222,7 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Disable Battery Optimization")
+                    Text(AppStrings.disableBatteryOpt(currentLang))
                 }
             }
 
@@ -220,7 +240,7 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Allow Auto-Updates Permission")
+                    Text(AppStrings.allowAutoUpdates(currentLang))
                 }
             }
 
@@ -236,7 +256,7 @@ fun DashboardScreen(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Enable Auto-Start (${AutoStartHelper.getBrandName()})")
+                    Text(AppStrings.enableAutoStart(AutoStartHelper.getBrandName(), currentLang))
                 }
             }
 
@@ -253,7 +273,7 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "🛡️ All Protection is Active",
+                            text = AppStrings.allProtectionActive(currentLang),
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF15803D),
                             fontSize = 16.sp,
@@ -273,7 +293,7 @@ fun DashboardScreen(
                 )
             }
         }
-        
+
         Spacer(modifier = Modifier.weight(1f))
 
         // On-Screen Helper Controls
@@ -285,7 +305,7 @@ fun DashboardScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
-                    text = "On-Screen Helper",
+                    text = AppStrings.onScreenHelper(currentLang),
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 20.sp,
                     modifier = Modifier.padding(bottom = 12.dp)
@@ -298,13 +318,13 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Voice Guidance (TTS)", 
+                        text = AppStrings.voiceGuidance(currentLang),
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Medium
                     )
                     Switch(
                         checked = voiceEnabled,
-                        onCheckedChange = { 
+                        onCheckedChange = {
                             voiceEnabled = it
                             localPrefs.saveBoolean("pref_voice", it)
                         }
@@ -315,7 +335,8 @@ fun DashboardScreen(
 
                 Button(
                     onClick = {
-                        val intent = Intent(context, com.saralgati.app.services.overlay.FloatingHelperService::class.java)
+                        val intent =
+                            Intent(context, com.saralgati.app.services.overlay.FloatingHelperService::class.java)
                         context.startService(intent)
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0074C8)),
@@ -324,7 +345,12 @@ fun DashboardScreen(
                         .height(60.dp),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    Text("🚀 Start Helper Now", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(
+                        AppStrings.startHelperNow(currentLang),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
         }

@@ -13,6 +13,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import android.os.Build
+import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.data.model.ScreenContextRequest
 import com.saralgati.app.services.fraud.OfflineFraudSentinel
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var lastFraudScanPackage: String? = null
     private var lastFraudSignature: String? = null
     private var fraudScanInFlight = false
+
     // Package whose trap is currently being warned about. While it is set the
     // same trap is never announced again, and a fresh alert is throttled so an
     // animated trap screen cannot re-speak on every content change. A safe
@@ -68,13 +70,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
         const val ACTION_SPEAK_EXPLANATION = "com.saralgati.app.ACTION_SPEAK_EXPLANATION"
         const val EXTRA_EXPLANATION_TEXT = "explanation_text"
-        
+
         const val ACTION_SHOW_VISUAL_CUE = "com.saralgati.app.ACTION_SHOW_VISUAL_CUE"
         const val EXTRA_BOUNDS_LEFT = "bounds_left"
         const val EXTRA_BOUNDS_TOP = "bounds_top"
         const val EXTRA_BOUNDS_RIGHT = "bounds_right"
         const val EXTRA_BOUNDS_BOTTOM = "bounds_bottom"
-        
+
         private const val TAG = "SaralGatiA11y"
         var isServiceRunning = false
             private set
@@ -104,6 +106,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         dismissFraudWarning()
                     }
                 }
+
                 Intent.ACTION_SCREEN_ON -> {
                     // Re-evaluate whatever is on screen when the elder wakes up.
                     lastFraudSignature = null
@@ -113,12 +116,19 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        localPrefs = LocalPrefs(applicationContext)
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         isServiceRunning = true
-        localPrefs = LocalPrefs(applicationContext)
+        if (!::localPrefs.isInitialized) {
+            localPrefs = LocalPrefs(applicationContext)
+        }
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
-        
+
         val filter = IntentFilter().apply {
             addAction(ACTION_EXTRACT_SCREEN)
             addAction(ACTION_EXTRACT_AND_ASK)
@@ -138,7 +148,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         } else {
             registerReceiver(screenStateReceiver, screenFilter)
         }
-        
+
         Log.i(TAG, "SaralGati Accessibility Service connected successfully.")
     }
 
@@ -153,11 +163,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 scanScreenForFraud(pkg)
                 handleWindowStateChanged(pkg, cls)
             }
+
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
                 // Catches text that appears without a window switch (an incoming
                 // WhatsApp message, a payment sheet drawn over the same activity).
                 scanScreenForFraud(event.packageName?.toString() ?: "")
             }
+
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
                 handleViewClicked(event)
             }
@@ -205,7 +217,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         )
                         NetworkModule.agentApi.sendFeedback(req)
                         Log.d(TAG, "Sent window-transition auto-verification for: $interactionId")
-                        
+
                         // Auto-advance multi-step flow
                         if (currentFlowGoal != null) {
                             kotlinx.coroutines.delay(1000) // Wait for screen to fully render
@@ -239,7 +251,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val actualIndex: Int? = if (isTargetTapped) {
                     activeHighlightedIndex
                 } else {
-                    val foundIdx = activeElementBounds.indexOfFirst { android.graphics.Rect.intersects(clickedRect, it) }
+                    val foundIdx =
+                        activeElementBounds.indexOfFirst { android.graphics.Rect.intersects(clickedRect, it) }
                     if (foundIdx != -1) foundIdx else null
                 }
 
@@ -262,8 +275,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                             actualTappedIndex = actualIndex
                         )
                         NetworkModule.agentApi.sendFeedback(req)
-                        Log.d(TAG, "Sent implicit feedback: $feedbackType (actualIndex: $actualIndex) for interaction: $interactionId")
-                        
+                        Log.d(
+                            TAG,
+                            "Sent implicit feedback: $feedbackType (actualIndex: $actualIndex) for interaction: $interactionId"
+                        )
+
                         // Auto-advance multi-step flow if they tapped the correct target
                         if (currentFlowGoal != null && isTargetTapped) {
                             kotlinx.coroutines.delay(1000) // Wait for content change
@@ -304,7 +320,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         // Check if N taps happened within the time window (first to last)
         if (recentClickTimes.size >= RAGE_TAP_THRESHOLD &&
-            (recentClickTimes.last() - recentClickTimes.first()) < RAGE_TAP_TIME_WINDOW_MS) {
+            (recentClickTimes.last() - recentClickTimes.first()) < RAGE_TAP_TIME_WINDOW_MS
+        ) {
             Log.w(TAG, "Rage Tap Detected on node: $viewId")
             lastAlertTriggerTime = currentTime
             recentClickTimes.clear()
@@ -312,7 +329,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
             triggerRageTapAlert(event.packageName?.toString() ?: "unknown", viewId)
         }
-        
+
         nodeInfo.recycle()
     }
 
@@ -359,11 +376,22 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
             // 1. Instant, network-free check first: the elder is warned the moment
             // the scam appears, even with no data or a server cold start.
+            val isEn = localPrefs.getAppLanguage() == "en"
             val offline = OfflineFraudSentinel.analyze(this, scanElements)
             if (offline != null) {
                 val safeBounds = OfflineFraudSentinel.findSafeActionIndex(scanElements)
                     ?.let { scanBounds.getOrNull(it) }
-                warnAboutFraud(pkg, offline.level, offline.category, offline.title, offline.messageHi, offline.safeAdvice, safeBounds)
+                val alertMsg = if (isEn) offline.safeAdvice else offline.messageHi
+                val alertTitle = if (isEn) "Warning: Suspicious Activity" else offline.title
+                warnAboutFraud(
+                    pkg,
+                    offline.level,
+                    offline.category,
+                    alertTitle,
+                    alertMsg,
+                    offline.safeAdvice,
+                    safeBounds
+                )
             }
 
             // 2. The server stays authoritative (and captures the flywheel case).
@@ -389,7 +417,17 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             }
 
             val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
-            warnAboutFraud(pkg, verdict.threatLevel, verdict.threatCategory, verdict.userAlert.title, verdict.userAlert.messageHi, verdict.actionDecision.safeAdvice, safeBounds)
+            val alertMsg = if (isEn) verdict.userAlert.messageEn else verdict.userAlert.messageHi
+            val alertTitle = if (isEn) "Warning: Potential Scam" else verdict.userAlert.title
+            warnAboutFraud(
+                pkg,
+                verdict.threatLevel,
+                verdict.threatCategory,
+                alertTitle,
+                alertMsg,
+                verdict.actionDecision.safeAdvice,
+                safeBounds
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Fraud scan failed: ${e.message}")
         } finally {
@@ -438,7 +476,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         warnElderAboutFraud(title, messageHi, advice, safeBounds)
     }
 
-    private fun warnElderAboutFraud(title: String, messageHi: String, advice: String, safeBounds: android.graphics.Rect?) {
+    private fun warnElderAboutFraud(
+        title: String,
+        messageHi: String,
+        advice: String,
+        safeBounds: android.graphics.Rect?
+    ) {
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_FRAUD_WARNING
             putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_TITLE, title)
@@ -457,7 +500,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
     private fun triggerRageTapAlert(pkgName: String, viewId: String) {
         val elderId = localPrefs.getElderId() ?: return
-        
+
         // Trigger the on-screen helper to pop up and ask if they need help
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_RAGE_TAP
@@ -517,29 +560,32 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         val lower = pkg.lowercase()
         if (INFINITE_AND_LONG_SCROLL_PACKAGES.contains(lower)) return true
         return lower.contains("youtube") ||
-               lower.contains("instagram") ||
-               lower.contains("facebook") ||
-               lower.contains("twitter") ||
-               lower.contains("whatsapp") ||
-               lower.contains("reddit") ||
-               lower.contains("tiktok") ||
-               lower.contains("gmail") ||
-               lower.contains("messaging") ||
-               lower.contains("photos")
+                lower.contains("instagram") ||
+                lower.contains("facebook") ||
+                lower.contains("twitter") ||
+                lower.contains("whatsapp") ||
+                lower.contains("reddit") ||
+                lower.contains("tiktok") ||
+                lower.contains("gmail") ||
+                lower.contains("messaging") ||
+                lower.contains("photos")
     }
 
-    private fun findScrollableNode(node: AccessibilityNodeInfo?, needBackward: Boolean = false): AccessibilityNodeInfo? {
+    private fun findScrollableNode(
+        node: AccessibilityNodeInfo?,
+        needBackward: Boolean = false
+    ): AccessibilityNodeInfo? {
         if (node == null) return null
         if (node.isScrollable) {
             val hasAction = if (needBackward) {
                 node.actionList.any {
                     it.id == AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD ||
-                    it.id == android.R.id.accessibilityActionScrollUp
+                            it.id == android.R.id.accessibilityActionScrollUp
                 }
             } else {
                 node.actionList.any {
                     it.id == AccessibilityNodeInfo.ACTION_SCROLL_FORWARD ||
-                    it.id == android.R.id.accessibilityActionScrollDown
+                            it.id == android.R.id.accessibilityActionScrollDown
                 }
             }
             if (hasAction) return node
@@ -631,39 +677,42 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // Immediately clear any old highlight box so it does not interfere or get scanned
             clearVisualCue()
             kotlinx.coroutines.delay(300)
-            
+
+            val curLang = localPrefs.getAppLanguage()
+            val isEn = curLang == "en"
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.e(TAG, "extractAndExplainScreen: rootInActiveWindow is null")
-                broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ, कृपया ऐप को दोबारा खोलें।")
+                broadcastExplanation(AppStrings.cannotReadScreen(curLang))
                 return@launch
             }
-            
+
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
             val belowFoldFlags = mutableListOf<Boolean>()
             val appPackage = rootNode.packageName?.toString() ?: "unknown"
-            
+
             extractFullWindowElements(rootNode, appPackage, elements, elementBounds, belowFoldFlags)
             Log.i(TAG, "Extracted ${elements.size} elements (below-fold included) from $appPackage")
-        
+
             try {
                 val request = ScreenContextRequest(appPackage, elements)
                 val response = NetworkModule.agentApi.explainScreen(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
-                    val explanation = data?.explanation ?: "मुझे समझ नहीं आया कि यह स्क्रीन क्या है।"
+                    val explanation = data?.explanation
+                        ?: if (isEn) "I cannot understand this screen right now." else "मुझे समझ नहीं आया कि यह स्क्रीन क्या है।"
                     broadcastExplanation(explanation)
                     val highlightIndex = data?.highlightIndex
                     if (highlightIndex != null && highlightIndex in elementBounds.indices) {
                         broadcastVisualCue(elementBounds[highlightIndex])
                     }
                 } else {
-                    broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
+                    broadcastExplanation(if (isEn) "Could not connect to the server." else "सर्वर से संपर्क नहीं हो पाया।")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to explain screen: ${e.message}")
-                broadcastExplanation("नेटवर्क में दिक्कत है।")
+                broadcastExplanation(if (isEn) "Network connection error." else "नेटवर्क में दिक्कत है।")
             } finally {
                 rootNode.recycle()
             }
@@ -678,32 +727,40 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // Immediately clear any old highlight box so it does not interfere or get scanned
             clearVisualCue()
             kotlinx.coroutines.delay(300)
-            
+
+            val curLang = localPrefs.getAppLanguage()
+            val isEn = curLang == "en"
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.e(TAG, "extractAndAskScreen: rootInActiveWindow is null")
-                broadcastExplanation("मैं स्क्रीन नहीं पढ़ पा रहा हूँ।")
+                broadcastExplanation(AppStrings.cannotReadScreen(curLang))
                 return@launch
             }
-            
+
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
             val belowFoldFlags = mutableListOf<Boolean>()
             val appPackage = rootNode.packageName?.toString() ?: "unknown"
-            
+
             extractFullWindowElements(rootNode, appPackage, elements, elementBounds, belowFoldFlags)
-            
+
             if (appPackage != currentAppPackage) {
                 currentAppPackage = appPackage
                 conversationHistory.clear()
             }
-            
+
             try {
-                val request = com.saralgati.app.data.model.AskContextRequest(appPackage, elements, question, conversationHistory.toList())
+                val request = com.saralgati.app.data.model.AskContextRequest(
+                    appPackage,
+                    elements,
+                    question,
+                    conversationHistory.toList()
+                )
                 val response = NetworkModule.agentApi.askQuestion(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
-                    val explanation = data?.explanation ?: "मुझे इस सवाल का जवाब नहीं मिला।"
+                    val explanation = data?.explanation
+                        ?: if (isEn) "I could not find an answer for this question." else "मुझे इस सवाल का जवाब नहीं मिला।"
                     conversationHistory.add(com.saralgati.app.data.model.ChatMessage("user", question))
                     conversationHistory.add(com.saralgati.app.data.model.ChatMessage("assistant", explanation))
                     // Keep max 6 turns
@@ -722,7 +779,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeWindowClassName = rootNode.className?.toString()
                         activeElementBounds = elementBounds.toList()
                         activeFlowGoal = if (data?.flow != null) question else null
-                        
+
                         // Keep screen rock-solid stable: do not force scroll down on elder's live screen
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
@@ -735,11 +792,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeFlowGoal = null
                     }
                 } else {
-                    broadcastExplanation("सर्वर से संपर्क नहीं हो पाया।")
+                    broadcastExplanation(if (isEn) "Could not connect to the server." else "सर्वर से संपर्क नहीं हो पाया।")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to ask question: ${e.message}")
-                broadcastExplanation("नेटवर्क में दिक्कत है।")
+                broadcastExplanation(if (isEn) "Network connection error." else "नेटवर्क में दिक्कत है।")
             } finally {
                 rootNode.recycle()
             }
@@ -767,17 +824,17 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     ) {
         if (node.isPassword) return
         if (!node.isVisibleToUser) return
-        
+
         // Ignore SaralGati's own overlay windows from being scanned as screen content!
         val pkg = node.packageName?.toString()
         if (pkg == packageName) return
-        
+
         val label = resolveHumanReadableLabel(node)
-        
+
         if (!label.isNullOrBlank()) {
             val rect = android.graphics.Rect()
             node.getBoundsInScreen(rect)
-            
+
             // Only capture elements with reasonable button/icon sizes (avoid full-screen parent containers!)
             val w = rect.width()
             val h = rect.height()
@@ -793,10 +850,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             } else {
                 (w in minPx..maxW) && (h in minPx..maxH)
             }
-            
+
             // Prefer clickable nodes or leaf nodes to prevent selecting massive layout parents
             val isInteractiveOrLeaf = node.isClickable || node.childCount == 0
-            
+
             if (isReasonableButtonSize && isInteractiveOrLeaf) {
                 val role = getElementRole(node)
                 elements.add("$role ${label.trim()}")
@@ -826,10 +883,11 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         return when {
             className.contains("EditText", ignoreCase = true) -> "[INPUT]"
             className.contains("CheckBox", ignoreCase = true) ||
-            className.contains("Switch", ignoreCase = true) ||
-            className.contains("RadioButton", ignoreCase = true) -> "[TOGGLE]"
+                    className.contains("Switch", ignoreCase = true) ||
+                    className.contains("RadioButton", ignoreCase = true) -> "[TOGGLE]"
+
             className.contains("Button", ignoreCase = true) ||
-            (className.contains("ImageView", ignoreCase = true) && isClickable) -> "[BUTTON]"
+                    (className.contains("ImageView", ignoreCase = true) && isClickable) -> "[BUTTON]"
             // Clickable TextViews are interactive targets (modern apps use clickable TextViews as buttons)
             className.contains("TextView", ignoreCase = true) && isClickable -> "[BUTTON]"
             className.contains("TextView", ignoreCase = true) -> "[TEXT]"
@@ -850,20 +908,27 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         // Filter out single character font-icon glyphs (like '0' or obscure icon codes)
         val nodeClassName = node.className?.toString() ?: ""
-        val isImageLike = nodeClassName.contains("ImageView", ignoreCase = true) || nodeClassName.contains("ImageButton", ignoreCase = true)
-        val text = if (rawText != null && rawText.length == 1 && ((rawText == "0" && isImageLike) || !rawText[0].isLetterOrDigit())) null else rawText
-        val desc = if (rawDesc != null && rawDesc.length == 1 && ((rawDesc == "0" && isImageLike) || !rawDesc[0].isLetterOrDigit())) null else rawDesc
+        val isImageLike = nodeClassName.contains("ImageView", ignoreCase = true) || nodeClassName.contains(
+            "ImageButton",
+            ignoreCase = true
+        )
+        val text =
+            if (rawText != null && rawText.length == 1 && ((rawText == "0" && isImageLike) || !rawText[0].isLetterOrDigit())) null else rawText
+        val desc =
+            if (rawDesc != null && rawDesc.length == 1 && ((rawDesc == "0" && isImageLike) || !rawDesc[0].isLetterOrDigit())) null else rawDesc
 
         val combined = "$desc $text $viewId $rawViewId".lowercase()
 
         // 1. CAMERA & PHOTOGRAPHY ICONS
-        if (combined.contains("shutter") || combined.contains("capture") || combined.contains("take photo") || 
-            combined.contains("take picture") || combined.contains("snap") || combined.contains("btn_camera_capture")) {
+        if (combined.contains("shutter") || combined.contains("capture") || combined.contains("take photo") ||
+            combined.contains("take picture") || combined.contains("snap") || combined.contains("btn_camera_capture")
+        ) {
             return "Photo kheenchne wala button (Camera Shutter)"
         }
-        if (combined.contains("switch camera") || combined.contains("flip") || combined.contains("rotate camera") || 
-            combined.contains("front camera") || combined.contains("rear camera") || combined.contains("toggle camera") || 
-            combined.contains("facing") || combined.contains("selfie camera")) {
+        if (combined.contains("switch camera") || combined.contains("flip") || combined.contains("rotate camera") ||
+            combined.contains("front camera") || combined.contains("rear camera") || combined.contains("toggle camera") ||
+            combined.contains("facing") || combined.contains("selfie camera")
+        ) {
             return "Camera badalne wala button (Flip Front/Back Camera)"
         }
         if (combined.contains("flash") || combined.contains("torch") || combined.contains("lightning")) {
@@ -883,8 +948,9 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 2. SEARCH & DISCOVERY (Fixing Magnifying Glass / Lens being confused with 0)
-        if (combined.contains("search") || combined.contains("magnif") || combined.contains("find") || 
-            combined.contains("khoj") || combined.contains("query") || rawText == "🔍" || rawDesc == "🔍") {
+        if (combined.contains("search") || combined.contains("magnif") || combined.contains("find") ||
+            combined.contains("khoj") || combined.contains("query") || rawText == "🔍" || rawDesc == "🔍"
+        ) {
             return "Search / Khojne wala button (Lens)"
         }
         if (combined.contains("filter") || combined.contains("funnel")) {
@@ -898,7 +964,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 3. UPI, PAYMENTS & BANKING (Google Pay, PhonePe, Paytm, BHIM)
-        if (combined.contains("scan qr") || combined.contains("scanner") || combined.contains("scan_qr") || combined.contains("barcode")) {
+        if (combined.contains("scan qr") || combined.contains("scanner") || combined.contains("scan_qr") || combined.contains(
+                "barcode"
+            )
+        ) {
             return "QR Code scan karne ka camera (Scan & Pay)"
         }
         if (combined.contains("send money") || combined.contains("pay") || combined.contains("transfer")) {
@@ -907,7 +976,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         if (combined.contains("check balance") || combined.contains("view balance") || combined.contains("account balance")) {
             return "Bank balance check karne ka button"
         }
-        if (combined.contains("history") || combined.contains("passbook") || combined.contains("statement") || combined.contains("transactions")) {
+        if (combined.contains("history") || combined.contains("passbook") || combined.contains("statement") || combined.contains(
+                "transactions"
+            )
+        ) {
             return "Purane len-den dekhne ka button (History / Passbook)"
         }
         if (combined.contains("cart") || combined.contains("basket") || combined.contains("shopping bag")) {
@@ -938,18 +1010,26 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 5. CHAT, MESSAGING & INPUT ICONS
-        if (combined.contains("attach") || combined.contains("clip") || combined.contains("paperclip") || 
-            combined.contains("document") || combined.contains("media")) {
+        if (combined.contains("attach") || combined.contains("clip") || combined.contains("paperclip") ||
+            combined.contains("document") || combined.contains("media")
+        ) {
             return "Photo / Document jodne wala button (Attachment Clip)"
         }
-        if (combined.contains("voice") || combined.contains("mic") || combined.contains("microphone") || 
-            combined.contains("record audio") || combined.contains("sound input")) {
+        if (combined.contains("voice") || combined.contains("mic") || combined.contains("microphone") ||
+            combined.contains("record audio") || combined.contains("sound input")
+        ) {
             return "Awaaz record karne wala mic button (Voice Note)"
         }
-        if (combined.contains("send") || combined.contains("submit") || combined.contains("send arrow") || combined.contains("bhejo")) {
+        if (combined.contains("send") || combined.contains("submit") || combined.contains("send arrow") || combined.contains(
+                "bhejo"
+            )
+        ) {
             return "Message bhejne wala button (Send Arrow)"
         }
-        if (combined.contains("emoji") || combined.contains("smiley") || combined.contains("sticker") || combined.contains("gif")) {
+        if (combined.contains("emoji") || combined.contains("smiley") || combined.contains("sticker") || combined.contains(
+                "gif"
+            )
+        ) {
             return "Emoji ya Sticker wala button"
         }
         if (combined.contains("forward") || combined.contains("aage bhejo")) {
@@ -963,10 +1043,16 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 6. PHONE & CALLING ICONS
-        if (combined.contains("dial") || combined.contains("dialpad") || combined.contains("keypad") || combined.contains("numpad")) {
+        if (combined.contains("dial") || combined.contains("dialpad") || combined.contains("keypad") || combined.contains(
+                "numpad"
+            )
+        ) {
             return "Number dial karne ka keypad"
         }
-        if (combined.contains("end call") || combined.contains("hang up") || combined.contains("disconnect") || combined.contains("reject")) {
+        if (combined.contains("end call") || combined.contains("hang up") || combined.contains("disconnect") || combined.contains(
+                "reject"
+            )
+        ) {
             return "Call kaatne wala laal button (End Call)"
         }
         if (combined.contains("loudspeaker") || combined.contains("speaker")) {
@@ -989,19 +1075,25 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 7. NAVIGATION, TABS & OVERFLOW MENUS
-        if (combined.contains("more options") || combined.contains("overflow") || combined.contains("options menu") || 
-            combined.contains("menu") || combined.contains("three dots") || combined.contains("dots")) {
+        if (combined.contains("more options") || combined.contains("overflow") || combined.contains("options menu") ||
+            combined.contains("menu") || combined.contains("three dots") || combined.contains("dots")
+        ) {
             return "Menu / 3 Bindi (More Options)"
         }
-        if (combined.contains("hamburger") || combined.contains("drawer") || combined.contains("side menu") || combined.contains("three lines")) {
+        if (combined.contains("hamburger") || combined.contains("drawer") || combined.contains("side menu") || combined.contains(
+                "three lines"
+            )
+        ) {
             return "Side menu / 3 Line wala button (Main Menu)"
         }
-        if (combined.contains("navigate up") || combined.contains("back") || combined.contains("arrow back") || 
-            combined.contains("previous") || rawText == "←" || rawDesc == "←") {
+        if (combined.contains("navigate up") || combined.contains("back") || combined.contains("arrow back") ||
+            combined.contains("previous") || rawText == "←" || rawDesc == "←"
+        ) {
             return "Peeche jane wala button (Back Arrow)"
         }
-        if (combined.contains("close") || combined.contains("cancel") || combined.contains("dismiss") || 
-            rawText == "✕" || rawText == "X" || rawDesc == "close") {
+        if (combined.contains("close") || combined.contains("cancel") || combined.contains("dismiss") ||
+            rawText == "✕" || rawText == "X" || rawDesc == "close"
+        ) {
             return "Band karne ka cross button (Close)"
         }
         if (combined.contains("share") || combined.contains("share icon")) {
@@ -1024,7 +1116,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         if (combined.contains("edit") || combined.contains("pencil") || combined.contains("crop") || combined.contains("modify")) {
             return "Photo sudharne ka button (Edit / Pencil)"
         }
-        if (combined.contains("favorite") || combined.contains("favourite") || combined.contains("star") || combined.contains("like")) {
+        if (combined.contains("favorite") || combined.contains("favourite") || combined.contains("star") || combined.contains(
+                "like"
+            )
+        ) {
             return "Pasand karne ka button (Favorite / Star)"
         }
         if (combined.contains("download") || combined.contains("save")) {
@@ -1064,7 +1159,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
 
         // 10. SECURITY, KEYBOARD & INPUT HELPERS
-        if (combined.contains("password visibility") || combined.contains("show password") || combined.contains("hide password") || combined.contains("eye")) {
+        if (combined.contains("password visibility") || combined.contains("show password") || combined.contains("hide password") || combined.contains(
+                "eye"
+            )
+        ) {
             return "Password dekhne ya chupane ka button (Eye Icon)"
         }
         if (combined.contains("backspace") || combined.contains("delete char")) {

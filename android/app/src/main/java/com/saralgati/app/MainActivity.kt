@@ -20,7 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AppVersionInfo
+import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.ui.dashboard.DashboardScreen
+import com.saralgati.app.ui.onboarding.LanguageSelectScreen
 import com.saralgati.app.ui.onboarding.PairingScreen
 import com.saralgati.app.ui.theme.SaralGatiTheme
 import kotlinx.coroutines.Dispatchers
@@ -32,10 +34,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         localPrefs = LocalPrefs(this)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
-        
+
         // COARSE and FINE are requested together: from Android 12 neither one
         // alone gives a usable fix for the caregiver's location view.
         var permissions = arrayOf(
@@ -56,9 +58,26 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    var hasSelectedLanguage by remember { mutableStateOf(localPrefs.hasSelectedLanguage()) }
+                    var currentLanguage by remember { mutableStateOf(localPrefs.getAppLanguage()) }
+                    var showLanguageSelection by remember { mutableStateOf(false) }
                     var isPaired by remember { mutableStateOf(localPrefs.isPaired()) }
                     var availableUpdate by remember { mutableStateOf<AppVersionInfo?>(null) }
                     val scope = rememberCoroutineScope()
+
+                    // Language Selection Screen: Shown first if user hasn't selected a language yet, or when requested
+                    if (!hasSelectedLanguage || showLanguageSelection) {
+                        LanguageSelectScreen(
+                            currentLang = currentLanguage,
+                            onLanguageSelected = { lang ->
+                                localPrefs.setAppLanguage(lang)
+                                currentLanguage = lang
+                                hasSelectedLanguage = true
+                                showLanguageSelection = false
+                            }
+                        )
+                        return@Surface
+                    }
 
                     // Check for App Updates: prompts every 3rd time the app is opened
                     LaunchedEffect(Unit) {
@@ -121,13 +140,13 @@ class MainActivity : ComponentActivity() {
                                         selected = selectedTab == 0,
                                         onClick = { selectedTab = 0 },
                                         icon = { Text("🛡️", fontSize = 20.sp) },
-                                        label = { Text("Suraksha") }
+                                        label = { Text(AppStrings.tabProtection(currentLanguage)) }
                                     )
                                     NavigationBarItem(
                                         selected = selectedTab == 1,
                                         onClick = { selectedTab = 1 },
                                         icon = { Text("🩹", fontSize = 20.sp) },
-                                        label = { Text("Phone Doctor") }
+                                        label = { Text(AppStrings.tabDoctor(currentLanguage)) }
                                     )
                                 }
                             }
@@ -135,19 +154,25 @@ class MainActivity : ComponentActivity() {
                             Box(modifier = Modifier.padding(paddingValues)) {
                                 if (selectedTab == 0) {
                                     DashboardScreen(
+                                        currentLang = currentLanguage,
+                                        onChangeLanguage = { showLanguageSelection = true },
                                         onUnpair = {
                                             localPrefs.clear()
                                             isPaired = false
                                         }
                                     )
                                 } else {
-                                    com.saralgati.app.ui.phonedoctor.PhoneDoctorScreen()
+                                    com.saralgati.app.ui.phonedoctor.PhoneDoctorScreen(
+                                        currentLang = currentLanguage
+                                    )
                                 }
                             }
                         }
                     } else {
                         PairingScreen(
                             localPrefs = localPrefs,
+                            currentLang = currentLanguage,
+                            onChangeLanguage = { showLanguageSelection = true },
                             onPairedSuccess = { isPaired = true }
                         )
                     }
@@ -172,17 +197,31 @@ class MainActivity : ComponentActivity() {
                                 Button(
                                     onClick = {
                                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && !this@MainActivity.packageManager.canRequestPackageInstalls()) {
-                                            android.widget.Toast.makeText(this@MainActivity, "Please allow 'Install Unknown Apps' to update", android.widget.Toast.LENGTH_LONG).show()
-                                            val intent = android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                                data = android.net.Uri.parse("package:${this@MainActivity.packageName}")
-                                            }
+                                            android.widget.Toast.makeText(
+                                                this@MainActivity,
+                                                "Please allow 'Install Unknown Apps' to update",
+                                                android.widget.Toast.LENGTH_LONG
+                                            ).show()
+                                            val intent =
+                                                android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                                                    .apply {
+                                                        data =
+                                                            android.net.Uri.parse("package:${this@MainActivity.packageName}")
+                                                    }
                                             this@MainActivity.startActivity(intent)
                                             // Keep dialog open so they can click Update Now again after returning
                                         } else {
                                             availableUpdate = null
-                                            android.widget.Toast.makeText(this@MainActivity, "Downloading update...", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(
+                                                this@MainActivity,
+                                                "Downloading update...",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
                                             scope.launch {
-                                                com.saralgati.app.utils.ApkInstaller.downloadAndInstall(this@MainActivity, update.downloadUrl)
+                                                com.saralgati.app.utils.ApkInstaller.downloadAndInstall(
+                                                    this@MainActivity,
+                                                    update.downloadUrl
+                                                )
                                             }
                                         }
                                     }

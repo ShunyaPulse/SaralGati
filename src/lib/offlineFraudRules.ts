@@ -242,24 +242,92 @@ const CATEGORY_PRIORITY: OfflineThreatCategory[] = [
   'MALICIOUS_APK',
 ];
 
+/**
+ * Pre-compiled regular expression literals. Using hardcoded literal regexes
+ * eliminates dynamic regex compilation at runtime, prevents ReDoS vulnerabilities,
+ * and satisfies static security analysis (Semgrep).
+ */
+const RE_OTP =
+  /\botp\b|o\.t\.p|one[ -]?time (password|code)|verification code|verify code|security code|sms code|\b2fa\b|two[ -]?factor|ओटीपी|वन टाइम पासवर्ड/i;
+
+const RE_PIN =
+  /\b(?:upi|m|mpin|atm|card|bank|banking|transaction|debit|credit)[ -]?pin\b|\bmpin\b|\bpin\b|पिन|यूपीआई/i;
+
+const RE_SHARE =
+  /\b(share|sharing|send|forward|tell|batao|bata do|bataiye|bhejo|bhej do|bhejna|read out|read it|padh kar|padhkar|disclose)\b|भेज|बताओ|बता दो|बताएं|पढ़|साझा|शेयर/i;
+
+const RE_ENTER =
+  /\b(enter|entering|type|fill|submit|daal|dalo|daalo|daal do|likho|likh do|lagao|confirm)\b|डाल|लिख|दर्ज/i;
+
+const RE_RECEIVE =
+  /\b(receive|receiving|refund|cashback|cash back|reward|prize|lottery|lucky (draw|winner)|winner|won|money back)\b|paise (aayenge|aane|wapas|milenge)|paisa (aayega|wapas)|पैसे (आएंगे|आएगा|वापस|मिलेंगे)|कैशबैक|इनाम|लॉटरी|रिफंड/i;
+
+const RE_COLLECT =
+  /collect request|request money|money request|payment request|request(ed)? .{0,20}(money|payment|paise)|approve (the )?(request|payment)|accept (the )?request|request accept|paise (bhejne|bhejo?) ki (request|rikwest)|पैसे भेजने की रिक्वेस्ट/i;
+
+const RE_QR =
+  /\bqr\b|qr code|scan (this|the|yeh)? ?qr|qr scan|scan karke|स्कैन|क्यूआर/i;
+
+const RE_REMOTE_APP =
+  /\bany ?desk\b|एनी ?डेस्क|\bteam ?viewer\b|टीम ?व्यूअर|\brust ?desk\b|\bquick ?support\b|क्विक सपोर्ट|\bsupremo\b|\bultraviewer\b|\bairdroid\b|\bawesun\b|screen ?shar(e|ing) (app|code|karo|करो)|स्क्रीन शेयर/i;
+
+const RE_REMOTE_CODE =
+  /(screen|remote|connection|sharing|support|anydesk|teamviewer|rustdesk)[ -]?(sharing )?code|\b(9|10)[ -]?digit (code|number)\b|\b\d{9,10}\b.{0,15}\bcode\b|\bcode\b.{0,15}(batao|bhejo|share|डाल|बताओ)/i;
+
+const RE_INSTALL_PRESSURE =
+  /\binstall\b|\bdownload\b|\bupdate\b|इंस्टॉल|डाउनलोड|अपडेट/i;
+
+const RE_COERCION_CONTEXT =
+  /\b(bank|account|refund|kyc|verification|verify|money|paise|problem|help|madad|support|sahayata|sbi|hdfc|icici|axis|pnb)\b|पैसे|खाता|मदद|बैंक|सहायता|रिफंड/i;
+
+const RE_APK =
+  /\.apk\b|\bapk\b|unknown sources|install from (unknown|other) sources|अनजान स्रोत/i;
+
+const RE_APK_SIDELOAD_CONTEXT =
+  /unknown sources|install from (unknown|other) sources|अनजान स्रोत|whatsapp|telegram|व्हाट्सएप|टेलीग्राम|\b(bhej|send|bhijwa|भेज)\b|\binstall\b.{0,20}(this|ye|\.apk|apk|kar)/i;
+
+const RE_UTILITY_THREAT =
+  /(electricity|bijli|power|current|meter|बिजली|करंट).{0,60}(disconnect|disconnection|cut|kat|band|block|बंद|काट)|(disconnect|cut|kat|band|block|बंद|काट).{0,60}(electricity|bijli|power|current|meter|बिजली|करंट|connection|कनेक्शन)/i;
+
+const RE_SIM_THREAT =
+  /(sim|सिम).{0,60}(block|blocked|band|deactivate|suspend|disconnect|बंद|ब्लॉक)|trai|दूरसंचार|सिम (बंद|ब्लॉक)/i;
+
+const RE_SAFE_ESCAPE =
+  /\b(cancel|close|decline|reject|deny|dismiss|ignore|no thanks|not now|back|exit|report|block)\b|नहीं|बंद|वापस|रद्द|अस्वीकार|छोड़ें/i;
+
 /** A rule compiled once, so matching does not rebuild regexes per fragment. */
 interface CompiledRule {
   rule: OfflineFraudRule;
-  patterns: RegExp[];
-  requires: RegExp[];
+  patterns: readonly RegExp[];
+  requires: readonly RegExp[];
 }
 
-const COMPILED_RULES: CompiledRule[] = OFFLINE_FRAUD_RULES.map((rule) => ({
-  rule,
-  patterns: rule.patterns.map((source) => new RegExp(source, 'i')),
-  requires: (rule.requires ?? []).map((source) => new RegExp(source, 'i')),
-}));
+const COMPILED_RULES: CompiledRule[] = [
+  { rule: OFFLINE_FRAUD_RULES[0], patterns: [RE_OTP], requires: [RE_SHARE] },
+  { rule: OFFLINE_FRAUD_RULES[1], patterns: [RE_OTP], requires: [RE_ENTER, RE_RECEIVE] },
+  { rule: OFFLINE_FRAUD_RULES[2], patterns: [RE_PIN], requires: [RE_RECEIVE] },
+  { rule: OFFLINE_FRAUD_RULES[3], patterns: [RE_PIN], requires: [RE_SHARE] },
+  { rule: OFFLINE_FRAUD_RULES[4], patterns: [RE_PIN], requires: [RE_COLLECT] },
+  { rule: OFFLINE_FRAUD_RULES[5], patterns: [RE_QR], requires: [RE_RECEIVE] },
+  { rule: OFFLINE_FRAUD_RULES[6], patterns: [RE_COLLECT], requires: [] },
+  { rule: OFFLINE_FRAUD_RULES[7], patterns: [RE_REMOTE_APP], requires: [RE_REMOTE_CODE] },
+  { rule: OFFLINE_FRAUD_RULES[8], patterns: [RE_REMOTE_APP], requires: [RE_INSTALL_PRESSURE, RE_COERCION_CONTEXT] },
+  { rule: OFFLINE_FRAUD_RULES[9], patterns: [RE_APK], requires: [RE_APK_SIDELOAD_CONTEXT] },
+  { rule: OFFLINE_FRAUD_RULES[10], patterns: [RE_UTILITY_THREAT], requires: [] },
+  { rule: OFFLINE_FRAUD_RULES[11], patterns: [RE_SIM_THREAT], requires: [] },
+];
 
-const SAFE_WARNING_STRIPS = OFFLINE_SAFE_WARNING_PATTERNS.map(
-  (source) => new RegExp(source, 'gi'),
-);
+const SAFE_WARNING_STRIPS: readonly RegExp[] = [
+  /do not share[^.!?,\u0964]*/gi,
+  /don'?t share[^.!?,\u0964]*/gi,
+  /never share[^.!?,\u0964]*/gi,
+  /not share[^.!?,\u0964]*/gi,
+  /kisi ko (na|mat) [^.!?,\u0964]*/gi,
+  /share na karein[^.!?,\u0964]*/gi,
+  /किसी को न बताएं|किसी को न बताओ|साझा न करें|शेयर न करें/gi,
+];
 
-const SAFE_ESCAPE_RE = new RegExp(OFFLINE_SAFE_ESCAPE, 'i');
+const SAFE_ESCAPE_RE = RE_SAFE_ESCAPE;
 
 /**
  * Normalise the elements the companion already extracted into lower-cased,

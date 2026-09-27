@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import { analyzeForFraudWithAdvisor } from "@/lib/fraudAdvisor";
+import {
+  analyzeForFraudWithAdvisor,
+  DEVICE_ADVISOR_TIMEOUT_MS,
+} from "@/lib/fraudAdvisor";
 import { query } from "@/lib/db";
 import { rateLimiter } from "@/lib/redis";
 
@@ -72,7 +75,11 @@ export async function POST(req: NextRequest) {
     const rateLimitId = isFlywheel
       ? "fraud:flywheel"
       : `fraud:device:${auth.elderId ?? req.headers.get("x-forwarded-for") ?? "anon"}`;
-    const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 240 : 60, 60);
+    // Screen changes are frequent and the companion now screens a fresh app
+    // immediately, so the device ceiling is generous enough to avoid a 429 on
+    // the very screen that needs a verdict. The signature check on-device keeps
+    // unchanged screens from spending the budget.
+    const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 240 : 120, 60);
     if (!rateLimit.allowed) {
       return NextResponse.json(
         { success: false, error: "Too many requests. Please wait a moment." },
@@ -92,7 +99,9 @@ export async function POST(req: NextRequest) {
 
     // Deterministic rules decide; the LoRA second opinion may only raise the
     // verdict. This is the production consumer of the fraud training data.
-    const verdict = await analyzeForFraudWithAdvisor(parseResult.data);
+    const verdict = await analyzeForFraudWithAdvisor(parseResult.data, {
+      timeoutMs: DEVICE_ADVISOR_TIMEOUT_MS,
+    });
 
     // Flywheel-only training capture: when Gemini supplies a ground-truth label,
     // store the verdict against it so the LoRA export (type=fraud) can learn the

@@ -44,10 +44,29 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_SHOW_RAGE_TAP = "com.saralgati.app.ACTION_SHOW_RAGE_TAP"
         const val ACTION_SHOW_FRAUD_WARNING = "com.saralgati.app.ACTION_SHOW_FRAUD_WARNING"
         const val ACTION_DISMISS_FRAUD_WARNING = "com.saralgati.app.ACTION_DISMISS_FRAUD_WARNING"
+        /** Sent by the app when the elder picks the other language. */
+        const val ACTION_LANGUAGE_CHANGED = "com.saralgati.app.ACTION_LANGUAGE_CHANGED"
         const val EXTRA_FRAUD_TITLE = "fraud_title"
         const val EXTRA_FRAUD_MESSAGE = "fraud_message"
         const val EXTRA_FRAUD_ADVICE = "fraud_advice"
         private const val TAG = "FloatingHelper"
+
+        /**
+         * Devanagari text must always be spoken by the Hindi voice, whatever
+         * language the UI is in: server guidance is written in Hindi/Hinglish,
+         * and an English engine reading it is what makes it sound broken.
+         */
+        private val DEVANAGARI = Regex("[\\u0900-\\u097F]")
+        private val HINDI_LOCALE = Locale("hi", "IN")
+        /** English (India) is the natural voice here; en-US is only a fallback. */
+        private val ENGLISH_LOCALE = Locale("en", "IN")
+
+        private fun explainLabel(lang: String): String =
+            if (lang == "en") "🔍 Explain Screen" else "🔍 स्क्रीन समझाइए\n(Explain Screen)"
+
+        private fun askLabel(lang: String): String =
+            if (lang == "en") "🎙️ Ask Question" else "🎙️ सवाल पूछें\n(Ask a Question)"
+
         var isRunning = false
             private set
     }
@@ -55,6 +74,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private var activeHighlightView: View? = null
     private val highlightHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var removeHighlightRunnable: Runnable? = null
+
+    // Kept so the card can be re-labelled when the language changes under it.
+    private var btnExplainView: Button? = null
+    private var btnAskView: Button? = null
 
     private val explanationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -134,6 +157,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         if (intent?.action == ACTION_DISMISS_FRAUD_WARNING) {
             if (this::tts.isInitialized) tts.stop()
             collapseHelper()
+        } else if (intent?.action == ACTION_LANGUAGE_CHANGED) {
+            onLanguageChanged()
         } else if (intent?.action == ACTION_SHOW_RAGE_TAP) {
             val lang = localPrefs.getAppLanguage()
             expandHelper(
@@ -156,12 +181,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            val langPref = localPrefs.getAppLanguage()
-            val locale = if (langPref == "en") Locale.ENGLISH else Locale("hi", "IN")
-            val result = tts.setLanguage(locale)
-            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                Log.e(TAG, "TTS Language not supported")
-            }
+            applyVoice(voiceLocale())
 
             tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {}
@@ -179,12 +199,68 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun speak(text: String, isExplanation: Boolean = false) {
-        val voiceEnabled = localPrefs.getBoolean("pref_voice", true)
-        if (voiceEnabled) {
-            val utteranceId = if (isExplanation) "explanation_done" else "standard_msg"
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    /** The voice the selected language asks for. */
+    private fun voiceLocale(): Locale =
+        if (localPrefs.getAppLanguage() == "en") ENGLISH_LOCALE else HINDI_LOCALE
+
+    /**
+     * The voice for one specific sentence, because one TTS engine has to read
+     * text in more than one language:
+     *
+     * 1. Devanagari is always read by the Hindi voice.
+     * 2. The server's guidance (answers and screen explanations) is Hinglish
+     *    written in Latin script by design, so it keeps the Hindi voice too -
+     *    that is how the companion has always sounded, and an Indian-English
+     *    voice reading "Beta ka video call" is exactly the mixed accent to avoid.
+     * 3. Everything else - the app's own copy and the fraud alert, which exist in
+     *    both languages - follows the language the elder chose.
+     */
+    private fun voiceLocaleFor(text: String, isGuidance: Boolean): Locale =
+        if (isGuidance || DEVANAGARI.containsMatchIn(text)) HINDI_LOCALE else voiceLocale()
+
+    /** Apply a voice, falling back to plain English when a device lacks en-IN. */
+    private fun applyVoice(locale: Locale): Boolean {
+        if (!this::tts.isInitialized) return false
+        val result = tts.setLanguage(locale)
+        if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+            return true
         }
+        if (locale !== Locale.ENGLISH && locale.language == "en") {
+            Log.w(TAG, "TTS has no $locale voice, falling back to en-US")
+            return applyVoice(Locale.ENGLISH)
+        }
+        Log.e(TAG, "TTS Language not supported: $locale")
+        return false
+    }
+
+    private fun speak(text: String, isExplanation: Boolean = false) {
+        if (!localPrefs.getBoolean("pref_voice", true)) return
+        if (text.isBlank()) return
+        // Per-utterance voice: the engine's language is set for the sentence
+        // about to be spoken, not once at service start.
+        applyVoice(voiceLocaleFor(text, isGuidance = isExplanation))
+        val utteranceId = if (isExplanation) "explanation_done" else "standard_msg"
+        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+    }
+
+    /**
+     * The elder picked the other language while this service was already up.
+     * Re-voice the engine and re-label the card, so the overlay never keeps
+     * talking in the language it was started with.
+     */
+    private fun onLanguageChanged() {
+        applyVoice(voiceLocale())
+        refreshCardLanguage()
+    }
+
+    private fun refreshCardLanguage() {
+        val lang = localPrefs.getAppLanguage()
+        val titleView = expandedView.findViewWithTag<TextView>("titleView")
+        // A live fraud warning keeps its own title; everything else is neutral copy.
+        val isWarning = titleView?.text?.startsWith("⚠️") == true
+        if (!isWarning) titleView?.text = AppStrings.assistantTitle(lang)
+        btnExplainView?.text = explainLabel(lang)
+        btnAskView?.text = askLabel(lang)
     }
 
     private fun startListeningSilent() {
@@ -326,7 +402,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
 
         val lang = localPrefs.getAppLanguage()
-        val isEn = lang == "en"
 
         val titleText = TextView(this).apply {
             text = AppStrings.assistantTitle(lang)
@@ -377,7 +452,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
         // Button 1: Explain Screen
         val btnExplain = Button(this).apply {
-            text = if (isEn) "🔍 Explain Screen" else "🔍 स्क्रीन समझाइए\n(Explain Screen)"
+            text = explainLabel(lang)
             textSize = 12f
             setTextColor(Color.WHITE)
             isAllCaps = false
@@ -400,10 +475,11 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             }
         }
         actionsRow.addView(btnExplain)
+        btnExplainView = btnExplain
 
         // Button 2: Ask a Question
         val btnNext = Button(this).apply {
-            text = if (isEn) "🎙️ Ask Question" else "🎙️ सवाल पूछें\n(Ask a Question)"
+            text = askLabel(lang)
             textSize = 12f
             setTextColor(Color.WHITE)
             isAllCaps = false
@@ -423,6 +499,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             }
         }
         actionsRow.addView(btnNext)
+        btnAskView = btnNext
         rootLayout.addView(actionsRow)
 
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

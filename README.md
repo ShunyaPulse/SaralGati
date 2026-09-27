@@ -164,6 +164,7 @@ flowchart TD
 ### Native Android Companion App Stack
 
 - **Language & Framework**: Kotlin, Jetpack Compose, Material 3 with high-contrast elder accessibility themes.
+- **Bilingual (हिंदी / English)**: the elder picks a language once, and every screen, warning and spoken line follows it. The TTS voice is chosen **per utterance** - Devanagari and the server's Hinglish guidance always use the Hindi voice (that is how the companion has always sounded), while the app's own English copy uses English (India). Fraud alerts carry title, message and advice in both languages, so a warning is never half-Hindi and half-English.
 - **Accessibility Engine**: Custom `AccessibilityService` traversing `AccessibilityNodeInfo` hierarchy with DP-normalized boundaries, below-fold peek scrolling, and clickable `TextView` role resolution.
 - **Persistent Reliability**:
   - `ForegroundService` with notification channel for 24/7 background survival.

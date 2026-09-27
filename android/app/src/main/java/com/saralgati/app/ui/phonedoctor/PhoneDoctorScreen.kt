@@ -133,11 +133,11 @@ fun PhoneDoctorScreen(
     if (showSettings) {
         AlertDialog(
             onDismissRequest = { showSettings = false },
-            title = { Text("Caregiver Settings\n(Button Actions)", fontSize = 18.sp, fontWeight = FontWeight.Bold) },
+            title = { Text(AppStrings.doctorSettingsTitle(currentLang), fontSize = 18.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     Text(
-                        "Select what 'Sab Theek Karo' will fix:",
+                        AppStrings.doctorSettingsSubtitle(currentLang),
                         fontSize = 14.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -147,13 +147,13 @@ fun PhoneDoctorScreen(
                         Checkbox(
                             checked = fixRinger,
                             onCheckedChange = { fixRinger = it; localPrefs.saveBoolean("doctor_fix_ringer", it) })
-                        Text("Max Ringer (Awaaz Full)", fontSize = 15.sp)
+                        Text(AppStrings.doctorFixRinger(currentLang), fontSize = 15.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
                             checked = fixMedia,
                             onCheckedChange = { fixMedia = it; localPrefs.saveBoolean("doctor_fix_media", it) })
-                        Text("Max Video/Media Volume", fontSize = 15.sp)
+                        Text(AppStrings.doctorFixMedia(currentLang), fontSize = 15.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
@@ -167,7 +167,7 @@ fun PhoneDoctorScreen(
                             }
                         )
                         Text(
-                            text = if (hasWritePermission) "Brightness High (85%) ✅" else "Brightness High (85%)",
+                            text = AppStrings.doctorFixBrightness(currentLang, hasWritePermission),
                             fontSize = 15.sp
                         )
                     }
@@ -183,7 +183,7 @@ fun PhoneDoctorScreen(
                             }
                         )
                         Text(
-                            text = if (hasWritePermission) "Screen Timeout 5 Mins ✅" else "Screen Timeout 5 Mins",
+                            text = AppStrings.doctorFixTimeout(currentLang, hasWritePermission),
                             fontSize = 15.sp
                         )
                     }
@@ -199,7 +199,7 @@ fun PhoneDoctorScreen(
                             }
                         )
                         Text(
-                            text = if (hasDndPermission) "DND Band Karein (Normal mode) ✅" else "DND Band Karein (Normal mode)",
+                            text = AppStrings.doctorFixDnd(currentLang, hasDndPermission),
                             fontSize = 15.sp
                         )
                     }
@@ -217,13 +217,13 @@ fun PhoneDoctorScreen(
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Text(
-                                    text = "⚠️ Permissions Required",
+                                    text = AppStrings.doctorPermissionTitle(currentLang),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF92400E)
                                 )
                                 Text(
-                                    text = "Features ko chalane ke liye permission allow karein:",
+                                    text = AppStrings.doctorPermissionBody(currentLang),
                                     fontSize = 11.sp,
                                     color = Color(0xFF92400E),
                                     modifier = Modifier.padding(vertical = 4.dp)
@@ -236,7 +236,7 @@ fun PhoneDoctorScreen(
                                         modifier = Modifier.fillMaxWidth().height(36.dp).padding(bottom = 4.dp)
                                     ) {
                                         Text(
-                                            "Allow Modify Settings (Roshni)",
+                                            AppStrings.doctorAllowWrite(currentLang),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -251,7 +251,7 @@ fun PhoneDoctorScreen(
                                         modifier = Modifier.fillMaxWidth().height(36.dp)
                                     ) {
                                         Text(
-                                            "Allow DND Access (Silent)",
+                                            AppStrings.doctorAllowDnd(currentLang),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color.White
@@ -265,7 +265,7 @@ fun PhoneDoctorScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showSettings = false }) {
-                    Text("Save & Close")
+                    Text(AppStrings.doctorSave(currentLang))
                 }
             }
         )
@@ -392,11 +392,9 @@ private fun executeFixes(context: Context, prefs: LocalPrefs, currentLang: Strin
             }
         }
 
-        val successToast = if (currentLang == "en") "✅ All settings fixed!" else "✅ सब ठीक हो गया!"
-        Toast.makeText(context, successToast, Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, AppStrings.doctorFixed(currentLang), Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
-        val errorToast = if (currentLang == "en") "Error adjusting settings." else "कुछ ठीक करने में दिक्कत आई।"
-        Toast.makeText(context, errorToast, Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, AppStrings.doctorFixError(currentLang), Toast.LENGTH_SHORT).show()
     }
 }
 

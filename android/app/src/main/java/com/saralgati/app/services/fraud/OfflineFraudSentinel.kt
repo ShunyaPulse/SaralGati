@@ -27,14 +27,21 @@ object OfflineFraudSentinel {
     private const val TAG = "OfflineFraud"
     private const val ASSET_NAME = "offline_fraud_rules.json"
 
-    /** The offline verdict, shaped so the overlay can warn without the network. */
+    /**
+     * The offline verdict, shaped so the overlay can warn without the network.
+     * Every text field exists in both languages, so the companion can show and
+     * speak one language end to end instead of a Hindi/English mixture.
+     */
     data class Verdict(
         val ruleId: String,
         val level: String,
         val category: String,
         val title: String,
+        val titleEn: String,
         val messageHi: String,
+        val messageEn: String,
         val safeAdvice: String,
+        val safeAdviceHi: String,
     )
 
     private class Rule(
@@ -45,8 +52,11 @@ object OfflineFraudSentinel {
         val patterns: List<Regex>,
         val requires: List<Regex>,
         val title: String,
+        val titleEn: String,
         val messageHi: String,
+        val messageEn: String,
         val safeAdvice: String,
+        val safeAdviceHi: String,
     )
 
     private val LEVEL_RANK = mapOf("DANGEROUS" to 3, "CRITICAL" to 4)
@@ -100,8 +110,13 @@ object OfflineFraudSentinel {
                             ?.map { Regex(it, RegexOption.IGNORE_CASE) }
                             ?: emptyList(),
                         title = obj.getString("title"),
+                        // Fallbacks keep an asset written by an older generator
+                        // usable rather than crashing the elder's warning.
+                        titleEn = obj.optString("title_en", obj.getString("title")),
                         messageHi = obj.getString("message_hi"),
+                        messageEn = obj.optString("message_en", obj.getString("safe_advice")),
                         safeAdvice = obj.getString("safe_advice"),
+                        safeAdviceHi = obj.optString("safe_advice_hi", obj.getString("safe_advice")),
                     ),
                 )
             }
@@ -146,8 +161,11 @@ object OfflineFraudSentinel {
                     level = rule.level,
                     category = rule.category,
                     title = rule.title,
+                    titleEn = rule.titleEn,
                     messageHi = rule.messageHi,
+                    messageEn = rule.messageEn,
                     safeAdvice = rule.safeAdvice,
+                    safeAdviceHi = rule.safeAdviceHi,
                 )
             }
         }

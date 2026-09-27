@@ -17,7 +17,9 @@ object AppStrings {
     const val HINDI_SUBTITLE = "ऐप और बोलकर सहायता हिंदी में"
 
     const val ENGLISH_TITLE = "🇬🇧 English"
-    const val ENGLISH_SUBTITLE = "App and spoken assistance in English"
+    // Guidance from the server is written in Hinglish by design, so the promise
+    // here is the app's own words - not a fully English voice experience.
+    const val ENGLISH_SUBTITLE = "App in English; spoken help in simple Hinglish"
 
     fun continueBtn(lang: String): String =
         if (lang == "en") "Continue" else "आगे बढ़ें"
@@ -126,6 +128,76 @@ object AppStrings {
 
     fun fixesApplied(lang: String): String =
         if (lang == "en") "All settings optimized!" else "सब सेटिंग्स ठीक कर दी गई हैं!"
+
+    fun doctorSettingsTitle(lang: String): String =
+        if (lang == "en") "Caregiver Settings\n(Button Actions)" else "केयरगिवर सेटिंग्स\n(बटन क्रियाएं)"
+
+    fun doctorSettingsSubtitle(lang: String): String =
+        if (lang == "en") "Select what 'Fix Everything' will fix:" else "'सब ठीक करो' क्या ठीक करे, चुनें:"
+
+    fun doctorFixRinger(lang: String): String =
+        if (lang == "en") "Max Ringer (Full Volume)" else "रिंगर पूरी आवाज़"
+
+    fun doctorFixMedia(lang: String): String =
+        if (lang == "en") "Max Video / Media Volume" else "वीडियो / मीडिया पूरी आवाज़"
+
+    fun doctorFixBrightness(lang: String, granted: Boolean): String {
+        val label = if (lang == "en") "Brightness High (85%)" else "रोशनी तेज़ (85%)"
+        return if (granted) "$label ✅" else label
+    }
+
+    fun doctorFixTimeout(lang: String, granted: Boolean): String {
+        val label = if (lang == "en") "Screen Timeout 5 Mins" else "स्क्रीन 5 मिनट तक चालू रहे"
+        return if (granted) "$label ✅" else label
+    }
+
+    fun doctorFixDnd(lang: String, granted: Boolean): String {
+        val label = if (lang == "en") "Turn Off DND (Normal mode)" else "DND बंद करें (नॉर्मल मोड)"
+        return if (granted) "$label ✅" else label
+    }
+
+    fun doctorPermissionTitle(lang: String): String =
+        if (lang == "en") "⚠️ Permissions Required" else "⚠️ अनुमति ज़रूरी है"
+
+    fun doctorPermissionBody(lang: String): String =
+        if (lang == "en") "To run these features, please allow the permissions:" else "ये सुविधाएं चलाने के लिए अनुमति दें:"
+
+    fun doctorAllowWrite(lang: String): String =
+        if (lang == "en") "Allow Modify Settings (Brightness)" else "सेटिंग्स बदलने की अनुमति दें (रोशनी)"
+
+    fun doctorAllowDnd(lang: String): String =
+        if (lang == "en") "Allow DND Access (Silent)" else "DND (साइलेंट) की अनुमति दें"
+
+    fun doctorSave(lang: String): String =
+        if (lang == "en") "Save & Close" else "सेव करें और बंद करें"
+
+    fun doctorFixed(lang: String): String =
+        if (lang == "en") "✅ All settings fixed!" else "✅ सब ठीक हो गया!"
+
+    fun doctorFixError(lang: String): String =
+        if (lang == "en") "Something went wrong while fixing. Please try again." else "कुछ ठीक करने में दिक्कत आई।"
+
+    // -------------------------------------------------------------
+    // In-App Update Dialog
+    // -------------------------------------------------------------
+    fun updateTitle(lang: String, version: String): String =
+        if (lang == "en") "A new update is available (v$version)" else "नया अपडेट उपलब्ध है (v$version)"
+
+    fun updateBody(lang: String): String =
+        if (lang == "en") "A newer version of SaralGati is available. Update now for better protection and new features."
+        else "SaralGati का नया वर्ज़न उपलब्ध है। बेहतर सुरक्षा और नए फ़ीचर्स के लिए अभी अपडेट करें।"
+
+    fun updateNow(lang: String): String =
+        if (lang == "en") "Update Now" else "अभी अपडेट करें"
+
+    fun updateLater(lang: String): String =
+        if (lang == "en") "Later" else "बाद में"
+
+    fun allowUnknownSources(lang: String): String =
+        if (lang == "en") "Please allow 'Install Unknown Apps' to update" else "अपडेट के लिए 'अनजान ऐप इंस्टॉल' की अनुमति दें"
+
+    fun downloadingUpdate(lang: String): String =
+        if (lang == "en") "Downloading update..." else "अपडेट डाउनलोड हो रहा है..."
 
     // -------------------------------------------------------------
     // Floating Helper & TTS

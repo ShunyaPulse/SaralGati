@@ -225,8 +225,22 @@ test('both a scam verdict and a clean one match the specified JSON schema', () =
       'target_element_to_block',
       'safe_action_index',
       'safe_advice',
+      'safe_advice_hi',
     ]);
-    assert.deepEqual(Object.keys(verdict.user_alert), ['title', 'message_en', 'message_hi']);
+    assert.deepEqual(Object.keys(verdict.user_alert), [
+      'title',
+      'title_en',
+      'message_en',
+      'message_hi',
+    ]);
+    // A companion in either language must get copy that is wholly that
+    // language: no Devanagari in the English fields, and none missing from the
+    // Hindi ones.
+    assert.doesNotMatch(verdict.user_alert.message_en, DEVANAGARI);
+    assert.doesNotMatch(verdict.action_decision.safe_advice, DEVANAGARI);
+    assert.doesNotMatch(verdict.user_alert.title_en, DEVANAGARI);
+    assert.match(verdict.user_alert.message_hi, DEVANAGARI);
+    assert.match(verdict.action_decision.safe_advice_hi, DEVANAGARI);
 
     assert.equal(typeof verdict.confidence, 'number');
     assert.ok(verdict.confidence >= 0 && verdict.confidence <= 1);

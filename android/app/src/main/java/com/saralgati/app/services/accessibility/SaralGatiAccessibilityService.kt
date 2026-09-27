@@ -381,15 +381,15 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             if (offline != null) {
                 val safeBounds = OfflineFraudSentinel.findSafeActionIndex(scanElements)
                     ?.let { scanBounds.getOrNull(it) }
-                val alertMsg = if (isEn) offline.safeAdvice else offline.messageHi
-                val alertTitle = if (isEn) "Warning: Suspicious Activity" else offline.title
+                // Each alert is rendered in one language only: message, title and
+                // advice all come from the same locale.
                 warnAboutFraud(
                     pkg,
                     offline.level,
                     offline.category,
-                    alertTitle,
-                    alertMsg,
-                    offline.safeAdvice,
+                    if (isEn) offline.titleEn else offline.title,
+                    if (isEn) offline.messageEn else offline.messageHi,
+                    if (isEn) offline.safeAdvice else offline.safeAdviceHi,
                     safeBounds
                 )
             }
@@ -417,15 +417,26 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             }
 
             val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
+            // A Hindi card never shows English advice, and an English card never
+            // falls back to Devanagari copy.
+            val alertTitle = if (isEn) {
+                verdict.userAlert.titleEn ?: "Warning: Potential Scam"
+            } else {
+                verdict.userAlert.title
+            }
             val alertMsg = if (isEn) verdict.userAlert.messageEn else verdict.userAlert.messageHi
-            val alertTitle = if (isEn) "Warning: Potential Scam" else verdict.userAlert.title
+            val alertAdvice = if (isEn) {
+                verdict.actionDecision.safeAdvice
+            } else {
+                verdict.actionDecision.safeAdviceHi ?: verdict.actionDecision.safeAdvice
+            }
             warnAboutFraud(
                 pkg,
                 verdict.threatLevel,
                 verdict.threatCategory,
                 alertTitle,
                 alertMsg,
-                verdict.actionDecision.safeAdvice,
+                alertAdvice,
                 safeBounds
             )
         } catch (e: Exception) {
@@ -461,7 +472,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         level: String,
         category: String,
         title: String,
-        messageHi: String,
+        message: String,
         advice: String,
         safeBounds: android.graphics.Rect?,
     ) {
@@ -473,19 +484,19 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         Log.w(TAG, "Fraud sentinel: $level/$category on $pkg")
         fraudWarnedPackage = pkg
         lastFraudWarnedAt = now
-        warnElderAboutFraud(title, messageHi, advice, safeBounds)
+        warnElderAboutFraud(title, message, advice, safeBounds)
     }
 
     private fun warnElderAboutFraud(
         title: String,
-        messageHi: String,
+        message: String,
         advice: String,
         safeBounds: android.graphics.Rect?
     ) {
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_SHOW_FRAUD_WARNING
             putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_TITLE, title)
-            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, messageHi)
+            putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_MESSAGE, message)
             putExtra(com.saralgati.app.services.overlay.FloatingHelperService.EXTRA_FRAUD_ADVICE, advice)
         }
         try {

@@ -510,15 +510,19 @@ const CATEGORY_PRIORITY: Exclude<ThreatCategory, 'NONE'>[] = [
   'PRIVACY_RISK',
 ];
 
-interface AlertCopy {
+export interface AlertCopy {
   title: string;
   message_en: string;
   message_hi: string;
   safe_advice: string;
 }
 
-/** One user-facing alert per category, in both languages. */
-const ALERT_COPY: Record<ThreatCategory, AlertCopy> = {
+/**
+ * One user-facing alert per category, in both languages. Exported so the
+ * on-device offline ruleset (and its generated Android asset) reuse the exact
+ * same wording instead of drifting into a second copy.
+ */
+export const ALERT_COPY: Record<ThreatCategory, AlertCopy> = {
   NONE: {
     title: 'Looks safe',
     message_en:

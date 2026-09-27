@@ -10,6 +10,7 @@
  */
 
 import { scoreOutputConfidence } from './confidenceScorer';
+import type { GuidanceLang } from './guidanceLanguage';
 
 /**
  * SaralGati AI Dual-Engine with Confidence-Based Arbitration
@@ -27,6 +28,12 @@ interface GenerateOptions {
   userPrompt: string;
   conversationHistory?: Array<{ role: string; content: string }>;
   uiElements?: string[];
+  /**
+   * The language the elder chose. Both engines are asked for it in the prompt,
+   * but the fine-tuned LoRA was trained on Hinglish, so arbitration has to
+   * count an answer written in the wrong script as the weaker answer.
+   */
+  lang?: GuidanceLang;
 }
 
 export interface AIResponse {
@@ -183,8 +190,8 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
 
     // Both models successfully generated responses: Arbitrate by Confidence Score!
     if (loraResult && geminiResult) {
-      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements);
-      const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements);
+      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements, options.lang);
+      const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements, options.lang);
 
       console.log(`[AI Arbitration] LoRA Confidence: ${loraScore.score}% vs Gemini Confidence: ${geminiScore.score}%`);
 
@@ -214,12 +221,12 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
 
     // Only one model succeeded
     if (loraResult) {
-      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements);
+      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements, options.lang);
       return { ...loraResult, confidence: loraScore.score };
     }
 
     if (geminiResult) {
-      const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements);
+      const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements, options.lang);
       return { ...geminiResult, confidence: geminiScore.score };
     }
 
@@ -230,7 +237,7 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
   if (hasLoRA) {
     const loraResult = await fetchCloudflareLoRA(options);
     if (loraResult) {
-      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements);
+      const loraScore = scoreOutputConfidence(loraResult.text, options.userPrompt, options.uiElements, options.lang);
       return { ...loraResult, confidence: loraScore.score };
     }
     throw new Error('Cloudflare LoRA failed and no Gemini API key configured.');
@@ -239,8 +246,8 @@ export async function generateAIResponse(options: GenerateOptions): Promise<AIRe
   // 3. Only Gemini is configured
   const geminiResult = await fetchGeminiAIStudio(options);
   if (geminiResult) {
-    const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements);
-    return { ...geminiResult, confidence: geminiScore.score };
+  const geminiScore = scoreOutputConfidence(geminiResult.text, options.userPrompt, options.uiElements, options.lang);
+  return { ...geminiResult, confidence: geminiScore.score };
   }
   throw new Error('Gemini AI Studio failed to generate a response.');
 }

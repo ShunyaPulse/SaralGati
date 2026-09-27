@@ -1,3 +1,5 @@
+import type { GuidanceLang } from "./guidanceLanguage";
+
 export interface FewShotExample {
   id: number;
   appPackage: string;
@@ -5,6 +7,12 @@ export interface FewShotExample {
   question: string;
   elements: string[];
   response: string;
+  /**
+   * The same answer in English, used whenever the elder chose English
+   * guidance. Without it the examples themselves taught the model to reply in
+   * Hindi no matter what the instruction above them said.
+   */
+  responseEn: string;
 }
 
 export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
@@ -23,6 +31,8 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "रमेश को वीडियो कॉल लगाने के लिए ऊपर वीडियो कॉल बटन पर दबाएं। TARGET:2",
+    responseEn:
+      "To start a video call with Ramesh, tap the video call button at the top. TARGET:2",
   },
 
   // 2. WhatsApp: Video call intent on main chats list (Disambiguation)
@@ -41,6 +51,8 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "कॉल लगाने के लिए नीचे Calls (कॉल) विकल्प पर दबाएं, या जिस व्यक्ति से बात करनी है उनकी चैट खोलें। TARGET:5",
+    responseEn:
+      "To make a call, tap Calls at the bottom, or open the chat of the person you want to talk to. TARGET:5",
   },
 
   // 3. WhatsApp: Send photo in chat
@@ -57,6 +69,8 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "फोटो भेजने के लिए यहाँ अटैचमेंट (पिन) या कैमरा बटन पर दबाएं। TARGET:1",
+    responseEn:
+      "To send a photo, tap the attachment (pin) or camera button here. TARGET:1",
   },
 
   // 4. Phone Dialer: Call son from contact list
@@ -72,6 +86,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[BUTTON] Keypad",
     ],
     response: "अमित को फोन करने के लिए यहाँ कॉल बटन पर दबाएं। TARGET:2",
+    responseEn: "To call Amit, tap the call button here. TARGET:2",
   },
 
   // 5. Phone Dialer: Open Keypad & Call
@@ -87,6 +102,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[BUTTON] Call SIM 1",
     ],
     response: "फोन लगाने के लिए नीचे हरे कॉल बटन पर दबाएं। TARGET:3",
+    responseEn: "To make the call, tap the green call button at the bottom. TARGET:3",
   },
 
   // 6. YouTube: Search bhajan
@@ -102,6 +118,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Trending bhajan 2026",
     ],
     response: "भजन खोजने के लिए ऊपर सर्च (लेंस) बटन पर दबाएं। TARGET:2",
+    responseEn: "To search for a bhajan, tap the search (lens) button at the top. TARGET:2",
   },
 
   // 7. YouTube: Subscribe channel
@@ -118,6 +135,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "चैनल से जुड़ने के लिए यहाँ सब्सक्राइब (Subscribe) पर दबाएं। TARGET:1",
+    responseEn: "To join this channel, tap Subscribe here. TARGET:1",
   },
 
   // 8. Paytm: Scan QR Code at shop
@@ -133,6 +151,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Flat 50 cashback",
     ],
     response: "दुकान का कोड स्कैन करने के लिए Scan & Pay पर दबाएं। TARGET:0",
+    responseEn: "To scan the shop's code, tap Scan & Pay. TARGET:0",
   },
 
   // 9. Paytm: Check bank balance
@@ -148,6 +167,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] My UPI ID",
     ],
     response: "बैंक बैलेंस देखने के लिए Check Balance पर दबाएं। TARGET:1",
+    responseEn: "To see your bank balance, tap Check Balance. TARGET:1",
   },
 
   // 10. PhonePe: Electricity Bill Payment
@@ -163,6 +183,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Recharge & Pay Bills",
     ],
     response: "बिजली का बिल भरने के लिए Electricity बटन पर दबाएं। TARGET:1",
+    responseEn: "To pay the electricity bill, tap the Electricity button. TARGET:1",
   },
 
   // 11. Tata 1mg: Order Medicines
@@ -178,6 +199,8 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[BUTTON] Cart",
     ],
     response: "दवाई खोजने और मंगाने के लिए ऊपर सर्च बॉक्स पर दबाएं। TARGET:0",
+    responseEn:
+      "To find and order your medicine, tap the search box at the top. TARGET:0",
   },
 
   // 12. Amazon: Track order delivery
@@ -194,6 +217,8 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "अपना सामान और डिलीवरी ट्रैक करने के लिए Returns & Orders पर दबाएं। TARGET:2",
+    responseEn:
+      "To track your parcel and delivery, tap Returns & Orders. TARGET:2",
   },
 
   // 13. Zomato: Order food
@@ -209,6 +234,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Great Offers",
     ],
     response: "खाना खोजने के लिए ऊपर सर्च बार पर दबाएं। TARGET:0",
+    responseEn: "To find food, tap the search bar at the top. TARGET:0",
   },
 
   // 14. Ola: Book Auto to railway station
@@ -224,6 +250,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Welcome back",
     ],
     response: "जहाँ जाना है वह जगह लिखने के लिए Where to go पर दबाएं। TARGET:0",
+    responseEn: "To type where you want to go, tap Where to go. TARGET:0",
   },
 
   // 15. IRCTC: Check Train PNR status
@@ -239,6 +266,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] IRCTC Official",
     ],
     response: "टिकट कन्फर्मेशन चेक करने के लिए PNR Enquiry पर दबाएं। TARGET:1",
+    responseEn: "To check your ticket confirmation, tap PNR Enquiry. TARGET:1",
   },
 
   // 16. Google Maps: Find hospital route
@@ -254,6 +282,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] 12 mins via Ring Road",
     ],
     response: "अस्पताल का रास्ता देखने के लिए Directions पर दबाएं। TARGET:1",
+    responseEn: "To see the route to the hospital, tap Directions. TARGET:1",
   },
 
   // 17. Android Settings: Increase font size / Large text
@@ -269,6 +298,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[TEXT] Android Version",
     ],
     response: "अक्षर बड़े करने के लिए Display & brightness पर दबाएं। TARGET:1",
+    responseEn: "To make the letters bigger, tap Display & brightness. TARGET:1",
   },
 
   // 18. Android Settings: WiFi Toggle
@@ -285,6 +315,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "इंटरनेट चालू करने के लिए Wi-Fi के सामने वाले बटन को दबाएं। TARGET:1",
+    responseEn: "To turn the internet on, tap the switch next to Wi-Fi. TARGET:1",
   },
 
   // 19. Google Photos: Delete unwanted photo
@@ -300,6 +331,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
       "3:[BUTTON] More options",
     ],
     response: "फोटो हटाने के लिए नीचे Delete (कचरा पेटी) पर दबाएं। TARGET:2",
+    responseEn: "To delete the photo, tap Delete (the dustbin) at the bottom. TARGET:2",
   },
 
   // 20. SMS Messages: Read bank OTP
@@ -316,6 +348,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "अपना बैंक OTP देखने के लिए ऊपर बैंक वाले मैसेज पर दबाएं। TARGET:1",
+    responseEn: "To see your bank OTP, tap the bank message at the top. TARGET:1",
   },
 
   // 21. Facebook: Like a post
@@ -332,6 +365,7 @@ export const CRISP_FEW_SHOT_EXAMPLES: FewShotExample[] = [
     ],
     response:
       "फोटो को पसंद (Like) करने के लिए यहाँ लाइक बटन पर दबाएं। TARGET:0",
+    responseEn: "To like the photo, tap the Like button here. TARGET:0",
   },
 ];
 
@@ -343,6 +377,7 @@ export function formatRelevantFewShots(
   appPackage?: string,
   question?: string,
   count: number = 4,
+  lang: GuidanceLang = "hi",
 ): string {
   const qLower = (question || "").toLowerCase();
   const pkgLower = (appPackage || "").toLowerCase();
@@ -400,7 +435,7 @@ export function formatRelevantFewShots(
 Screen:
 ${ex.elements.map((el) => `  ${el}`).join("\n")}
 Question: "${ex.question}"
-Answer: ${ex.response}`,
+Answer: ${answerFor(ex, lang)}`,
     )
     .join("\n\n");
 }
@@ -408,13 +443,18 @@ Answer: ${ex.response}`,
 /**
  * Returns all 20 few-shot grounding examples formatted.
  */
-export function formatAll20FewShots(): string {
+export function formatAll20FewShots(lang: GuidanceLang = "hi"): string {
   return CRISP_FEW_SHOT_EXAMPLES.map(
     (ex, i) =>
       `Example ${i + 1} (${ex.appPackage}):
 Screen:
 ${ex.elements.map((el) => `  ${el}`).join("\n")}
 Question: "${ex.question}"
-Answer: ${ex.response}`,
+Answer: ${answerFor(ex, lang)}`,
   ).join("\n\n");
+}
+
+/** The example answer in the elder's language; the examples set the reply language. */
+function answerFor(example: FewShotExample, lang: GuidanceLang): string {
+  return lang === "en" ? example.responseEn : example.response;
 }

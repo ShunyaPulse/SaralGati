@@ -1,4 +1,5 @@
 import { cacheGet, cacheSet, cacheDelete } from '@/lib/redis';
+import type { GuidanceLang } from '@/lib/guidanceLanguage';
 
 import {
   FlowStep,
@@ -32,6 +33,25 @@ export const MULTI_STEP_FLOWS: MultiStepFlowDefinition[] = ALL_PLAYBOOKS;
 
 const FLOW_TTL_SECONDS = 900; // 15 minutes session TTL
 
+/**
+ * The spoken line for one step, in the elder's language.
+ *
+ * Hindi uses the hand-written Hinglish sentence the playbook carries. English
+ * names the same element through the step label, which is already English and
+ * matches what the spotlight is drawing attention to, so an English elder is
+ * never read the Hindi instruction instead.
+ */
+export function flowStepInstruction(
+  step: FlowStep,
+  totalSteps: number,
+  lang: GuidanceLang
+): string {
+  if (lang === 'en') {
+    return `Step ${step.stepNumber} of ${totalSteps}: tap "${step.label}" on your screen.`;
+  }
+  return step.hindiInstruction;
+}
+
 function findMatchingElement(uiElements: string[], keywords: string[]): number {
   return uiElements.findIndex((el) => {
     const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
@@ -64,7 +84,8 @@ export async function clearFlowSession(elderId: string): Promise<void> {
 export async function evaluateMultiStepFlow(
   elderId: string | undefined,
   question: string,
-  uiElements: string[]
+  uiElements: string[],
+  lang: GuidanceLang = 'hi'
 ): Promise<FlowEvaluationResult | null> {
   if (!elderId) return null;
 
@@ -107,7 +128,11 @@ export async function evaluateMultiStepFlow(
             currentStep: currentStepDef.stepNumber,
             totalSteps: flowDef.steps.length,
             stepLabel: currentStepDef.label,
-            explanation: currentStepDef.hindiInstruction,
+            explanation: flowStepInstruction(
+              currentStepDef,
+              flowDef.steps.length,
+              lang
+            ),
             highlightIndex: matchIdx
           };
         }
@@ -137,7 +162,11 @@ export async function evaluateMultiStepFlow(
           currentStep: step1.stepNumber,
           totalSteps: matchingPlaybook.steps.length,
           stepLabel: step1.label,
-          explanation: step1.hindiInstruction,
+          explanation: flowStepInstruction(
+            step1,
+            matchingPlaybook.steps.length,
+            lang
+          ),
           highlightIndex: matchIdx
         };
       }

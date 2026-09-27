@@ -18,6 +18,8 @@
  * so a loud advertisement never freezes the phone the way an OTP request does.
  */
 
+import type { GuidanceLang } from './guidanceLanguage';
+
 export type ThreatLevel = 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'CRITICAL';
 
 export type ThreatCategory =
@@ -909,8 +911,13 @@ export function shouldInterceptFraud(verdict: FraudSentinelVerdict): boolean {
  * The line the elder sees and hears when the sentinel intercepts. Devanagari is
  * deliberate: it is the script every Hindi TTS engine pronounces correctly.
  */
-export function sentinelExplanation(verdict: FraudSentinelVerdict): string {
-  return verdict.user_alert.message_hi;
+export function sentinelExplanation(
+  verdict: FraudSentinelVerdict,
+  lang: GuidanceLang = 'hi',
+): string {
+  return lang === 'en'
+    ? verdict.user_alert.message_en
+    : verdict.user_alert.message_hi;
 }
 
 /** Ordering used by escalation: a verdict may only ever move up this scale. */

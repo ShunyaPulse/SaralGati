@@ -1,5 +1,6 @@
 import { ELDER_INTENTS, matchQueryPattern } from "./intentDictionary";
 import { isNoiseElement } from "./semanticValidator";
+import { hasDevanagari, type GuidanceLang } from "./guidanceLanguage";
 
 export interface ConfidenceScore {
   score: number; // 0 to 100
@@ -20,6 +21,7 @@ export function scoreOutputConfidence(
   output: string,
   question: string,
   uiElements: string[] = [],
+  lang: GuidanceLang = "hi",
 ): ConfidenceScore {
   let score = 0;
   const reasons: string[] = [];
@@ -143,16 +145,31 @@ export function scoreOutputConfidence(
       "pay",
       "call",
       "search",
+      "tap",
+      "open",
+      "press",
+      "select",
+      "click",
+      "enter",
     ];
     if (commonActionVerbs.some((v) => cleanExplanation.includes(v))) {
       score += 10;
-      reasons.push(
-        "Explanation contains clear Hinglish action instruction (+10)",
-      );
+      reasons.push("Explanation contains a clear action instruction (+10)");
     }
   } else {
     score = 50;
     if (targetMatch) score += 30;
+  }
+
+  // 6. Language match. The elder chose a language, so an answer written in the
+  //    other script is a worse answer even when it points at the right button.
+  //    Latin-script Hinglish cannot be detected this way, which is fine: the
+  //    penalty only has to beat the other engine's score in arbitration.
+  if (lang === "en" && hasDevanagari(output)) {
+    score -= 30;
+    reasons.push(
+      "Answer is in Hindi although English guidance was requested (-30)",
+    );
   }
 
   const normalizedScore = Math.max(0, Math.min(100, score));

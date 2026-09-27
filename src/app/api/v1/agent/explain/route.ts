@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: true,
         data: {
-          explanation: sentinelExplanation(fraudVerdict),
+          explanation: sentinelExplanation(fraudVerdict, guidanceLang),
           source: "fraud_sentinel",
           model_used: "anti_fraud_sentinel",
           safety: fraudVerdict,
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     const langInstruction =
       guidanceLang === "en"
-        ? "Explain this screen in 1 or 2 very simple English sentences. Only output the English sentence."
+        ? "Explain this screen in 1 or 2 very simple English sentences. Write only in English words and Latin script, never in Hindi or Devanagari. Only output the English sentence."
         : "Explain this screen in 1 or 2 very simple Hinglish (Hindi written in English script) sentences. Only output the Hinglish sentence.";
 
     const systemPrompt = `You are SaralGati, a patient companion for Indian elders.
@@ -117,6 +117,7 @@ Tell them where they are and what they can do next. Be comforting and respectful
         guidanceLang === "en"
           ? "Explain this screen and tell me what I should do."
           : "Is screen ke baare mein samjhao aur batao mujhe kya karna chahiye.",
+      lang: guidanceLang,
     });
 
     return NextResponse.json({

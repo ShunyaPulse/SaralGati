@@ -20,7 +20,7 @@
 > | 🛡️ **Autonomous Anti-Fraud Sentinel**          | Real-time scam shield (OTP theft, UPI PIN collect traps, AnyDesk remote-access, malicious APKs) + Red Warning Alert, Trap Evasion Spotlight & Offline on-device ruleset |
 > | 🩺 **Phone Doctor ("Sab Theek Karo")**         | 1-Tap instant fix for elder phone misconfigurations (Unmutes ringer, 85% Media volume, 85% Brightness, 5-min timeout, DND disable)                         |
 > | 👨‍👩‍👧 **Caregiver Remote Command Dashboard**      | Zero-friction QR pairing + Live battery telemetry + Safe-Zone Geofencing with 1-tap Google Maps exit email alerts                                          |
-> | 🧠 **Self-Learning Flywheel & LoRA Pipeline**  | 4-Axis Combinatorial Matrix + Evol-Instruct + Kaggle T4 Unsloth fine-tuning auto-deployed to Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`) |
+> | 🧠 **Self-Learning Flywheel & LoRA Pipeline**  | 4-Axis Combinatorial Matrix + Evol-Instruct + bilingual (Hindi + English) self-play + Kaggle T4 Unsloth fine-tuning auto-deployed to Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`) |
 > | 🔒 **Privacy-First & Zero-Trust Architecture** | Zero hardcoded secrets + No screenshots taken + No personal chats read + Pure Accessibility UI role tree parsing                                           |
 
 > **"Technology should adapt to our parents, not the other way around."**  
@@ -183,9 +183,10 @@ flowchart TD
 ### Edge AI & Autonomous Flywheel
 
 - **Primary LLM**: Llama 3.1 8B Instruct deployed on Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`).
-- **Custom LoRA Adapter**: Fine-tuned on Hinglish elder voice queries and Android UI graphs (`saralgati-elder-llama31-8b`).
+- **Custom LoRA Adapter**: Fine-tuned on Hinglish **and** English elder queries and Android UI graphs (`saralgati-elder-llama31-8b`).
 - **Autonomous Feedback Flywheel**:
   - Tracks implicit user actions (`tapped_suggested` vs `tapped_other`).
+  - **Bilingual by construction**: every captured interaction stores the language it was answered in (`model_interactions.guidance_lang`), the synthetic self-play generator writes both Hindi and English queries (per batch, biased toward the language whose answers were recently rejected, and pinnable with the `FLYWHEEL_GUIDANCE_LANG` repo variable), the training-data export rebuilds each sample under the *same* prompt the app really sends, in the sample's own language, and the Kaggle run oversamples the minority language so the adapter cannot drift back to one language. An interaction whose answer contradicts its own recorded language - an English request answered in Devanagari - is counted and dropped instead of taught. Without this a "fine-tuned on Hinglish" adapter quietly pushed back against the elder's own language choice, so English mode fell back to the general model.
   - Weekly scheduled GitHub Action trains DPO preference datasets on Kaggle Dual-T4 GPUs using Unsloth.
   - Automatically exports and deploys updated LoRA adapters to Cloudflare Workers AI with zero downtime.
 

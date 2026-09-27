@@ -10,6 +10,9 @@ No local device, emulator, or laptop required.
    those weak apps, queries and threat categories, so the loop is recursive.
 1. Generates rich synthetic Android app screens & elder queries across major apps:
    - WhatsApp, PhonePe, Google Pay, YouTube, Swiggy, Uber, IRCTC, Settings, Dialer.
+   - In BOTH guidance languages (Hindi/Hinglish and English), and the language
+     travels with the request as `guidance_lang`, so an English screen is also a
+     training row for English guidance instead of one more Hinglish example.
 2. Evaluates SaralGati (/api/v1/agent/ask).
 3. Validates decisions against ground truth.
 4. Directly feeds verified outcomes into /api/v1/agent/feedback:
@@ -43,12 +46,15 @@ def fetch_recent_failures(api_url, headers, limit=50):
       - weak_categories : threat categories the sentinel recently MISSED
       - weak_apps       : apps involved in recent fraud misses / rejected picks
       - weak_queries    : elder queries the companion recently answered wrongly
+      - misses_by_lang  : rejected screens per guidance language, so the next
+                          batch is written in the language that is failing
       - fraud_misses / rejected_screens : how many of each failure type were pulled
     """
     focus = {
         "weak_categories": [],
         "weak_apps": [],
         "weak_queries": [],
+        "misses_by_lang": {"hi": 0, "en": 0},
         "fraud_misses": 0,
         "rejected_screens": 0,
     }
@@ -94,6 +100,9 @@ def fetch_recent_failures(api_url, headers, limit=50):
             meta = row.get("metadata") or {}
             focus["rejected_screens"] += 1
             remember("weak_apps", meta.get("app_package"))
+            lang = meta.get("guidance_lang")
+            if lang in focus["misses_by_lang"]:
+                focus["misses_by_lang"][lang] += 1
             # The rejected export carries the elder's question in the user turn.
             # A row without one simply contributes no query hint.
             turns = row.get("messages") or []
@@ -105,6 +114,38 @@ def fetch_recent_failures(api_url, headers, limit=50):
         print(f"  ⚠️ Failure mining skipped (rejected picks): {e}")
 
     return focus
+
+
+# Every language the companion can answer in. The key is the value the app sends
+# as `guidance_lang`, so the generated screens are trained in the same one.
+GUIDANCE_LANG_LABELS = {
+    "hi": "Hindi (Hinglish in Roman script, or Devanagari)",
+    "en": "English (Latin script only)",
+}
+
+
+def pick_guidance_language(focus=None):
+    """Which language this batch's queries are written in.
+
+    Failure-driven, like the app selection: a language whose answers were
+    recently rejected gets the next batch's attention, so neither language can
+    quietly starve. FLYWHEEL_GUIDANCE_LANG=hi|en pins every batch to one
+    language when an operator deliberately wants to top that pool up.
+    """
+    import random
+
+    forced = (os.environ.get("FLYWHEEL_GUIDANCE_LANG") or "").strip().lower()
+    if forced in GUIDANCE_LANG_LABELS:
+        return forced
+
+    misses = (focus or {}).get("misses_by_lang") or {}
+    hi_misses = int(misses.get("hi", 0))
+    en_misses = int(misses.get("en", 0))
+    if en_misses > hi_misses:
+        return "en"
+    if hi_misses > en_misses:
+        return "hi"
+    return random.choice(list(GUIDANCE_LANG_LABELS))
 
 
 def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None, focus=None):
@@ -151,13 +192,30 @@ def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_
         ("com.digilocker.android", "DigiLocker / mAadhaar (view digital Aadhaar, vehicle RC, or vaccination certificate)")
     ]
 
-    # AXIS 4: Linguistic Speech Style (How does the elder ask?)
-    speech_styles = [
-        "Natural Conversational Hinglish (Hindi in Roman script: 'Beti ko video call kaise lagayein', 'Bijli ka bill kahan se bharein')",
-        "Pure Devanagari Hindi script ('पेंशन का पैसा आया या नहीं कैसे देखें', 'दवाई मंगवाने का बटन कहाँ है')",
-        "Colloquial / Indirect elder phrasing ('Doctor sahab ko phone milana hai', 'Ghar aane ke liye gaadi bulao')",
-        "Semi-literate / Keyword-action mix ('Train ticket PNR check', 'Gas cylinder booking karna')"
-    ]
+    # AXIS 4: Guidance Language + Linguistic Speech Style (Which language did the
+    # elder choose in the app, and how do they ask in it?)
+    #
+    # The companion ships a language switch ("Everything in English"), and the
+    # fine-tuned adapter is what carries an elder's learned screen grounding. A
+    # generator that only writes Hindi queries can only ever produce Hindi
+    # training rows, so the adapter stayed monolingual and lost arbitration to
+    # the general model on every English request. Both languages are generated
+    # here, and the chosen one travels with the request as `guidance_lang`, so
+    # each captured interaction is trained in the language it was answered in.
+    speech_styles_by_lang = {
+        "hi": [
+            "Natural Conversational Hinglish (Hindi in Roman script: 'Beti ko video call kaise lagayein', 'Bijli ka bill kahan se bharein')",
+            "Pure Devanagari Hindi script ('पेंशन का पैसा आया या नहीं कैसे देखें', 'दवाई मंगवाने का बटन कहाँ है')",
+            "Colloquial / Indirect elder phrasing ('Doctor sahab ko phone milana hai', 'Ghar aane ke liye gaadi bulao')",
+            "Semi-literate / Keyword-action mix ('Train ticket PNR check', 'Gas cylinder booking karna')",
+        ],
+        "en": [
+            "Natural conversational English ('My daughter is not picking up, how do I video call her?', 'Where can I pay the electricity bill?')",
+            "Simple elder English with everyday Indian app words ('Check my PNR status', 'Book a gas cylinder', 'Show my pension passbook')",
+            "Direct, keyword-first English ('video call', 'pay bill', 'check balance')",
+            "Anxious, reassurance-seeking English ('It is not working, what should I press?', 'Where did my money go?')",
+        ],
+    }
 
     # EVOL-INSTRUCT MUTATION (Adversarial challenge for model robustness)
     evol_mutations = [
@@ -180,7 +238,9 @@ def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_
     random.shuffle(other_apps)
     chosen_apps = (priority_apps + other_apps)[:min(count, len(app_domains))]
 
-    speech = random.choice(speech_styles)
+    lang = pick_guidance_language(focus)
+    lang_label = GUIDANCE_LANG_LABELS[lang]
+    speech = random.choice(speech_styles_by_lang[lang])
     mutation = random.choice(evol_mutations)
     entropy_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
 
@@ -208,8 +268,9 @@ Generate exactly {len(chosen_apps)} realistic Android app screens based on this 
 1. Elder Persona: {persona}
 2. Cognitive Intent: {intent}
 3. Speech / Query Style: {speech}
-4. Evol-Instruct Mutation: {mutation}
-5. Entropy Seed: {entropy_seed}
+4. Response Language: {lang_label} - every "query" you write MUST be written in this language, because it is the language this elder chose in the companion's settings.
+5. Evol-Instruct Mutation: {mutation}
+6. Entropy Seed: {entropy_seed}
 {focus_block}
 Target Apps:
 {json.dumps([app[1] for app in chosen_apps])}
@@ -224,7 +285,7 @@ For each screen:
    - [TEXT] for static titles/headers
    Format: "[index] [ROLE] Label" (e.g., "[0] [BUTTON] Video Call", "[1] [INPUT] Search contacts")
    *CRITICAL RULE*: Subtitles, timestamps, or media counters (e.g., '[TEXT] 3 unread') must NEVER be the target.
-3. Provide "scenarios": 2 to 3 realistic elder queries matching the selected Speech Style and Intent.
+3. Provide "scenarios": 2 to 3 realistic elder queries matching the selected Speech Style, Intent and Response Language ({lang_label}).
 4. For each query, specify "expected" (the exact integer index number of the actionable target element to tap).
 
 Respond ONLY with valid JSON array containing this exact structure (no markdown fences, no extra text):
@@ -295,11 +356,13 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
                         {
                             "app_package": str(s.get("app_package", "")),
                             "elements": [str(el) for el in s.get("elements", [])],
+                            "guidance_lang": lang,
                             "scenarios": [
                                 {
                                     "query": str(sc.get("query", "")),
                                     "expected": int(sc.get("expected", 0)),
-                                    "intent": str(sc.get("intent", "general"))
+                                    "intent": str(sc.get("intent", "general")),
+                                    "guidance_lang": lang
                                 }
                                 for sc in s.get("scenarios", [])
                             ]
@@ -307,7 +370,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
                         for s in parsed_data
                         if isinstance(s, dict)
                     ]
-                    print(f"✨ Synthesized {len(screens)} screens via {model_name} [key {key_idx+1}/{len(gemini_keys_pool)}]")
+                    print(f"✨ Synthesized {len(screens)} screens ({lang}) via {model_name} [key {key_idx+1}/{len(gemini_keys_pool)}]")
                     return screens
                 model_exhausted = False
             except Exception as e:
@@ -533,6 +596,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     print("[Failure Mining] Pulling recent misses from the flywheel...")
     focus = fetch_recent_failures(api_url, headers)
     print(f"[Failure Mining] Fraud misses: {focus['fraud_misses']} | Rejected picks: {focus['rejected_screens']}")
+    print(f"[Failure Mining] Misses by language : hi={focus['misses_by_lang']['hi']} en={focus['misses_by_lang']['en']}")
     if focus["weak_categories"]:
         print(f"[Failure Mining] Weak fraud categories : {', '.join(focus['weak_categories'])}")
     if focus["weak_apps"]:
@@ -548,6 +612,9 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         "golden_cache_promotions": 0,
         "cache_evictions": 0,
         "api_errors": 0,
+        "hindi_scenarios": 0,
+        "english_scenarios": 0,
+        "english_answered_in_hindi": 0,
         "fraud_scenarios": 0,
         "fraud_correct": 0,
         "fraud_missed": 0,
@@ -596,6 +663,10 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             query = scenario["query"]
             expected_index = scenario["expected"]
             intent_name = scenario.get("intent", "general")
+            # The language the elder chose in the companion, sent on the request
+            # so the answer - and therefore the training row captured with it -
+            # is produced in that language.
+            guidance_lang = scenario.get("guidance_lang") or screen.get("guidance_lang") or "hi"
 
             # Validate ground truth: skip if expected index is out of bounds
             if not isinstance(expected_index, int) or expected_index < 0 or expected_index >= len(elements):
@@ -604,7 +675,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
 
             count += 1
 
-            print(f"[{count}] App: {pkg:<28} | Intent: {intent_name:<18}")
+            print(f"[{count}] App: {pkg:<28} | Lang: {guidance_lang:<3} | Intent: {intent_name:<18}")
             print(f"    Query: \"{query}\"")
 
             # 1. Ask SaralGati API
@@ -612,7 +683,8 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
                 "app_package": pkg,
                 "question": query,
                 "ui_elements": elements,
-                "conversation_history": []
+                "conversation_history": [],
+                "guidance_lang": guidance_lang
             }
 
             try:
@@ -634,8 +706,22 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             interaction_id = result.get("interaction_id")
             predicted_index = result.get("highlight_index")
             source = result.get("source")
+            explanation = result.get("explanation") if isinstance(result.get("explanation"), str) else ""
 
             print(f"    🎯 SaralGati Pick: [{predicted_index}] (Expected: [{expected_index}]) | {latency}ms | Source: {source}")
+
+            # A screen per language, so the summary can show whether the English
+            # half of the pool is actually growing - and whether English requests
+            # are still being answered in Devanagari. Those rows are dropped from
+            # the training export rather than taught, so a high count here is the
+            # signal to fix the prompt/arbitration before the next training run.
+            if guidance_lang == "en":
+                stats["english_scenarios"] += 1
+                if re.search(r"[\u0900-\u097f]", explanation):
+                    stats["english_answered_in_hindi"] += 1
+                    print("    ⚠️  English mode was answered in Devanagari - row will not be trained")
+            else:
+                stats["hindi_scenarios"] += 1
 
             # 2. Compare with Ground Truth
             stats["total_scenarios"] += 1
@@ -745,6 +831,9 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     total = stats["total_scenarios"]
     acc = (stats["correct_grounding"] / total * 100) if total > 0 else 0
     print(f" Scenarios Evaluated       : {total}")
+    print(f"   Hindi / English         : {stats['hindi_scenarios']} / {stats['english_scenarios']}")
+    if stats["english_answered_in_hindi"]:
+        print(f"   English answered in Hindi: {stats['english_answered_in_hindi']} (excluded from training)")
     print(f" Grounding Accuracy        : {stats['correct_grounding']}/{total} ({acc:.1f}%)")
     print(f" Corrections Injected      : {stats['corrections_injected']}")
     print(f" Golden Cache Promotions   : {stats['golden_cache_promotions']}")
@@ -765,8 +854,13 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             headers=headers,
             timeout=15,
         )
-        train_count = train_res.json().get("count", 0)
-        print(f" Flywheel Verified Pool    : {train_count} verified interaction samples ready in Neon DB.")
+        pool = train_res.json()
+        print(f" Flywheel Verified Pool    : {pool.get('count', 0)} verified interaction samples ready in Neon DB.")
+        lang_counts = pool.get("counts") or {}
+        if lang_counts:
+            print(f"   Language split          : hi={lang_counts.get('hi', 0)} en={lang_counts.get('en', 0)}"
+                  + (f" | dropped (wrong script): {pool.get('skipped_wrong_script', 0)}" 
+                     if pool.get('skipped_wrong_script') else ""))
 
         fraud_res = requests.get(
             urljoin(api_url, "/api/v1/agent/training-data?type=fraud&limit=5"),

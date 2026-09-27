@@ -40,6 +40,9 @@ jobs:
           BODY=$(curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" "$API_URL")
           COUNT=$(printf '%s' "$BODY" | python -c "import json,sys; print(json.load(sys.stdin).get('count', 0))" 2>/dev/null || echo "0")
           echo "Found $COUNT verified elder interactions in database."
+          # The pool is bilingual now: show the split, so a Hindi-only pool is
+          # visible here instead of only showing up as a Hinglish adapter later.
+          printf '%s' "$BODY" | python -c "import json,sys; pool=json.load(sys.stdin); c=pool.get('counts') or {}; print(f\"Language split: hi={c.get('hi',0)} en={c.get('en',0)} | dropped (wrong script): {pool.get('skipped_wrong_script',0)}\")" 2>/dev/null || true
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
 
           FORCE="$INPUT_FORCE_TRAIN"

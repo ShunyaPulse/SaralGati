@@ -10,6 +10,7 @@ import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import { hasDevanagari } from "@/lib/guidanceLanguage";
 import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraudSentinel";
 import {
   analyzeForFraudWithAdvisor,
@@ -154,7 +155,10 @@ export async function POST(req: NextRequest) {
       safeConversationHistory.length > 0
         ? `:${crypto.createHash("sha256").update(JSON.stringify(safeConversationHistory)).digest("hex").slice(0, 8)}`
         : "";
-    const cacheKeyRaw = `${safeAppPackage}:${screenHash}:${normalizedQuestion}${historyHash}`;
+    // The language is part of the key. Without it a Hindi answer cached for a
+    // screen was handed straight back to an elder who had chosen English, which
+    // is exactly why "Everything in English" still spoke Hindi.
+    const cacheKeyRaw = `${guidanceLang}:${safeAppPackage}:${screenHash}:${normalizedQuestion}${historyHash}`;
     const cacheKeyHash = crypto
       .createHash("sha256")
       .update(cacheKeyRaw)
@@ -190,7 +194,7 @@ export async function POST(req: NextRequest) {
     );
     if (shouldInterceptFraud(fraudVerdict)) {
       finalResult = {
-        explanation: sentinelExplanation(fraudVerdict),
+        explanation: sentinelExplanation(fraudVerdict, guidanceLang),
         // Point the spotlight at the visible way out, not at the trap.
         highlightIndex: fraudVerdict.action_decision.safe_action_index,
         source: "fraud_sentinel",
@@ -209,6 +213,7 @@ export async function POST(req: NextRequest) {
         effectiveElderId || undefined,
         safeQuestion,
         safeUIElements,
+        guidanceLang,
       );
       if (
         flowResult &&
@@ -231,39 +236,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const EN_FAST_PATH_MAP: Record<string, string> = {
-      "Video call karne ke liye yahan video call button par dabayein.":
-        "Tap here on the video call button to start a video call.",
-      "Video ya audio call lagane ke liye niche Calls par dabayein, ya jis vyakti se baat karni hai unki chat kholein.":
-        "Tap Calls at the bottom or open a chat to start a call.",
-      "Call karne ke liye yahan dabayein.": "Tap here to make a call.",
-      "Call lagane ke liye niche Calls par dabayein, ya kisi ki chat kholein.":
-        "Tap Calls at the bottom or open a chat to make a call.",
-      "Status (Updates) dekhne ke liye yahan dabayein.":
-        "Tap here to view Status updates.",
-      "Naya message bhejne ke liye yahan dabayein.":
-        "Tap here to send a new message.",
-      "Number dial karne ke liye yahan dabayein.": "Tap here to dial a number.",
-      "Sampark (Contacts) dekhne ke liye yahan dabayein.":
-        "Tap here to view contacts.",
-      "Photo ya post daalne ke liye yahan dabayein.":
-        "Tap here to create a post or share a photo.",
-      "Video dekhne ke liye yahan dabayein.": "Tap here to watch videos.",
-      "Video khojne ke liye yahan dabayein.": "Tap here to search for videos.",
-      "Shorts dekhne ke liye yahan dabayein.": "Tap here to watch Shorts.",
-      "Is photo ko kisi ko bhejne ke liye yahan share dabayein.":
-        "Tap share here to send this photo.",
-      "Is photo ko delete karne ke liye yahan dabayein.":
-        "Tap here to delete this photo.",
-      "Naya message bhejne ke liye yahan click karein.":
-        "Tap here to send a new message.",
-      "Apna message ya OTP padhne ke liye yahan dabayein.":
-        "Tap here to read your message or OTP.",
-      "Naya contact add karne ke liye yahan dabayein.":
-        "Tap here to add a new contact.",
-      "Aapki madad ke liye yahan dabayein.": "Tap here to proceed.",
-    };
-
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
     // The per-app rule chain lives in lib/agentFastPath so this slice of the
     // product can be tested without a device token, database or Redis.
@@ -272,14 +244,11 @@ export async function POST(req: NextRequest) {
         safeAppPackage,
         safeQuestion,
         safeUIElements,
+        guidanceLang,
       );
       if (fastPath) {
-        const explanation =
-          guidanceLang === "en"
-            ? (EN_FAST_PATH_MAP[fastPath.explanation] ?? fastPath.explanation)
-            : fastPath.explanation;
         finalResult = {
-          explanation,
+          explanation: fastPath.explanation,
           highlightIndex: fastPath.index,
           source: "fast_path",
           modelUsed: "fast_path_rules",
@@ -314,7 +283,12 @@ export async function POST(req: NextRequest) {
         safeUIElements,
         safeQuestion,
       );
-      const fewShots = formatRelevantFewShots(safeAppPackage, safeQuestion, 4);
+      const fewShots = formatRelevantFewShots(
+        safeAppPackage,
+        safeQuestion,
+        4,
+        guidanceLang,
+      );
 
       let knownHabitsStr = "";
       if (effectiveElderId) {
@@ -343,7 +317,7 @@ export async function POST(req: NextRequest) {
 
       const langInstruction =
         guidanceLang === "en"
-          ? `1. Answer the user's question in 1 or 2 simple, comforting English sentences.
+          ? `1. Answer the user's question in 1 or 2 simple, comforting English sentences. Write only in English words and Latin script, never in Hindi or Devanagari.
 2. Elements on screen are prefixed with their role:
    - [BUTTON]: Clickable button or icon that can be tapped.
    - [INPUT]: Text input box for typing.
@@ -380,6 +354,7 @@ ${fewShots}`;
         userPrompt: safeQuestion,
         conversationHistory: safeConversationHistory,
         uiElements: safeUIElements,
+        lang: guidanceLang,
       });
 
       const rawExplanation = aiResult.text;
@@ -414,7 +389,12 @@ ${fewShots}`;
         arbitration: aiResult.competingResults,
       };
 
-      if (validation.isValid) {
+      // Never promote an answer written in the wrong language into the 7-day
+      // cache: one Hinglish reply left there would be replayed to an English
+      // elder for a week, which is the bug this change is fixing.
+      const answerMatchesLanguage =
+        guidanceLang !== "en" || !hasDevanagari(cleanExplanation);
+      if (validation.isValid && answerMatchesLanguage) {
         await cacheSet(
           cacheKey,
           {

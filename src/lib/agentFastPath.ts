@@ -1,4 +1,5 @@
 import { matchElderIntent } from './intentDictionary';
+import type { GuidanceLang } from './guidanceLanguage';
 
 /**
  * Deterministic, zero-latency answers for the questions elders ask most.
@@ -11,14 +12,100 @@ import { matchElderIntent } from './intentDictionary';
  * The rule chain is deliberately unchanged by that move: it is the ground truth
  * for the most common elderly flows, and the tests in
  * `agentFastPath.test.ts` pin its behaviour.
+ *
+ * Copy lives in one bilingual table rather than a translation lookup, so the
+ * compiler refuses a rule that only has a Hindi sentence. That is what keeps an
+ * English-speaking elder from hearing Hinglish out of the fastest path.
  */
 
 export interface FastPathMatch {
-  /** Hinglish sentence the companion app speaks to the elder. */
+  /** Sentence the companion app speaks to the elder, in their language. */
   explanation: string;
   /** Index into the caller's `uiElements` array that should be spotlighted. */
   index: number;
 }
+
+/**
+ * Every sentence this engine can speak, in both languages. Hinglish is spelled
+ * in Latin script because that is how the companion has always sounded in
+ * Hindi mode; the English column is what an English elder hears instead.
+ */
+const FAST_PATH_COPY = {
+  whatsappVideoCallButton: {
+    hi: 'Video call karne ke liye yahan video call button par dabayein.',
+    en: 'Tap here on the video call button to start a video call.',
+  },
+  whatsappCallsTabForVideo: {
+    hi: 'Video ya audio call lagane ke liye niche Calls par dabayein, ya jis vyakti se baat karni hai unki chat kholein.',
+    en: 'Tap Calls at the bottom, or open the chat of the person you want to talk to.',
+  },
+  whatsappVoiceCallButton: {
+    hi: 'Call karne ke liye yahan dabayein.',
+    en: 'Tap here to make the call.',
+  },
+  whatsappCallsTab: {
+    hi: 'Call lagane ke liye niche Calls par dabayein, ya kisi ki chat kholein.',
+    en: "Tap Calls at the bottom, or open someone's chat to make a call.",
+  },
+  whatsappStatus: {
+    hi: 'Status (Updates) dekhne ke liye yahan dabayein.',
+    en: 'Tap here to see Status (Updates).',
+  },
+  whatsappNewMessage: {
+    hi: 'Naya message bhejne ke liye yahan dabayein.',
+    en: 'Tap here to send a new message.',
+  },
+  dialerKeypad: {
+    hi: 'Number dial karne ke liye yahan dabayein.',
+    en: 'Tap here to dial a number.',
+  },
+  dialerContacts: {
+    hi: 'Sampark (Contacts) dekhne ke liye yahan dabayein.',
+    en: 'Tap here to see your contacts.',
+  },
+  facebookPost: {
+    hi: 'Photo ya post daalne ke liye yahan dabayein.',
+    en: 'Tap here to add a photo or a post.',
+  },
+  facebookVideo: {
+    hi: 'Video dekhne ke liye yahan dabayein.',
+    en: 'Tap here to watch a video.',
+  },
+  youtubeSearch: {
+    hi: 'Video khojne ke liye yahan dabayein.',
+    en: 'Tap here to search for videos.',
+  },
+  youtubeShorts: {
+    hi: 'Shorts dekhne ke liye yahan dabayein.',
+    en: 'Tap here to watch Shorts.',
+  },
+  photosShare: {
+    hi: 'Is photo ko kisi ko bhejne ke liye yahan share dabayein.',
+    en: 'Tap share here to send this photo to someone.',
+  },
+  photosDelete: {
+    hi: 'Is photo ko delete karne ke liye yahan dabayein.',
+    en: 'Tap here to delete this photo.',
+  },
+  smsNewMessage: {
+    hi: 'Naya message bhejne ke liye yahan click karein.',
+    en: 'Tap here to send a new message.',
+  },
+  smsReadMessage: {
+    hi: 'Apna message ya OTP padhne ke liye yahan dabayein.',
+    en: 'Tap here to read your message or OTP.',
+  },
+  contactsAdd: {
+    hi: 'Naya number save karne ke liye yahan dabayein.',
+    en: 'Tap here to save a new number.',
+  },
+  contactsSearch: {
+    hi: 'Kisi ka number khojne ke liye yahan dabayein.',
+    en: "Tap here to find someone's number.",
+  },
+} as const;
+
+type FastPathCopyKey = keyof typeof FAST_PATH_COPY;
 
 /**
  * Labels that are dynamic furniture rather than targets: an elder asking
@@ -67,11 +154,14 @@ export function matchFastPathRule(
   appPackage: string,
   question: string,
   uiElements: string[],
+  lang: GuidanceLang = 'hi',
 ): FastPathMatch | null {
   const questionLower = question.toLowerCase();
 
   let fpMatch = false;
-  let fpExplanation = '';
+  let fpCopy: FastPathCopyKey | null = null;
+  /** Set only by the intent-dictionary fallback, which already localizes. */
+  let fpIntentExplanation = '';
   let fpIndex = -1;
 
   if (appPackage === 'com.whatsapp') {
@@ -84,15 +174,13 @@ export function matchFastPathRule(
       let idx = findUIIndex(uiElements, ['video call', 'वीडियो कॉल', 'video_call']);
       if (idx !== -1) {
         fpIndex = idx;
-        fpExplanation =
-          'Video call karne ke liye yahan video call button par dabayein.';
+        fpCopy = 'whatsappVideoCallButton';
         fpMatch = true;
       } else {
         idx = findUIIndex(uiElements, ['calls', 'कॉल', 'call']);
         if (idx !== -1) {
           fpIndex = idx;
-          fpExplanation =
-            'Video ya audio call lagane ke liye niche Calls par dabayein, ya jis vyakti se baat karni hai unki chat kholein.';
+          fpCopy = 'whatsappCallsTabForVideo';
           fpMatch = true;
         }
       }
@@ -105,14 +193,13 @@ export function matchFastPathRule(
       let idx = findUIIndex(uiElements, ['audio call', 'voice call', 'कॉल']);
       if (idx !== -1) {
         fpIndex = idx;
-        fpExplanation = 'Call karne ke liye yahan dabayein.';
+        fpCopy = 'whatsappVoiceCallButton';
         fpMatch = true;
       } else {
         idx = findUIIndex(uiElements, ['calls', 'call', 'कॉल']);
         if (idx !== -1) {
           fpIndex = idx;
-          fpExplanation =
-            'Call lagane ke liye niche Calls par dabayein, ya kisi ki chat kholein.';
+          fpCopy = 'whatsappCallsTab';
           fpMatch = true;
         }
       }
@@ -123,7 +210,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['updates', 'status', 'स्टेटस', 'update']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Status (Updates) dekhne ke liye yahan dabayein.';
+        fpCopy = 'whatsappStatus';
         fpMatch = true;
       }
     } else if (
@@ -134,7 +221,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['message', 'chat', 'new', 'मैसेज', 'नया']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Naya message bhejne ke liye yahan dabayein.';
+        fpCopy = 'whatsappNewMessage';
         fpMatch = true;
       }
     }
@@ -148,7 +235,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['keypad', 'dialpad', 'dial', 'कॉल', 'key']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Number dial karne ke liye yahan dabayein.';
+        fpCopy = 'dialerKeypad';
         fpMatch = true;
       }
     } else if (
@@ -157,7 +244,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['contact', 'संपर्क']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Sampark (Contacts) dekhne ke liye yahan dabayein.';
+        fpCopy = 'dialerContacts';
         fpMatch = true;
       }
     }
@@ -174,7 +261,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['photo', 'फोटो', 'post', 'mind', 'create']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Photo ya post daalne ke liye yahan dabayein.';
+        fpCopy = 'facebookPost';
         fpMatch = true;
       }
     } else if (
@@ -183,7 +270,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['video', 'watch', 'वीडियो']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Video dekhne ke liye yahan dabayein.';
+        fpCopy = 'facebookVideo';
         fpMatch = true;
       }
     }
@@ -195,13 +282,13 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['search', 'खोज']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Video khojne ke liye yahan dabayein.';
+        fpCopy = 'youtubeSearch';
         fpMatch = true;
       }
     } else if (questionLower.includes('shorts')) {
       fpIndex = findUIIndex(uiElements, ['shorts']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Shorts dekhne ke liye yahan dabayein.';
+        fpCopy = 'youtubeShorts';
         fpMatch = true;
       }
     }
@@ -216,8 +303,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['share', 'शेयर', 'send']);
       if (fpIndex !== -1) {
-        fpExplanation =
-          'Is photo ko kisi ko bhejne ke liye yahan share dabayein.';
+        fpCopy = 'photosShare';
         fpMatch = true;
       }
     } else if (
@@ -227,7 +313,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['delete', 'trash', 'डिलीट']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Is photo ko delete karne ke liye yahan dabayein.';
+        fpCopy = 'photosDelete';
         fpMatch = true;
       }
     }
@@ -242,7 +328,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['start chat', 'new message', 'नया संदेश']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Naya message bhejne ke liye yahan click karein.';
+        fpCopy = 'smsNewMessage';
         fpMatch = true;
       }
     } else if (
@@ -251,7 +337,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['unread', 'otp', 'message']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Apna message ya OTP padhne ke liye yahan dabayein.';
+        fpCopy = 'smsReadMessage';
         fpMatch = true;
       }
     }
@@ -263,7 +349,7 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['add', 'new', 'create', 'प्लस']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Naya number save karne ke liye yahan dabayein.';
+        fpCopy = 'contactsAdd';
         fpMatch = true;
       }
     } else if (
@@ -272,26 +358,29 @@ export function matchFastPathRule(
     ) {
       fpIndex = findUIIndex(uiElements, ['search', 'खोज']);
       if (fpIndex !== -1) {
-        fpExplanation = 'Kisi ka number khojne ke liye yahan dabayein.';
+        fpCopy = 'contactsSearch';
         fpMatch = true;
       }
     }
   }
 
   // Nothing app-specific matched: fall back to the generic elder intent
-  // dictionary, which works across any package.
+  // dictionary, which works across any package and localizes on its own.
   if (!fpMatch) {
-    const intentFastMatch = matchElderIntent(question, uiElements);
+    const intentFastMatch = matchElderIntent(question, uiElements, lang);
     if (
       intentFastMatch.highlightIndex !== null &&
       intentFastMatch.matchedIntent !== null
     ) {
       fpIndex = intentFastMatch.highlightIndex;
-      fpExplanation = intentFastMatch.explanation;
+      fpIntentExplanation = intentFastMatch.explanation;
       fpMatch = true;
     }
   }
 
   if (!fpMatch) return null;
-  return { explanation: fpExplanation, index: fpIndex };
+  return {
+    explanation: fpCopy ? FAST_PATH_COPY[fpCopy][lang] : fpIntentExplanation,
+    index: fpIndex,
+  };
 }

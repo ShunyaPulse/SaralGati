@@ -86,7 +86,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 ### 6. Autonomous Anti-Fraud Sentinel
 
 - **Real-Time Scam Shield**: Every question and screen the companion sends is screened _before_ any guidance is produced, so a scam screen never receives a placement hint. The taxonomy covers OTP theft, UPI-PIN / collect-request / deceptive-QR payment traps, remote-access coercion (AnyDesk, TeamViewer, RustDesk, QuickSupport, accessibility unlock), fake electricity / SIM / KYC / challan notices, fake virus & spin-wheel banners, sideloaded APKs, and unneeded contacts / SMS / camera permissions.
-- **Hindi + English Alerts**: DANGEROUS and CRITICAL screens are intercepted and answered with a simple Devanagari warning (which the companion speaks) plus plain English copy, and the spotlight is redirected to the visible way out (Cancel / Decline). Weaker signals still travel with the normal answer as a soft warning, so a legitimate payment screen stays usable.
+- **Hindi + English Alerts**: DANGEROUS and CRITICAL screens are intercepted and answered with a warning in both languages, and the companion speaks the one the elder chose. The spotlight is redirected to the visible way out (Cancel / Decline). Weaker signals still travel with the normal answer as a soft warning, so a legitimate payment screen stays usable.
 - **Deterministic & Auditable**: `src/lib/fraudSentinel.ts` is a pure rule ensemble with unit tests for every category. It keeps protecting the elder when Workers AI or Gemini are unreachable, and every verdict carries `risk_reasoning` for logs. Also exposed as `POST /api/v1/agent/fraud-check` (HMAC + device token, like the rest of the agent API) for the companion to poll on screen changes.
 - **Money Rule Enforced**: Receiving money never needs a UPI PIN, a QR scan or an approval - any "receive + PIN" combination is treated as theft, not as a payment.
 - **Works With No Network**: the companion also carries a small, high-confidence **offline ruleset** (`src/lib/offlineFraudRules.ts`, generated into `android/app/src/main/assets/offline_fraud_rules.json` by `npm run rules:export`), so the most dangerous screens - an OTP asked to be shared, "receive money + PIN", a remote-control app pushing its code, a sideloaded APK, fake electricity/SIM cut-off threats - are warned about the instant they appear and with the radio off. The server verdict still arrives moments later and stays authoritative; the offline check only ever adds protection, it never downgrades one.
@@ -137,7 +137,7 @@ flowchart TD
         CF --> VAL{"Semantic Validator Check"}
 
         %% Case 5: Semantic Validation & Recovery
-        VAL -- "Target Validated" --> ANS4["✅ Verified Target Index & Hindi Explanation"]
+        VAL -- "Target Validated" -->        ANS4["✅ Verified Target Index & Explanation in the Elder's Language"]
         VAL -- "Hallucination / Noise Detected" --> ANS5["🛡️ CASE 5: Semantic Fallback Recovery<br/>Re-anchors target to nearest verified actionable button"]
 
         ANS4 --> PROMOTE["Promote to Redis Screen Cache"]
@@ -157,14 +157,14 @@ flowchart TD
 
     subgraph Companion["🌟 Elder Companion Action"]
         RESP --> SPOT["Highlight Target Button with Glowing Spotlight Ring"]
-        RESP --> TTS["Play Natural Soothing Hindi Audio Guidance"]
+        RESP --> TTS["Play Natural Soothing Audio Guidance in the Elder's Language"]
     end
 ```
 
 ### Native Android Companion App Stack
 
 - **Language & Framework**: Kotlin, Jetpack Compose, Material 3 with high-contrast elder accessibility themes.
-- **Bilingual (हिंदी / English)**: the elder picks a language once, and every screen, warning and spoken line follows it. The TTS voice is chosen **per utterance** - Devanagari and the server's Hinglish guidance always use the Hindi voice (that is how the companion has always sounded), while the app's own English copy uses English (India). Fraud alerts carry title, message and advice in both languages, so a warning is never half-Hindi and half-English.
+- **Bilingual (हिंदी / English)**: the elder picks a language once, and every screen, warning and spoken line follows it. The choice travels with each request as `guidance_lang`, so the whole guidance stack answers in it - the deterministic fast path, the intent dictionary, the multi-step flows, the few-shot examples handed to the models, which engine wins arbitration, the fraud intercept, and even the Redis screen cache, which is keyed per language so a cached Hindi answer can never be replayed to an English elder. The TTS voice is then chosen **per utterance**: Devanagari always uses the Hindi voice (that is how the companion has always sounded), English guidance uses English (India), and the app's own copy follows the app language. Fraud alerts carry title, message and advice in both languages, so a warning is never half-Hindi and half-English.
 - **Accessibility Engine**: Custom `AccessibilityService` traversing `AccessibilityNodeInfo` hierarchy with DP-normalized boundaries, below-fold peek scrolling, and clickable `TextView` role resolution.
 - **Persistent Reliability**:
   - `ForegroundService` with notification channel for 24/7 background survival.

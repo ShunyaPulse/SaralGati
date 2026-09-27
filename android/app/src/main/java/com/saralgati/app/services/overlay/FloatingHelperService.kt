@@ -161,9 +161,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             onLanguageChanged()
         } else if (intent?.action == ACTION_SHOW_RAGE_TAP) {
             val lang = localPrefs.getAppLanguage()
+            val gLang = localPrefs.getGuidanceLang()
             expandHelper(
                 title = AppStrings.rageTapTitle(lang),
-                speakMsg = AppStrings.rageTapMessage(lang)
+                speakMsg = AppStrings.rageTapMessage(gLang)
             )
         } else if (intent?.action == ACTION_SHOW_FRAUD_WARNING) {
             val title = intent.getStringExtra(EXTRA_FRAUD_TITLE) ?: "सावधान!"
@@ -199,9 +200,9 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    /** The voice the selected language asks for. */
+    /** The voice the selected guidance language asks for. */
     private fun voiceLocale(): Locale =
-        if (localPrefs.getAppLanguage() == "en") ENGLISH_LOCALE else HINDI_LOCALE
+        if (localPrefs.getGuidanceLang() == "en") ENGLISH_LOCALE else HINDI_LOCALE
 
     /**
      * The voice for one specific sentence, because one TTS engine has to read
@@ -301,7 +302,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             })
         }
 
-        val langPref = localPrefs.getAppLanguage()
+        val langPref = localPrefs.getGuidanceLang()
         val speechLang = if (langPref == "en") "en-IN" else "hi-IN"
         val intent = Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(
@@ -365,9 +366,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         setupDrag(bubbleView, paramsBubble!!) {
             // On click
             val lang = localPrefs.getAppLanguage()
+            val gLang = localPrefs.getGuidanceLang()
             expandHelper(
                 title = AppStrings.assistantTitle(lang),
-                speakMsg = if (lang == "en") "Hello, how can I help you today?" else "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ?"
+                speakMsg = if (gLang == "en") "Hello, how can I help you today?" else "नमस्ते, मैं आपकी कैसे मदद कर सकता हूँ?"
             )
         }
     }
@@ -465,7 +467,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 marginEnd = dp(6)
             }
             setOnClickListener {
-                val curLang = localPrefs.getAppLanguage()
+                val curLang = localPrefs.getGuidanceLang()
                 speak(if (curLang == "en") "One moment, let me see..." else "एक सेकंड रुकिए, मैं देख रहा हूँ...")
                 collapseHelper()
                 val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_SCREEN").apply {

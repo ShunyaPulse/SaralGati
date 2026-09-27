@@ -376,7 +376,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
             // 1. Instant, network-free check first: the elder is warned the moment
             // the scam appears, even with no data or a server cold start.
-            val isEn = localPrefs.getAppLanguage() == "en"
+            val isEn = localPrefs.getGuidanceLang() == "en"
             val offline = OfflineFraudSentinel.analyze(this, scanElements)
             if (offline != null) {
                 val safeBounds = OfflineFraudSentinel.findSafeActionIndex(scanElements)
@@ -690,7 +690,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             kotlinx.coroutines.delay(300)
 
             val curLang = localPrefs.getAppLanguage()
-            val isEn = curLang == "en"
+            val isEn = localPrefs.getGuidanceLang() == "en"
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.e(TAG, "extractAndExplainScreen: rootInActiveWindow is null")
@@ -740,7 +740,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             kotlinx.coroutines.delay(300)
 
             val curLang = localPrefs.getAppLanguage()
-            val isEn = curLang == "en"
+            val isEn = localPrefs.getGuidanceLang() == "en"
             val rootNode = rootInActiveWindow
             if (rootNode == null) {
                 Log.e(TAG, "extractAndAskScreen: rootInActiveWindow is null")

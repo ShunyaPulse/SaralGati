@@ -2,7 +2,6 @@ package com.saralgati.app.ui.onboarding
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -14,14 +13,62 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.saralgati.app.data.local.AppStrings
+
+/**
+ * Preset language combos: (appLanguage, guidanceLanguage).
+ *
+ * Option 1 → Hindi UI + Hindi guidance
+ * Option 2 → English UI + Hindi guidance
+ * Option 3 → English UI + English guidance
+ */
+private data class LangOption(
+    val appLang: String,
+    val guidanceLang: String,
+    val title: String,
+    val subtitle: String,
+    val emoji: String
+)
+
+private val OPTIONS = listOf(
+    LangOption(
+        appLang = "hi",
+        guidanceLang = "hi",
+        title = "हिंदी में सब कुछ",
+        subtitle = "ऐप और बोलकर गाइड — दोनों हिंदी में",
+        emoji = "🇮🇳"
+    ),
+    LangOption(
+        appLang = "en",
+        guidanceLang = "hi",
+        title = "English App, Hindi Guide",
+        subtitle = "App English में, बोलकर गाइड हिंदी में",
+        emoji = "🗣️"
+    ),
+    LangOption(
+        appLang = "en",
+        guidanceLang = "en",
+        title = "Everything in English",
+        subtitle = "App and spoken guidance — both in English",
+        emoji = "🇬🇧"
+    )
+)
 
 @Composable
 fun LanguageSelectScreen(
-    currentLang: String,
-    onLanguageSelected: (String) -> Unit
+    currentAppLang: String,
+    currentGuidanceLang: String,
+    onLanguageSelected: (appLang: String, guidanceLang: String) -> Unit
 ) {
-    var selectedLang by remember { mutableStateOf(currentLang) }
+    var selectedIdx by remember {
+        mutableIntStateOf(
+            OPTIONS.indexOfFirst {
+                it.appLang == currentAppLang && it.guidanceLang == currentGuidanceLang
+            }.coerceAtLeast(0)
+        )
+    }
+
+    // Title/subtitle follow the *preview* app language of the selected option
+    val previewLang = OPTIONS[selectedIdx].appLang
 
     Column(
         modifier = Modifier
@@ -42,7 +89,7 @@ fun LanguageSelectScreen(
                 modifier = Modifier.padding(bottom = 12.dp)
             )
             Text(
-                text = AppStrings.selectLangTitle(selectedLang),
+                text = if (previewLang == "en") "Choose Your Language" else "अपनी भाषा चुनें",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
@@ -50,7 +97,10 @@ fun LanguageSelectScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = AppStrings.selectLangSubtitle(selectedLang),
+                text = if (previewLang == "en")
+                    "Select how SaralGati should look and talk"
+                else
+                    "SaralGati कैसे दिखे और कैसे बोले, वो चुनें",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
@@ -60,28 +110,25 @@ fun LanguageSelectScreen(
         // Language Choice Cards
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Option 1: Hindi
-            LanguageCard(
-                title = AppStrings.HINDI_TITLE,
-                subtitle = AppStrings.HINDI_SUBTITLE,
-                isSelected = selectedLang == "hi",
-                onClick = { selectedLang = "hi" }
-            )
-
-            // Option 2: English
-            LanguageCard(
-                title = AppStrings.ENGLISH_TITLE,
-                subtitle = AppStrings.ENGLISH_SUBTITLE,
-                isSelected = selectedLang == "en",
-                onClick = { selectedLang = "en" }
-            )
+            OPTIONS.forEachIndexed { idx, opt ->
+                LanguageCard(
+                    emoji = opt.emoji,
+                    title = opt.title,
+                    subtitle = opt.subtitle,
+                    isSelected = selectedIdx == idx,
+                    onClick = { selectedIdx = idx }
+                )
+            }
         }
 
         // Continue Button
         Button(
-            onClick = { onLanguageSelected(selectedLang) },
+            onClick = {
+                val chosen = OPTIONS[selectedIdx]
+                onLanguageSelected(chosen.appLang, chosen.guidanceLang)
+            },
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = Color.White
@@ -93,7 +140,7 @@ fun LanguageSelectScreen(
             elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
         ) {
             Text(
-                text = AppStrings.continueBtn(selectedLang),
+                text = if (previewLang == "en") "Continue" else "आगे बढ़ें",
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -103,6 +150,7 @@ fun LanguageSelectScreen(
 
 @Composable
 private fun LanguageCard(
+    emoji: String,
     title: String,
     subtitle: String,
     isSelected: Boolean,
@@ -122,25 +170,30 @@ private fun LanguageCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Text(
+                text = emoji,
+                fontSize = 28.sp,
+                modifier = Modifier.padding(end = 14.dp)
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 15.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             RadioButton(
                 selected = isSelected,
                 onClick = onClick,

@@ -87,10 +87,11 @@ class MainActivity : ComponentActivity() {
                     // Language Selection Screen: Shown first if user hasn't selected a language yet, or when requested
                     if (!hasSelectedLanguage || showLanguageSelection) {
                         LanguageSelectScreen(
-                            currentLang = currentLanguage,
-                            onLanguageSelected = { lang ->
-                                localPrefs.setAppLanguage(lang)
-                                currentLanguage = lang
+                            currentAppLang = currentLanguage,
+                            currentGuidanceLang = localPrefs.getGuidanceLang(),
+                            onLanguageSelected = { appLang, guidanceLang ->
+                                localPrefs.setLanguagePrefs(appLang, guidanceLang)
+                                currentLanguage = appLang
                                 hasSelectedLanguage = true
                                 showLanguageSelection = false
                                 notifyOverlayLanguageChanged()

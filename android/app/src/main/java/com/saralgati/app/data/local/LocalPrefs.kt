@@ -12,13 +12,30 @@ class LocalPrefs(context: Context) {
         private const val KEY_DEVICE_TOKEN = "device_token"
         private const val KEY_IS_PAIRED = "is_paired"
         private const val KEY_PREF_LANG = "pref_lang"
+        private const val KEY_GUIDANCE_LANG = "guidance_lang"
     }
 
+    /**
+     * Store both the UI language and the guidance (TTS / API response) language.
+     * Call-sites pass one of the three preset combos; this keeps the two keys in sync.
+     */
+    fun setLanguagePrefs(appLang: String, guidanceLang: String) {
+        prefs.edit()
+            .putString(KEY_PREF_LANG, appLang)
+            .putString(KEY_GUIDANCE_LANG, guidanceLang)
+            .apply()
+    }
+
+    /** Legacy single-key setter kept for backward compat inside settings toggle. */
     fun setAppLanguage(lang: String) {
         prefs.edit().putString(KEY_PREF_LANG, lang).apply()
     }
 
+    /** Language used for all UI strings (buttons, titles, labels). */
     fun getAppLanguage(): String = prefs.getString(KEY_PREF_LANG, "hi") ?: "hi"
+
+    /** Language used for TTS voice, API guidance responses, and spoken explanations. */
+    fun getGuidanceLang(): String = prefs.getString(KEY_GUIDANCE_LANG, "hi") ?: "hi"
 
     fun hasSelectedLanguage(): Boolean = prefs.contains(KEY_PREF_LANG)
 

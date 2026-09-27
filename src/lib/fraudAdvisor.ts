@@ -51,6 +51,14 @@ export const ADVISOR_TIMEOUT_MS = 3000;
  */
 export const INTERACTIVE_ADVISOR_TIMEOUT_MS = 900;
 
+/**
+ * The polling companion is real-time too: the on-screen warning and its spoken
+ * alert must appear while the elder is still looking at the trap. The rules have
+ * already decided, so the model gets a tighter window here as well instead of
+ * holding the verdict back for the full default budget.
+ */
+export const DEVICE_ADVISOR_TIMEOUT_MS = 1200;
+
 /** Below this much visible text there is no signal worth a model call. */
 const MIN_ADVISOR_CHARS = 12;
 

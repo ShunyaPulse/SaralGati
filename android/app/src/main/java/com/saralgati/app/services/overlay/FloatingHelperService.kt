@@ -42,6 +42,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     companion object {
         const val ACTION_SHOW_RAGE_TAP = "com.saralgati.app.ACTION_SHOW_RAGE_TAP"
         const val ACTION_SHOW_FRAUD_WARNING = "com.saralgati.app.ACTION_SHOW_FRAUD_WARNING"
+        const val ACTION_DISMISS_FRAUD_WARNING = "com.saralgati.app.ACTION_DISMISS_FRAUD_WARNING"
         const val EXTRA_FRAUD_TITLE = "fraud_title"
         const val EXTRA_FRAUD_MESSAGE = "fraud_message"
         const val EXTRA_FRAUD_ADVICE = "fraud_advice"
@@ -79,6 +80,12 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 showVisualCue(left, top, right, bottom)
             } else if (action == "com.saralgati.app.ACTION_CLEAR_VISUAL_CUE") {
                 highlightHandler.post { removeCurrentHighlight() }
+            } else if (action == Intent.ACTION_SCREEN_OFF) {
+                // Phone went to sleep: stop any speech immediately and take the
+                // warning card / highlight down so nothing keeps talking.
+                if (this@FloatingHelperService::tts.isInitialized) tts.stop()
+                highlightHandler.post { removeCurrentHighlight() }
+                collapseHelper()
             }
         }
     }
@@ -94,6 +101,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             addAction("com.saralgati.app.ACTION_SPEAK_EXPLANATION")
             addAction("com.saralgati.app.ACTION_SHOW_VISUAL_CUE")
             addAction("com.saralgati.app.ACTION_CLEAR_VISUAL_CUE")
+            addAction(Intent.ACTION_SCREEN_OFF)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(explanationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
@@ -118,7 +126,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_SHOW_RAGE_TAP) {
+        if (intent?.action == ACTION_DISMISS_FRAUD_WARNING) {
+            if (this::tts.isInitialized) tts.stop()
+            collapseHelper()
+        } else if (intent?.action == ACTION_SHOW_RAGE_TAP) {
             expandHelper(
                 title = "क्या आपको यहाँ कुछ सहायता चाहिए?",
                 speakMsg = "ऐसा लगता है कि आपको यहाँ कुछ परेशानी हो रही है। क्या मैं मदद करूँ?"
@@ -438,22 +449,28 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val titleView = expandedView.findViewWithTag<TextView>("titleView")
         val bodyText = expandedView.findViewWithTag<TextView>("bodyView")
 
+        val newBody = if (advice.isBlank()) message else "$message\n\n$advice"
+        // If this exact warning is already on screen, do not re-announce it.
+        val alreadyShowing = isExpanded && bodyText?.text?.toString() == newBody
+
         titleView?.text = "⚠️ $title"
         titleView?.setTextColor(Color.parseColor("#B91C1C"))
-        bodyText?.text = if (advice.isBlank()) message else "$message\n\n$advice"
+        bodyText?.text = newBody
         bodyText?.visibility = View.VISIBLE
 
-        if (!isExpanded) {
-            if (!android.provider.Settings.canDrawOverlays(this)) return
-            try {
-                windowManager.removeView(bubbleView)
-                windowManager.addView(expandedView, paramsExpanded)
-                isExpanded = true
-            } catch (e: WindowManager.BadTokenException) {
-                Log.e(TAG, "Overlay token invalid: ${e.message}")
+        if (!alreadyShowing) {
+            if (!isExpanded) {
+                if (!android.provider.Settings.canDrawOverlays(this)) return
+                try {
+                    windowManager.removeView(bubbleView)
+                    windowManager.addView(expandedView, paramsExpanded)
+                    isExpanded = true
+                } catch (e: WindowManager.BadTokenException) {
+                    Log.e(TAG, "Overlay token invalid: ${e.message}")
+                }
             }
+            speak(if (advice.isBlank()) message else "$message $advice")
         }
-        speak(if (advice.isBlank()) message else "$message $advice")
     }
 
     private fun collapseHelper() {

@@ -104,3 +104,14 @@ jobs:
       - name: Compile debug variant
         run: ./gradlew assembleDebug --no-daemon
         working-directory: android
+
+      # Publish the freshly built debug APK so a reviewer can install this exact
+      # revision on a physical device before the change reaches main. The release
+      # job (`build-apk.yml`) only runs on pushes to main, so without this a pull
+      # request touching the companion could not be tested on-device at all.
+      - name: Upload debug APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: saralgati-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

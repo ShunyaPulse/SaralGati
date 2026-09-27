@@ -94,10 +94,13 @@ def fetch_recent_failures(api_url, headers, limit=50):
             meta = row.get("metadata") or {}
             focus["rejected_screens"] += 1
             remember("weak_apps", meta.get("app_package"))
-            try:
-                remember("weak_queries", row["messages"][1]["content"])
-            except (KeyError, IndexError, TypeError):
-                pass
+            # The rejected export carries the elder's question in the user turn.
+            # A row without one simply contributes no query hint.
+            turns = row.get("messages") or []
+            user_turn = turns[1] if len(turns) > 1 else None
+            question = user_turn.get("content") if isinstance(user_turn, dict) else None
+            if isinstance(question, str) and question.strip():
+                remember("weak_queries", question)
     except Exception as e:
         print(f"  ⚠️ Failure mining skipped (rejected picks): {e}")
 

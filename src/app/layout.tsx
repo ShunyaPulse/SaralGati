@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Sans_Devanagari } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/providers/session-provider";
 import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
@@ -7,11 +7,6 @@ import { Toaster } from "sonner";
 import { headers } from 'next/headers';
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const notoSansDevanagari = Noto_Sans_Devanagari({
-  weight: ["400", "500", "600", "700"],
-  subsets: ["devanagari"],
-  variable: "--font-noto-devanagari",
-});
 
 export const metadata: Metadata = {
   title: "SaralGati — Elderly Accessibility Companion",
@@ -44,7 +39,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" nonce={nonce}>
-      <body className={`${inter.variable} ${notoSansDevanagari.variable} font-sans overflow-x-hidden`} nonce={nonce}>
+      <body className={`${inter.variable} font-sans overflow-x-hidden`} nonce={nonce}>
         <SmoothScrollProvider>
           <AuthProvider>
             {children}

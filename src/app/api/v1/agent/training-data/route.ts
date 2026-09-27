@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { pruneUITree } from "@/lib/uiPruner";
 import { isFlywheelRequest } from "@/lib/agent-auth";
+import { FRAUD_ANALYST_SYSTEM_PROMPT } from "@/lib/fraudAdvisor";
 
 export async function GET(req: NextRequest) {
   try {
@@ -147,18 +148,15 @@ Instructions:
         [limit],
       );
 
-      const FRAUD_SYSTEM_PROMPT = `You are SaralGati's anti-fraud analyst for Indian elders.
-You receive the visible signals of one Android screen or message batch: UI element labels, URLs, SMS/notification text and the elder's question.
-Classify the threat into exactly one level (SAFE, SUSPICIOUS, DANGEROUS, CRITICAL) and one category among OTP_THEFT, PAYMENT_FRAUD, REMOTE_ACCESS, PHISHING_IMPERSONATION, MALVERTISING, MALICIOUS_APK, PRIVACY_RISK, NONE.
-Rules: receiving money never needs a UPI PIN or OTP; only theft vectors (OTP theft, payment fraud, remote access, malicious APK) may reach CRITICAL; never mark a screen DANGEROUS on a single weak keyword when a benign explanation exists.
-Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reasoning":"one short sentence"}.`;
+      // The prompt is imported (not duplicated) so the adapter this export trains
+      // is asked the identical question in production by src/lib/fraudAdvisor.ts.
 
       // For device-sourced rows without ground-truth labels, the predicted
       // verdict IS the best available label (sentinel was confident enough to
       // flag DANGEROUS/CRITICAL).
       const fraudSft = fraudRows.map((row) => ({
         messages: [
-          { role: "system", content: FRAUD_SYSTEM_PROMPT },
+          { role: "system", content: FRAUD_ANALYST_SYSTEM_PROMPT },
           {
             role: "user",
             content: JSON.stringify(
@@ -197,7 +195,7 @@ Respond ONLY with JSON: {"threat_level":"...","threat_category":"...","risk_reas
         .filter((row) => row.is_correct === false)
         .map((row) => ({
           prompt: [
-            { role: "system", content: FRAUD_SYSTEM_PROMPT },
+            { role: "system", content: FRAUD_ANALYST_SYSTEM_PROMPT },
             {
               role: "user",
               content: JSON.stringify({

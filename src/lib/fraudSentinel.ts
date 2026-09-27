@@ -877,3 +877,81 @@ export function shouldInterceptFraud(verdict: FraudSentinelVerdict): boolean {
 export function sentinelExplanation(verdict: FraudSentinelVerdict): string {
   return verdict.user_alert.message_hi;
 }
+
+/** Ordering used by escalation: a verdict may only ever move up this scale. */
+const LEVEL_RANK: Record<ThreatLevel, number> = {
+  SAFE: 0,
+  SUSPICIOUS: 1,
+  DANGEROUS: 2,
+  CRITICAL: 3,
+};
+
+/**
+ * Raise a deterministic verdict on a second opinion - strictly one way.
+ *
+ * A level at or below the current verdict is ignored and the original object is
+ * returned untouched, so a model can never talk the sentinel out of a warning it
+ * already decided on. Alert copy, the action and the safe-exit lookup stay in
+ * this module, so an escalated verdict reads exactly like a rule-driven one to
+ * the elder, and the reason for the escalation is appended to the audit trail
+ * instead of being invented as a new response field.
+ */
+export function escalateFraudVerdict(
+  verdict: FraudSentinelVerdict,
+  escalation: {
+    level: ThreatLevel;
+    category: Exclude<ThreatCategory, 'NONE'>;
+    reasoning: string;
+    source: string;
+  },
+  uiElements: string[] = [],
+): FraudSentinelVerdict {
+  // Only theft vectors may reach CRITICAL - the same table the rules answer to.
+  const level =
+    escalation.level === 'CRITICAL' &&
+    CATEGORY_SEVERITY_CAP[escalation.category] < 4
+      ? 'DANGEROUS'
+      : escalation.level;
+
+  if (LEVEL_RANK[level] <= LEVEL_RANK[verdict.threat_level]) return verdict;
+
+  const copy = ALERT_COPY[escalation.category];
+  // KILL_SESSION stays reserved for a rule that caught a theft mid-flight, so an
+  // opinion alone can never kill the elder's session.
+  const action: SentinelAction =
+    level === 'SUSPICIOUS' ? 'SHOW_WARNING' : 'BLOCK_AND_INTERCEPT';
+  const safeActionIndex =
+    verdict.action_decision.safe_action_index ??
+    findSafeActionIndex(uiElements, verdict.action_decision.target_element_to_block);
+
+  // Corroboration by two independent systems counts like one extra rule.
+  const opinionSeverity = level === 'CRITICAL' ? 4 : level === 'DANGEROUS' ? 3 : 2;
+
+  return {
+    threat_level: level,
+    threat_category: escalation.category,
+    confidence: Math.max(
+      verdict.confidence,
+      computeConfidence(opinionSeverity, verdict.detected_triggers.length + 1),
+    ),
+    detected_triggers: [
+      ...verdict.detected_triggers.slice(0, MAX_TRIGGERS - 1),
+      `SECOND_OPINION (${escalation.source}): ${level}/${escalation.category} ` +
+        `("${truncateSnippet(escalation.reasoning)}")`,
+    ],
+    action_decision: {
+      action,
+      target_element_to_block: verdict.action_decision.target_element_to_block,
+      safe_action_index: safeActionIndex,
+      safe_advice: copy.safe_advice,
+    },
+    user_alert: {
+      title: copy.title,
+      message_en: copy.message_en,
+      message_hi: copy.message_hi,
+    },
+    risk_reasoning:
+      `${verdict.risk_reasoning}; second opinion (${escalation.source}) raised the ` +
+      `verdict to ${level}/${escalation.category}: ${escalation.reasoning}`,
+  };
+}

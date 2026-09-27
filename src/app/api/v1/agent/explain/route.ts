@@ -3,10 +3,13 @@ import { z } from "zod";
 import { generateAIResponse } from "@/lib/aiFallback";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
 import {
-  analyzeForFraud,
   sentinelExplanation,
   shouldInterceptFraud,
 } from "@/lib/fraudSentinel";
+import {
+  analyzeForFraudWithAdvisor,
+  INTERACTIVE_ADVISOR_TIMEOUT_MS,
+} from "@/lib/fraudAdvisor";
 import { rateLimiter } from "@/lib/redis";
 
 const explainRequestSchema = z.object({
@@ -68,10 +71,13 @@ export async function POST(req: NextRequest) {
     // === SECURITY GATE: AUTONOMOUS ANTI-FRAUD SENTINEL ===
     // Screen explanations are pushed proactively, so a scam screen must be warned
     // about here too instead of being politely described to the elder.
-    const fraudVerdict = analyzeForFraud({
-      app_package: safeAppPackage,
-      ui_elements: safeUIElements,
-    });
+    // The rules decide; the LoRA may only raise the verdict. Explanations are
+    // pushed proactively, so the model gets a short budget instead of holding
+    // the screen up.
+    const fraudVerdict = await analyzeForFraudWithAdvisor(
+      { app_package: safeAppPackage, ui_elements: safeUIElements },
+      { timeoutMs: INTERACTIVE_ADVISOR_TIMEOUT_MS },
+    );
     if (shouldInterceptFraud(fraudVerdict)) {
       console.warn(
         `Anti-fraud sentinel blocked screen explanation for elder ${auth.elderId ?? "unknown"}: ` +

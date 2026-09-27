@@ -21,6 +21,7 @@ import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AppVersionInfo
 import com.saralgati.app.data.local.AppStrings
+import com.saralgati.app.services.accessibility.SaralGatiAccessibilityService
 import com.saralgati.app.ui.dashboard.DashboardScreen
 import com.saralgati.app.ui.onboarding.LanguageSelectScreen
 import com.saralgati.app.ui.onboarding.PairingScreen
@@ -49,6 +50,16 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to notify language change: ${e.message}")
         }
+    }
+
+    /**
+     * SaralGati's own screens are never screened for fraud, so nothing ever
+     * judged them safe and a warning card raised for the app the elder came from
+     * kept hovering over our own guidance and the language picker. Entering our
+     * UI means they have left that screen, so take the stale card down.
+     */
+    private fun dismissStaleFraudWarning() {
+        SaralGatiAccessibilityService.onCompanionUiShown()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -258,6 +269,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        dismissStaleFraudWarning()
     }
 }
 

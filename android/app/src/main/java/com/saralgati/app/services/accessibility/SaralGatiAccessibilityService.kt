@@ -80,6 +80,25 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         private const val TAG = "SaralGatiA11y"
         var isServiceRunning = false
             private set
+
+        /** The connected service, so SaralGati's own UI can hand back state that
+         *  belongs to whatever app the elder just left. */
+        @Volatile
+        private var instance: SaralGatiAccessibilityService? = null
+
+        /**
+         * Called when SaralGati's own UI reaches the foreground.
+         *
+         * A warning card describes the trap screen it was raised for, and its
+         * "safe exit" spotlight points at elements of *that* screen, so over our
+         * own guidance and language picker it is meaningless. Our own screens are
+         * never scanned (they are not a trap), so nothing ever judged them safe
+         * and the card used to sit on top of them until the elder closed it by
+         * hand - which is how a scam warning ended up on the language screen.
+         */
+        fun onCompanionUiShown() {
+            instance?.clearFraudWarningForOwnUi()
+        }
     }
 
 
@@ -124,6 +143,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isServiceRunning = true
+        instance = this
         if (!::localPrefs.isInitialized) {
             localPrefs = LocalPrefs(applicationContext)
         }
@@ -446,6 +466,39 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         }
     }
 
+    /**
+     * Take down a warning that belonged to another app, and forget the screen it
+     * was raised for so returning to the trap is screened (and warned about)
+     * again instead of staying silent behind the stale signature.
+     */
+    private fun clearFraudWarningForOwnUi() {
+        lastFraudSignature = null
+        lastFraudScanPackage = null
+        if (fraudWarnedPackage == null) return
+        fraudWarnedPackage = null
+        dismissFraudWarning()
+        Log.i(TAG, "Own UI in the foreground: took down the fraud warning card")
+    }
+
+    /**
+     * True while `pkg` is still the screen the elder is looking at.
+     *
+     * A verdict takes a moment to arrive, and the elder can leave the trap in
+     * that moment - often straight into SaralGati's own UI. Warning about a
+     * screen that is no longer in front of them would put a scam card over
+     * whatever they are actually reading.
+     *
+     * Only a *known* different app suppresses the warning: an unreadable window
+     * keeps protecting, the same way an unreachable model leaves the rule
+     * verdict in place rather than failing open into silence.
+     */
+    private fun isPackageInForeground(pkg: String): Boolean {
+        val root = rootInActiveWindow ?: return true
+        val current = root.packageName?.toString()
+        root.recycle()
+        return current == null || current == pkg
+    }
+
     private fun dismissFraudWarning() {
         val intent = Intent(this, com.saralgati.app.services.overlay.FloatingHelperService::class.java).apply {
             action = com.saralgati.app.services.overlay.FloatingHelperService.ACTION_DISMISS_FRAUD_WARNING
@@ -477,6 +530,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         safeBounds: android.graphics.Rect?,
     ) {
         if (pkg == fraudWarnedPackage) return
+        if (!isPackageInForeground(pkg)) return
         val now = System.currentTimeMillis()
         if (now - lastFraudWarnedAt < FRAUD_WARNING_COOLDOWN_MS) return
         if (!isScreenInteractive()) return
@@ -1227,6 +1281,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         isServiceRunning = false
+        instance = null
         // Cancel all coroutines to prevent memory leaks and dangling network requests
         serviceScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         try {

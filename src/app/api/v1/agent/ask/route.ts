@@ -11,10 +11,13 @@ import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
 import {
-  analyzeForFraud,
   sentinelExplanation,
   shouldInterceptFraud,
 } from "@/lib/fraudSentinel";
+import {
+  analyzeForFraudWithAdvisor,
+  INTERACTIVE_ADVISOR_TIMEOUT_MS,
+} from "@/lib/fraudAdvisor";
 import { rateLimiter } from "@/lib/redis";
 
 const askRequestSchema = z.object({
@@ -173,11 +176,19 @@ export async function POST(req: NextRequest) {
     // Runs before any guidance (fast path, cache, LLM) because a scam screen must
     // never receive a placement hint. Only DANGEROUS/CRITICAL verdicts intercept;
     // a SUSPICIOUS verdict still travels with the normal answer as a soft warning.
-    const fraudVerdict = analyzeForFraud({
-      app_package: safeAppPackage,
-      question: safeQuestion,
-      ui_elements: safeUIElements,
-    });
+    // The deterministic rules decide first; the fine-tuned LoRA may only raise
+    // the verdict (never lower it), which is how the fraud flywheel reaches
+    // production instead of stopping at the training data. Short budget: the
+    // elder is waiting on spoken guidance, so a stalled model falls back to the
+    // rule verdict that is already computed.
+    const fraudVerdict = await analyzeForFraudWithAdvisor(
+      {
+        app_package: safeAppPackage,
+        question: safeQuestion,
+        ui_elements: safeUIElements,
+      },
+      { timeoutMs: INTERACTIVE_ADVISOR_TIMEOUT_MS },
+    );
     if (shouldInterceptFraud(fraudVerdict)) {
       finalResult = {
         explanation: sentinelExplanation(fraudVerdict),

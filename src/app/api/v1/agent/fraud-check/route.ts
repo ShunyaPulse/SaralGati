@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import { analyzeForFraud } from "@/lib/fraudSentinel";
+import { analyzeForFraudWithAdvisor } from "@/lib/fraudAdvisor";
 import { query } from "@/lib/db";
 import { rateLimiter } from "@/lib/redis";
 
@@ -90,7 +90,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const verdict = analyzeForFraud(parseResult.data);
+    // Deterministic rules decide; the LoRA second opinion may only raise the
+    // verdict. This is the production consumer of the fraud training data.
+    const verdict = await analyzeForFraudWithAdvisor(parseResult.data);
 
     // Flywheel-only training capture: when Gemini supplies a ground-truth label,
     // store the verdict against it so the LoRA export (type=fraud) can learn the

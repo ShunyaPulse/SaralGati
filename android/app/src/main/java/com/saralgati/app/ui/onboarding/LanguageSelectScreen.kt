@@ -3,7 +3,9 @@ package com.saralgati.app.ui.onboarding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -67,41 +69,46 @@ fun LanguageSelectScreen(
         )
     }
 
-    // Title/subtitle follow the *preview* app language of the selected option
     val previewLang = OPTIONS[selectedIdx].appLang
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .verticalScroll(scrollState)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // Top Header
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 24.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 16.dp)
         ) {
             Text(
                 text = "🌐",
-                fontSize = 54.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
+                fontSize = 40.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
             )
             Text(
                 text = if (previewLang == "en") "Choose Your Language" else "अपनी भाषा चुनें",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.titleLarge,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = if (previewLang == "en")
                     "Select how SaralGati should look and talk"
                 else
                     "SaralGati कैसे दिखे और कैसे बोले, वो चुनें",
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 14.sp,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f)
             )
@@ -109,8 +116,10 @@ fun LanguageSelectScreen(
 
         // Language Choice Cards
         Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             OPTIONS.forEachIndexed { idx, opt ->
                 LanguageCard(
@@ -123,6 +132,8 @@ fun LanguageSelectScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
         // Continue Button
         Button(
             onClick = {
@@ -131,17 +142,17 @@ fun LanguageSelectScreen(
             },
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
+                contentColor = MaterialTheme.colorScheme.onPrimary
             ),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(14.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(60.dp),
-            elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+                .height(52.dp),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
         ) {
             Text(
                 text = if (previewLang == "en") "Continue" else "आगे बढ़ें",
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -156,48 +167,61 @@ private fun LanguageCard(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFFD1D5DB)
-    val bgColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f) else Color(0xFFF9FAFB)
-    val borderWidth = if (isSelected) 3.dp else 1.dp
+    val borderColor = if (isSelected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    }
+
+    val containerColor = if (isSelected) {
+        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+
+    val borderWidth = if (isSelected) 2.dp else 1.dp
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(14.dp),
         border = BorderStroke(borderWidth, borderColor),
-        color = bgColor,
+        color = containerColor,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 18.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
                 text = emoji,
-                fontSize = 28.sp,
-                modifier = Modifier.padding(end = 14.dp)
+                fontSize = 26.sp,
+                modifier = Modifier.padding(end = 12.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 20.sp,
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(3.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = subtitle,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             RadioButton(
                 selected = isSelected,
                 onClick = onClick,
-                colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
+                colors = RadioButtonDefaults.colors(
+                    selectedColor = MaterialTheme.colorScheme.primary,
+                    unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
             )
         }
     }

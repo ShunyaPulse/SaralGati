@@ -86,7 +86,7 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -101,18 +101,22 @@ fun DashboardScreen(
             ) {
                 Text(
                     text = AppStrings.title(currentLang),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f, fill = false),
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.width(8.dp))
                 OutlinedButton(
                     onClick = onChangeLanguage,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Text(
                         text = if (currentLang == "hi") "🌐 English" else "🌐 हिंदी",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }

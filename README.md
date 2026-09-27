@@ -8,6 +8,21 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20%7C%20Web-emerald)](https://github.com/ShunyaPulse/SaralGati)
 
+> 🏆 **Devfolio Boss Battle Hackathon Submission — Key Capabilities at a Glance**
+>
+> - 🚀 **Live Caregiver Dashboard**: [saralgati-685823552970.asia-south1.run.app](https://saralgati-685823552970.asia-south1.run.app)
+> - 📱 **Download Android Companion APK**: [SaralGati.apk (Latest Release)](https://github.com/ShunyaPulse/SaralGati/releases/latest)
+>
+> | Pillar System                                  | Breakthrough Capability                                                                                                                                    |
+> | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | 👵 **Live Floating Companion ("Saral Mitra")** | 1-Tap patient Hindi/Hinglish TTS voice guidance over any app + Proactive Rage-Tap & Hesitation detection                                                   |
+> | 🎯 **Visual Focus Spotlight & Scroll Engine**  | Glowing emerald target ring + Below-the-fold auto-peeking & smooth scrolling                                                                               |
+> | 🛡️ **Autonomous Anti-Fraud Sentinel**          | Real-time scam shield (OTP theft, UPI PIN collect traps, AnyDesk remote-access, malicious APKs) + Red Warning Alert & Trap Evasion Spotlight               |
+> | 🩺 **Phone Doctor ("Sab Theek Karo")**         | 1-Tap instant fix for elder phone misconfigurations (Unmutes ringer, 85% Media volume, 85% Brightness, 5-min timeout, DND disable)                         |
+> | 👨‍👩‍👧 **Caregiver Remote Command Dashboard**      | Zero-friction QR pairing + Live battery telemetry + Safe-Zone Geofencing with 1-tap Google Maps exit email alerts                                          |
+> | 🧠 **Self-Learning Flywheel & LoRA Pipeline**  | 4-Axis Combinatorial Matrix + Evol-Instruct + Kaggle T4 Unsloth fine-tuning auto-deployed to Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`) |
+> | 🔒 **Privacy-First & Zero-Trust Architecture** | Zero hardcoded secrets + No screenshots taken + No personal chats read + Pure Accessibility UI role tree parsing                                           |
+
 > **"Technology should adapt to our parents, not the other way around."**  
 > SaralGati is an autonomous, on-device AI companion and remote caregiver ecosystem engineered to give senior citizens in India complete digital independence. It guides elders step-by-step through any smartphone app using natural voice and visual spotlights, while giving family caregivers remote peace of mind.
 
@@ -70,7 +85,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 
 ### 6. Autonomous Anti-Fraud Sentinel
 
-- **Real-Time Scam Shield**: Every question and screen the companion sends is screened *before* any guidance is produced, so a scam screen never receives a placement hint. The taxonomy covers OTP theft, UPI-PIN / collect-request / deceptive-QR payment traps, remote-access coercion (AnyDesk, TeamViewer, RustDesk, QuickSupport, accessibility unlock), fake electricity / SIM / KYC / challan notices, fake virus & spin-wheel banners, sideloaded APKs, and unneeded contacts / SMS / camera permissions.
+- **Real-Time Scam Shield**: Every question and screen the companion sends is screened _before_ any guidance is produced, so a scam screen never receives a placement hint. The taxonomy covers OTP theft, UPI-PIN / collect-request / deceptive-QR payment traps, remote-access coercion (AnyDesk, TeamViewer, RustDesk, QuickSupport, accessibility unlock), fake electricity / SIM / KYC / challan notices, fake virus & spin-wheel banners, sideloaded APKs, and unneeded contacts / SMS / camera permissions.
 - **Hindi + English Alerts**: DANGEROUS and CRITICAL screens are intercepted and answered with a simple Devanagari warning (which the companion speaks) plus plain English copy, and the spotlight is redirected to the visible way out (Cancel / Decline). Weaker signals still travel with the normal answer as a soft warning, so a legitimate payment screen stays usable.
 - **Deterministic & Auditable**: `src/lib/fraudSentinel.ts` is a pure rule ensemble with unit tests for every category. It keeps protecting the elder when Workers AI or Gemini are unreachable, and every verdict carries `risk_reasoning` for logs. Also exposed as `POST /api/v1/agent/fraud-check` (HMAC + device token, like the rest of the agent API) for the companion to poll on screen changes.
 - **Money Rule Enforced**: Receiving money never needs a UPI PIN, a QR scan or an approval - any "receive + PIN" combination is treated as theft, not as a payment.
@@ -80,7 +95,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 - ❌ **NO Screenshots Taken**: SaralGati never captures screenshots or screen recordings.
 - ❌ **NO Personal Chats Read**: Personal message bodies, photo galleries, and payment PINs are completely inaccessible.
 - ✅ **Accessibility Tree Only**: The app only reads interactive UI element roles (e.g., `[BUTTON] Send`, `[INPUT] Search`) solely to calculate coordinate targets.
-- ✅ **Location With Consent**: Only the *last known* position is stored — never a movement history — and only the caregiver who paired the phone can read it. Fixes are read passively at heartbeat time, so the companion never holds a location wake lock on the elder's phone.
+- ✅ **Location With Consent**: Only the _last known_ position is stored — never a movement history — and only the caregiver who paired the phone can read it. Fixes are read passively at heartbeat time, so the companion never holds a location wake lock on the elder's phone.
 
 ---
 

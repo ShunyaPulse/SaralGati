@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,8 +26,7 @@ private data class LangOption(
     val appLang: String,
     val guidanceLang: String,
     val title: String,
-    val subtitle: String,
-    val emoji: String
+    val subtitle: String
 )
 
 private val OPTIONS = listOf(
@@ -36,22 +34,19 @@ private val OPTIONS = listOf(
         appLang = "hi",
         guidanceLang = "hi",
         title = "हिंदी में सब कुछ",
-        subtitle = "ऐप और बोलकर गाइड — दोनों हिंदी में",
-        emoji = "🇮🇳"
+        subtitle = "ऐप और बोलकर गाइड — दोनों हिंदी में"
     ),
     LangOption(
         appLang = "en",
         guidanceLang = "hi",
         title = "English App, Hindi Guide",
-        subtitle = "App English में, बोलकर गाइड हिंदी में",
-        emoji = "🗣️"
+        subtitle = "App English में, बोलकर गाइड हिंदी में"
     ),
     LangOption(
         appLang = "en",
         guidanceLang = "en",
         title = "Everything in English",
-        subtitle = "App and spoken guidance — both in English",
-        emoji = "🇬🇧"
+        subtitle = "App and spoken guidance — both in English"
     )
 )
 
@@ -123,7 +118,6 @@ fun LanguageSelectScreen(
         ) {
             OPTIONS.forEachIndexed { idx, opt ->
                 LanguageCard(
-                    emoji = opt.emoji,
                     title = opt.title,
                     subtitle = opt.subtitle,
                     isSelected = selectedIdx == idx,
@@ -161,7 +155,6 @@ fun LanguageSelectScreen(
 
 @Composable
 private fun LanguageCard(
-    emoji: String,
     title: String,
     subtitle: String,
     isSelected: Boolean,
@@ -191,30 +184,25 @@ private fun LanguageCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = emoji,
-                fontSize = 26.sp,
-                modifier = Modifier.padding(end = 12.dp)
-            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 17.sp,
+                    fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(3.dp))
                 Text(
                     text = subtitle,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(12.dp))
             RadioButton(
                 selected = isSelected,
                 onClick = onClick,

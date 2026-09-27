@@ -216,8 +216,14 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
      * 3. Everything else - the app's own copy and the fraud alert, which exist in
      *    both languages - follows the language the elder chose.
      */
-    private fun voiceLocaleFor(text: String, isGuidance: Boolean): Locale =
-        if (isGuidance || DEVANAGARI.containsMatchIn(text)) HINDI_LOCALE else voiceLocale()
+    private fun voiceLocaleFor(text: String, isGuidance: Boolean): Locale {
+        // Devanagari text is always spoken by the Hindi voice, whatever the preference.
+        if (DEVANAGARI.containsMatchIn(text)) return HINDI_LOCALE
+        // Guidance text follows the guidance language preference.
+        if (isGuidance) return voiceLocale()
+        // App UI copy follows the app language preference.
+        return if (localPrefs.getAppLanguage() == "en") ENGLISH_LOCALE else HINDI_LOCALE
+    }
 
     /** Apply a voice, falling back to plain English when a device lacks en-IN. */
     private fun applyVoice(locale: Locale): Boolean {

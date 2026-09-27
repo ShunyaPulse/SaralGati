@@ -10,10 +10,7 @@ import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import {
-  sentinelExplanation,
-  shouldInterceptFraud,
-} from "@/lib/fraudSentinel";
+import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraudSentinel";
 import {
   analyzeForFraudWithAdvisor,
   INTERACTIVE_ADVISOR_TIMEOUT_MS,
@@ -37,6 +34,7 @@ const askRequestSchema = z.object({
     )
     .optional()
     .default([]),
+  guidance_lang: z.enum(["hi", "en"]).optional().default("hi"),
 });
 
 async function recordModelInteraction(params: {
@@ -114,6 +112,7 @@ export async function POST(req: NextRequest) {
       question: safeQuestion,
       ui_elements: safeUIElements,
       conversation_history: safeConversationHistory,
+      guidance_lang: guidanceLang,
     } = parseResult.data;
 
     // 3. Apply strict AI processing rate limit (30 req/min per device/IP, 120 for flywheel)
@@ -232,6 +231,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const EN_FAST_PATH_MAP: Record<string, string> = {
+      "Video call karne ke liye yahan video call button par dabayein.":
+        "Tap here on the video call button to start a video call.",
+      "Video ya audio call lagane ke liye niche Calls par dabayein, ya jis vyakti se baat karni hai unki chat kholein.":
+        "Tap Calls at the bottom or open a chat to start a call.",
+      "Call karne ke liye yahan dabayein.": "Tap here to make a call.",
+      "Call lagane ke liye niche Calls par dabayein, ya kisi ki chat kholein.":
+        "Tap Calls at the bottom or open a chat to make a call.",
+      "Status (Updates) dekhne ke liye yahan dabayein.":
+        "Tap here to view Status updates.",
+      "Naya message bhejne ke liye yahan dabayein.":
+        "Tap here to send a new message.",
+      "Number dial karne ke liye yahan dabayein.": "Tap here to dial a number.",
+      "Sampark (Contacts) dekhne ke liye yahan dabayein.":
+        "Tap here to view contacts.",
+      "Photo ya post daalne ke liye yahan dabayein.":
+        "Tap here to create a post or share a photo.",
+      "Video dekhne ke liye yahan dabayein.": "Tap here to watch videos.",
+      "Video khojne ke liye yahan dabayein.": "Tap here to search for videos.",
+      "Shorts dekhne ke liye yahan dabayein.": "Tap here to watch Shorts.",
+      "Is photo ko kisi ko bhejne ke liye yahan share dabayein.":
+        "Tap share here to send this photo.",
+      "Is photo ko delete karne ke liye yahan dabayein.":
+        "Tap here to delete this photo.",
+      "Naya message bhejne ke liye yahan click karein.":
+        "Tap here to send a new message.",
+      "Apna message ya OTP padhne ke liye yahan dabayein.":
+        "Tap here to read your message or OTP.",
+      "Naya contact add karne ke liye yahan dabayein.":
+        "Tap here to add a new contact.",
+      "Aapki madad ke liye yahan dabayein.": "Tap here to proceed.",
+    };
+
     // === METHOD 1: BACKEND FAST-PATH ENGINE ===
     // The per-app rule chain lives in lib/agentFastPath so this slice of the
     // product can be tested without a device token, database or Redis.
@@ -242,8 +274,12 @@ export async function POST(req: NextRequest) {
         safeUIElements,
       );
       if (fastPath) {
+        const explanation =
+          guidanceLang === "en"
+            ? (EN_FAST_PATH_MAP[fastPath.explanation] ?? fastPath.explanation)
+            : fastPath.explanation;
         finalResult = {
-          explanation: fastPath.explanation,
+          explanation,
           highlightIndex: fastPath.index,
           source: "fast_path",
           modelUsed: "fast_path_rules",
@@ -305,13 +341,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.${knownHabitsStr}
-The user is looking at an Android app: ${safeAppPackage}.
-Here are the numbered interactive elements on their screen:
-${formattedElements}
-
-Instructions:
-1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
+      const langInstruction =
+        guidanceLang === "en"
+          ? `1. Answer the user's question in 1 or 2 simple, comforting English sentences.
 2. Elements on screen are prefixed with their role:
    - [BUTTON]: Clickable button or icon that can be tapped.
    - [INPUT]: Text input box for typing.
@@ -320,7 +352,25 @@ Instructions:
 3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
 4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
 5. If no specific element needs to be tapped, do NOT output any TARGET tag.
-6. Do not mention that you are an AI. Only output the Hinglish sentence.
+6. Do not mention that you are an AI. Only output the English sentence.`
+          : `1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.
+2. Elements on screen are prefixed with their role:
+   - [BUTTON]: Clickable button or icon that can be tapped.
+   - [INPUT]: Text input box for typing.
+   - [TOGGLE]: Switch or checkbox.
+   - [TEXT]: Plain static non-clickable text or title.
+3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.
+4. If your answer directs the user to tap or look at a specific element on screen, append " TARGET:[index]" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).
+5. If no specific element needs to be tapped, do NOT output any TARGET tag.
+6. Do not mention that you are an AI. Only output the Hinglish sentence.`;
+
+      const systemPrompt = `You are SaralGati, a patient, warm companion for Indian elders.${knownHabitsStr}
+The user is looking at an Android app: ${safeAppPackage}.
+Here are the numbered interactive elements on their screen:
+${formattedElements}
+
+Instructions:
+${langInstruction}
 
 Few-shot Grounding Examples:
 ${fewShots}`;

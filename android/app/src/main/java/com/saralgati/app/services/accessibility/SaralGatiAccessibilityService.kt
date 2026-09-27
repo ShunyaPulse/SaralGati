@@ -707,7 +707,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             Log.i(TAG, "Extracted ${elements.size} elements (below-fold included) from $appPackage")
 
             try {
-                val request = ScreenContextRequest(appPackage, elements)
+                val request = ScreenContextRequest(appPackage, elements, localPrefs.getGuidanceLang())
                 val response = NetworkModule.agentApi.explainScreen(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
@@ -765,7 +765,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     appPackage,
                     elements,
                     question,
-                    conversationHistory.toList()
+                    conversationHistory.toList(),
+                    localPrefs.getGuidanceLang()
                 )
                 val response = NetworkModule.agentApi.askQuestion(request)
                 if (response.isSuccessful && response.body()?.success == true) {

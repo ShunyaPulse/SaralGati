@@ -55,7 +55,8 @@ data class ApiResponse<T>(
 @JsonClass(generateAdapter = true)
 data class ScreenContextRequest(
     @Json(name = "app_package") val appPackage: String,
-    @Json(name = "ui_elements") val uiElements: List<String>
+    @Json(name = "ui_elements") val uiElements: List<String>,
+    @Json(name = "guidance_lang") val guidanceLang: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -86,7 +87,8 @@ data class AskContextRequest(
     @Json(name = "app_package") val appPackage: String,
     @Json(name = "ui_elements") val uiElements: List<String>,
     val question: String,
-    @Json(name = "conversation_history") val conversationHistory: List<ChatMessage> = emptyList()
+    @Json(name = "conversation_history") val conversationHistory: List<ChatMessage> = emptyList(),
+    @Json(name = "guidance_lang") val guidanceLang: String? = null
 )
 
 @JsonClass(generateAdapter = true)

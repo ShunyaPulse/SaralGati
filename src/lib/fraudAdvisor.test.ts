@@ -215,7 +215,12 @@ test('the advisor sends the same prompt and payload shape the export trains on',
     await analyzeForFraudWithAdvisor(THIN_DANGEROUS);
     assert.equal(stub.calls.length, 1);
     const { url, body } = stub.calls[0];
-    assert.match(url, /api\.cloudflare\.com\/client\/v4\/accounts\/acct\/ai\/run\//);
+    // Pinned exactly rather than matched loosely: an unanchored URL regex would
+    // also accept arbitrary hosts wrapping this path.
+    assert.equal(
+      url,
+      'https://api.cloudflare.com/client/v4/accounts/acct/ai/run/@cf/meta/llama-3.1-8b-instruct-fast',
+    );
     assert.equal(body.lora, 'saralgati-elder-llama31-8b');
     assert.equal(body.messages[0].content, FRAUD_ANALYST_SYSTEM_PROMPT);
     assert.equal(JSON.parse(body.messages[1].content).app_package, null);

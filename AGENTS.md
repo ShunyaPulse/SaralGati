@@ -9,6 +9,7 @@ All AI models, assistants, and automated coding agents operating in this reposit
 Before committing changes or preparing a release, the AI model MUST inspect all modified files, classify the changes into one of three semantic categories, and update `version.json` accordingly:
 
 ### A. Major Update (`MAJOR.0.0`)
+
 - **When to use**: Major architectural redesign, core accessibility pipeline rewrite, major framework or platform migration, or introducing an entirely new standalone capability pillar (e.g., `5.0.0` -> `6.0.0`).
 - **Rule**:
   - `MAJOR = MAJOR + 1`
@@ -17,6 +18,7 @@ Before committing changes or preparing a release, the AI model MUST inspect all 
   - `version_code = version_code + 1`
 
 ### B. Minor Update (`MAJOR.MINOR.0`)
+
 - **When to use**: New features, new capabilities (e.g., adding a new language, new Phone Doctor diagnostic tool, new flow categories, new dashboard analytics tab, new background worker), backward-compatible functional expansions.
 - **Rule**:
   - `MAJOR` stays the same
@@ -25,6 +27,7 @@ Before committing changes or preparing a release, the AI model MUST inspect all 
   - `version_code = version_code + 1` (e.g., `5.0.0` -> `5.1.0`)
 
 ### C. Patch Update (`MAJOR.MINOR.PATCH`)
+
 - **When to use**: Bug fixes, security fixes, CodeQL/lint error resolutions, edge-case hardening, performance optimizations, copy/i18n adjustments, minor UI polish, documentation, or dependency bumps.
 - **Rule**:
   - `MAJOR` and `MINOR` stay the same
@@ -33,6 +36,7 @@ Before committing changes or preparing a release, the AI model MUST inspect all 
   - `version_code = version_code + 1`
 
 ### Always Update `version.json`:
+
 1. `version_name`: Set to the new `MAJOR.MINOR.PATCH` string.
 2. `version_code`: Must be an integer strictly greater than the previous code (ensures Android `PackageInstaller` never rejects the update as a downgrade).
 3. `changelog`: Write a crisp, human-readable summary of the exact changes included.

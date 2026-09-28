@@ -81,6 +81,10 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private var btnExplainView: Button? = null
     private var btnAskView: Button? = null
 
+    private var isTtsReady = false
+    private var pendingSpeechText: String? = null
+    private var pendingSpeechIsExplanation: Boolean = false
+
     private val explanationReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action
@@ -120,7 +124,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 // Phone went to sleep: stop any speech immediately and take the
                 // warning card / highlight down so nothing keeps talking.
                 Log.i(TAG, "Screen off / phone asleep: stopping speech and collapsing overlay")
-                if (this@FloatingHelperService::tts.isInitialized) tts.stop()
+                pendingSpeechText = null
+                if (isTtsReady) tts.stop()
                 highlightHandler.post { removeCurrentHighlight() }
                 collapseHelper()
             }
@@ -170,7 +175,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_DISMISS_FRAUD_WARNING) {
-            if (this::tts.isInitialized) tts.stop()
+            pendingSpeechText = null
+            if (isTtsReady) tts.stop()
             highlightHandler.post { removeCurrentHighlight() }
             collapseHelper()
         } else if (intent?.action == ACTION_LANGUAGE_CHANGED) {
@@ -198,6 +204,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
+            isTtsReady = true
             applyVoice(voiceLocale())
 
             tts.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
@@ -213,6 +220,15 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
                 override fun onError(utteranceId: String?) {}
             })
+
+            val text = pendingSpeechText
+            if (!text.isNullOrBlank()) {
+                val isExp = pendingSpeechIsExplanation
+                pendingSpeechText = null
+                speak(text, isExp)
+            }
+        } else {
+            Log.e(TAG, "TTS initialization failed with status: $status")
         }
     }
 
@@ -259,18 +275,25 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private fun speak(text: String, isExplanation: Boolean = false) {
         if (!localPrefs.getBoolean("pref_voice", true)) return
         if (text.isBlank()) return
-        if (!this::tts.isInitialized) return
         val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
         if (pm?.isInteractive == false) {
             Log.i(TAG, "Screen is off / phone asleep: suppressing speech")
-            tts.stop()
+            if (isTtsReady) tts.stop()
+            pendingSpeechText = null
+            return
+        }
+        if (!isTtsReady) {
+            Log.i(TAG, "TTS not ready yet: queuing pending speech ('$text')")
+            pendingSpeechText = text
+            pendingSpeechIsExplanation = isExplanation
             return
         }
         // Per-utterance voice: the engine's language is set for the sentence
         // about to be spoken, not once at service start.
         applyVoice(voiceLocaleFor(text, isGuidance = isExplanation))
         val utteranceId = if (isExplanation) "explanation_done" else "standard_msg"
-        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        Log.i(TAG, "TTS speak requested (result=$result): '$text'")
     }
 
     /**
@@ -625,7 +648,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 windowManager.removeView(expandedView)
                 windowManager.addView(bubbleView, paramsBubble)
                 isExpanded = false
-                tts.stop()
+                if (isTtsReady) tts.stop()
             } catch (e: WindowManager.BadTokenException) {
                 Log.e(TAG, "Failed to collapse overlay: bad token", e)
             }

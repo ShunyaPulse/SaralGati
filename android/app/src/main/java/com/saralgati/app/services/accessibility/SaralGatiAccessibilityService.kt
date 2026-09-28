@@ -46,8 +46,25 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     // the warning and speech are immediately dismissed.
     private var activeFraudPackage: String? = null
     private var activeFraudWindow: String? = null
+    private var currentActivityName: String? = null
     private var hasSpokenForActiveFraud = false
     private var lastFraudWarnedAt = 0L
+
+    /**
+     * Determines whether [cls] is a genuine Android Activity rather than an internal View/Widget.
+     * Prevents widget layouts or scrolling views (e.g. FrameLayout, RecyclerView) from being
+     * misidentified as screen transitions.
+     */
+    private fun isActualActivity(cls: String, pkg: String): Boolean {
+        if (cls.isBlank()) return false
+        if (cls.startsWith("android.widget.") ||
+            cls.startsWith("android.view.") ||
+            cls.startsWith("androidx.") ||
+            cls.startsWith("android.webkit.")) {
+            return false
+        }
+        return cls.endsWith("Activity") || (pkg.isNotEmpty() && cls.startsWith(pkg))
+    }
 
     // Variables for Continuous Learning Implicit Feedback Loop
     private var activeInteractionId: String? = null
@@ -180,11 +197,19 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val cls = event.className?.toString() ?: ""
                 Log.d(TAG, "Window switched: $pkg / $cls")
 
-                // If user leaves the screen/app where fraud was detected, dismiss immediately:
+                if (isActualActivity(cls, pkg)) {
+                    currentActivityName = cls
+                }
+
+                // If user genuinely leaves the screen/app where fraud was detected, dismiss immediately.
+                // Do NOT dismiss for SaralGati's own overlay, System UI, keyboard, or view/scroll events!
                 if (activeFraudPackage != null) {
-                    val packageChanged = pkg.isNotEmpty() && pkg != activeFraudPackage
-                    val activityChanged = cls.isNotEmpty() && activeFraudWindow != null && cls != activeFraudWindow
-                    if (packageChanged || activityChanged) {
+                    val isOwnApp = pkg == packageName
+                    val isSystemUi = pkg == "com.android.systemui" || pkg.contains("inputmethod")
+                    val packageChanged = pkg.isNotEmpty() && !isOwnApp && !isSystemUi && pkg != activeFraudPackage
+                    val activityChanged = isActualActivity(cls, pkg) && activeFraudWindow != null && cls != activeFraudWindow
+
+                    if (packageChanged || (pkg == activeFraudPackage && activityChanged)) {
                         Log.i(
                             TAG,
                             "User switched away from fraud screen ($activeFraudPackage/$activeFraudWindow -> $pkg/$cls): dismissing warning"
@@ -193,7 +218,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     }
                 }
 
-                scanScreenForFraud(pkg, cls)
+                scanScreenForFraud(pkg, currentActivityName ?: cls)
                 handleWindowStateChanged(pkg, cls)
             }
 
@@ -201,11 +226,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 if (!isScreenInteractive()) return
                 val pkg = event.packageName?.toString() ?: ""
                 // If this package is already actively showing fraud warning and has already spoken,
-                // do not re-scan or re-trigger speech on content changes
+                // do not re-scan or re-trigger speech on content changes (e.g. scrolling).
+                // The warning card remains visible and stable while scrolling!
                 if (pkg.isNotEmpty() && pkg == activeFraudPackage && hasSpokenForActiveFraud) {
                     return
                 }
-                scanScreenForFraud(pkg, activeFraudWindow)
+                scanScreenForFraud(pkg, currentActivityName)
             }
 
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
@@ -447,11 +473,6 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             lastFraudSignature = signature
 
             if (!verdict.isDangerous) {
-                // The elder left the trap for a safe screen: take the lingering
-                // warning card down.
-                if (offline == null && activeFraudPackage == pkg) {
-                    clearFraudWarning()
-                }
                 return
             }
 
@@ -508,15 +529,16 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
     /**
      * True while `pkg` is genuinely the active screen in the foreground.
-     * When display is off or window root is null, returns false to prevent
-     * hovering over lockscreen or background sleep.
+     * When display is off, returns false to prevent hovering during background sleep.
+     * If rootInActiveWindow is temporarily null (during layout passes or overlay display),
+     * returns true rather than failing into silence.
      */
     private fun isPackageInForeground(pkg: String): Boolean {
         if (!isScreenInteractive()) return false
-        val root = rootInActiveWindow ?: return false
+        val root = rootInActiveWindow ?: return true
         val current = root.packageName?.toString()
         root.recycle()
-        return current == pkg
+        return current == null || current == pkg || current == packageName || current == "com.android.systemui"
     }
 
     private fun dismissFraudWarning() {
@@ -555,7 +577,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         Log.w(TAG, "Fraud sentinel: $level/$category on $pkg ($cls)")
         activeFraudPackage = pkg
-        activeFraudWindow = cls
+        activeFraudWindow = if (isActualActivity(cls ?: "", pkg)) cls else currentActivityName
         hasSpokenForActiveFraud = true
         lastFraudWarnedAt = System.currentTimeMillis()
         warnElderAboutFraud(title, message, advice, safeBounds)

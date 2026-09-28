@@ -1,7 +1,7 @@
 {
-  "version_code": 64,
-  "version_name": "5.0.1",
+  "version_code": 65,
+  "version_name": "5.0.2",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix fraud warning overlay stability on scroll and ensure reliable TTS speech delivery via initialization queue."
+  "changelog": "AI accuracy upgrade: both engine answers are validated before arbitration, the teacher model is self-consistency sampled, few-shot retrieval uses BM25, and only grounded answers are cached. Fixes real 'Video call' buttons and emoji call previews being misread as noise."
 }

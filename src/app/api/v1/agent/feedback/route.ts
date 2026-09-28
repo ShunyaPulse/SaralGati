@@ -4,7 +4,11 @@ import { queryOne } from '@/lib/db';
 import redis, { cacheSet, rateLimiter } from '@/lib/redis';
 import { isFlywheelRequest, validateDeviceToken } from '@/lib/agent-auth';
 import { normalizeGuidanceLang } from '@/lib/guidanceLanguage';
-import { normalizeScreenQuestion, screenCacheKey } from '@/lib/screenCache';
+import {
+  correctionExplanation,
+  normalizeScreenQuestion,
+  screenCacheKey,
+} from '@/lib/screenCache';
 
 /**
  * Feedback drives the self-learning cache: a verified answer is promoted to a
@@ -18,6 +22,24 @@ const feedbackSchema = z.object({
   feedback: z.enum(['tapped_highlight', 'tapped_other', 'timeout', 'disliked']),
   actual_tapped_index: z.number().int().min(0).max(500).nullish(),
 });
+
+/** `ui_elements` is jsonb: an array already, or a string on older drivers. */
+function parseUiElements(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((el): el is string => typeof el === 'string');
+  }
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed)
+        ? parsed.filter((el): el is string => typeof el === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
 
 const STATUS_BY_FEEDBACK = {
   tapped_highlight: 'verified',
@@ -71,6 +93,7 @@ export async function POST(req: NextRequest) {
       suggested_index: number | null;
       explanation: string;
       guidance_lang: string | null;
+      ui_elements: unknown;
     }>(
       `UPDATE model_interactions
        SET feedback_status = $1,
@@ -85,7 +108,7 @@ export async function POST(req: NextRequest) {
            END,
            updated_at = NOW()
        WHERE id = $3 AND ($4::uuid IS NULL OR elder_id = $4::uuid)
-       RETURNING id, app_package, screen_hash, question, suggested_index, explanation, guidance_lang`,
+       RETURNING id, app_package, screen_hash, question, suggested_index, explanation, guidance_lang, ui_elements`,
       [newStatus, sanitizedIndex, interaction_id, elderId]
     );
 
@@ -100,12 +123,16 @@ export async function POST(req: NextRequest) {
     let demoted = false;
 
     const normalizedQuestion = normalizeScreenQuestion(updatedRow.question);
+    const lang = normalizeGuidanceLang(updatedRow.guidance_lang);
+    // The screen as the companion sent it, so a correction can name the button
+    // the elder actually tapped instead of caching a contentless "Tap here.".
+    const uiElements = parseUiElements(updatedRow.ui_elements);
 
     const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
     // Same builder the ask route uses, so a promotion/eviction lands on the key
     // that route actually reads - and on the one for the elder's language.
     const cacheKey = screenCacheKey({
-      lang: normalizeGuidanceLang(updatedRow.guidance_lang),
+      lang,
       appPackage: updatedRow.app_package,
       screenHash: updatedRow.screen_hash,
       normalizedQuestion,
@@ -166,7 +193,12 @@ export async function POST(req: NextRequest) {
             await cacheSet(
               cacheKey,
               {
-                explanation: updatedRow.explanation,
+                // Name the corrected element. The model's own sentence is the
+                // one that pointed at the wrong button, so it is not reused.
+                explanation: correctionExplanation({
+                  elementLabel: uiElements[sanitizedIndex],
+                  lang,
+                }),
                 highlight_index: sanitizedIndex,
               },
               30 * 86400 // 30-day extended TTL for corrected golden answer

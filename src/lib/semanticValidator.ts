@@ -8,24 +8,57 @@ export interface SemanticValidationResult {
   originalIndex: number | null;
 }
 
+// Global message preview/subtitle noise (e.g. "📹 Video call", "Missed video call", "Audio call")
+// The `u` flag matters: without it an emoji is two code units and cannot be
+// matched by a single-character class, so "📹 Missed call" silently was not
+// recognised as a preview at all.
+const PREVIEW_ONLY_REGEXES = [
+  /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/iu,
+  /^[📹🎥📞📱]\s*$/iu
+];
+
 const NOISE_REGEXES = [
   /\b\d+\s*(videos?|photos?|messages?|audios?|items?)\b/i,
   /\b(yesterday|today|tomorrow)\b/i,
   /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i,
   /\b(am|pm)\b/i,
   /\b(sent|delivered|read|typing\.\.\.|online|last seen)\b/i,
-  // Global message preview/subtitle noise (e.g. "📹 Video call", "Missed video call", "Audio call")
-  /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/i,
-  /^[📹🎥📞📱]\s*$/i
+  ...PREVIEW_ONLY_REGEXES
 ];
 
 function cleanElementText(text: string): string {
   return text.replace(/^\d+:\s*/, '').replace(/^\[below-fold\]\s*/i, '').replace(/^\[.*?\]\s*/, '').trim().toLowerCase();
 }
 
-export function isNoiseElement(elementText: string): boolean {
+/** True when the client told us this element accepts a tap or typing. */
+export function isActionableElement(elementText: string): boolean {
+  return /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(
+    elementText.replace(/^\d+:\s*/, '').replace(/^\[below-fold\]\s*/i, '').trim(),
+  );
+}
+
+/**
+ * The preview patterns only apply to *static* text.
+ *
+ * They exist to catch a chat list's call preview ("📹 Video call", "Missed
+ * call") so the companion never points an elder at a line of status text. But
+ * WhatsApp's own in-chat control is labelled exactly "Video call", and once the
+ * role tag is stripped the two are indistinguishable - so a real button was
+ * being treated as noise, its correct answer downscored (-35) and the target
+ * "recovered" onto some unrelated element. A screen element the client reports
+ * as tappable is never a preview, so these two patterns are skipped for
+ * [BUTTON]/[INPUT]/[TOGGLE] whichever way the caller knows the role.
+ */
+export function isNoiseElement(
+  elementText: string,
+  options: { actionable?: boolean } = {},
+): boolean {
   const lower = cleanElementText(elementText);
-  return NOISE_REGEXES.some((regex) => regex.test(lower));
+  const actionable = options.actionable ?? isActionableElement(elementText);
+  const applicable = actionable
+    ? NOISE_REGEXES.filter((regex) => !PREVIEW_ONLY_REGEXES.includes(regex))
+    : NOISE_REGEXES;
+  return applicable.some((regex) => regex.test(lower));
 }
 
 // Universal affirmative/navigational keywords acceptable for generic confirmation steps
@@ -73,9 +106,12 @@ export function validateSemanticTarget(
 
   const targetEl = uiElements[rawTargetIndex];
   const targetClean = cleanElementText(targetEl);
+  // The role is read off the raw element: `targetClean` has it stripped, and a
+  // tappable "Video call" button must not be mistaken for a call preview.
+  const isTargetActionable = isActionableElement(targetEl);
 
   // 2. Reject noise elements (e.g. "3 videos", "Yesterday", "10:45 AM")
-  if (isNoiseElement(targetClean)) {
+  if (isNoiseElement(targetClean, { actionable: isTargetActionable })) {
     const recovery = matchElderIntent(question, uiElements);
     return {
       isValid: recovery.highlightIndex !== null,
@@ -88,11 +124,6 @@ export function validateSemanticTarget(
 
   // 3. Interactive Role Check
   // If user is asking for an action and LLM targeted static [TEXT]
-  const isTargetActionable =
-    targetEl.toLowerCase().startsWith('[button]') ||
-    targetEl.toLowerCase().startsWith('[input]') ||
-    targetEl.toLowerCase().startsWith('[toggle]');
-
   if (!isTargetActionable) {
     // If target is [TEXT], check if there is an actionable element matching the intent
     const recovery = matchElderIntent(question, uiElements);

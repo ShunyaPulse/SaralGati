@@ -1,6 +1,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeScreenQuestion, screenCacheKey } from './screenCache';
+import {
+  correctionExplanation,
+  normalizeScreenQuestion,
+  screenCacheKey,
+} from './screenCache';
 
 /**
  * The ask route reads and writes this key and the feedback route has to promote
@@ -59,5 +63,43 @@ describe('the screen cache key is shared, stable and language-scoped', () => {
       normalizeScreenQuestion('पेंशन का पैसा   आया?'),
       'पेंशन का पैसा आया',
     );
+  });
+});
+
+/**
+ * A correction is cached for 30 days and served to every elder on that screen,
+ * so the sentence it caches has to name the button the elder actually tapped.
+ * The generic placeholder it used to cache named nothing.
+ */
+describe('the spoken line for a corrected answer', () => {
+  test('quotes the element the elder chose, in their language', () => {
+    assert.equal(
+      correctionExplanation({ elementLabel: '[BUTTON] Electricity Bill', lang: 'en' }),
+      'Tap "Electricity Bill" here.',
+    );
+    assert.equal(
+      correctionExplanation({ elementLabel: '[BUTTON] Electricity Bill', lang: 'hi' }),
+      'Yahan "Electricity Bill" par dabayein.',
+    );
+  });
+
+  test('the role tag, folding marker and list prefix are never spoken', () => {
+    assert.equal(
+      correctionExplanation({ elementLabel: '4:[BELOW-FOLD] [BUTTON] PNR Enquiry', lang: 'en' }),
+      'Tap "PNR Enquiry" here.',
+    );
+  });
+
+  test('a long label is trimmed rather than read out in full', () => {
+    const label = '[TEXT] Aapki purani aur nayi dono jaankari yahan dikhayi jayegi';
+    const spoken = correctionExplanation({ elementLabel: label, lang: 'hi' });
+
+    assert.ok(spoken.endsWith('par dabayein.'));
+    assert.ok(spoken.length < 70, `expected a short line, got: ${spoken}`);
+  });
+
+  test('an index the client no longer reports falls back to the placeholder', () => {
+    assert.equal(correctionExplanation({ elementLabel: null, lang: 'en' }), 'Tap here.');
+    assert.equal(correctionExplanation({ elementLabel: '   ', lang: 'hi' }), 'Yahan dabayein.');
   });
 });

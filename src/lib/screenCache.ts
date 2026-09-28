@@ -27,6 +27,43 @@ export function normalizeScreenQuestion(question: string): string {
     .replace(/\s+/g, " ");
 }
 
+/**
+ * List index, folding marker and role tag are control data, never spoken. The
+ * index is stripped first: the companion's own format is `3:[BUTTON] Calls`, so
+ * a leading `3:` would otherwise stop every other anchor from matching.
+ */
+function cleanElementLabel(elementLabel: string): string {
+  return elementLabel
+    .replace(/^\d+:\s*/, "")
+    .replace(/^\[BELOW-FOLD\]\s*/i, "")
+    .replace(/^\[[^\]]*\]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 40);
+}
+
+/**
+ * The spoken line for a *corrected* answer - the one the elder reached by
+ * tapping a different button than the model suggested.
+ *
+ * A correction used to be cached with the generic placeholder "Tap here.",
+ * which names nothing: the elder then hears a sentence that would fit any button
+ * on any screen, for the next 30 days, on every phone that shares the screen.
+ * Quoting the element's own label back is free, deterministic, and turns the
+ * correction into an answer about the button the elder actually chose. The
+ * placeholder remains only for an index the client no longer reports.
+ */
+export function correctionExplanation(params: {
+  elementLabel: string | null | undefined;
+  lang: GuidanceLang;
+}): string {
+  const label = cleanElementLabel(params.elementLabel ?? "");
+  if (!label) return params.lang === "en" ? "Tap here." : "Yahan dabayein.";
+  return params.lang === "en"
+    ? `Tap "${label}" here.`
+    : `Yahan "${label}" par dabayein.`;
+}
+
 export function screenCacheKey(params: {
   lang: GuidanceLang;
   appPackage: string;

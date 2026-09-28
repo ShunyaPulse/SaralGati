@@ -911,8 +911,6 @@ export function matchElderIntent(
 ): { highlightIndex: number | null; matchedIntent: IntentDefinition | null; explanation: string } {
   const qLower = question.toLowerCase();
 
-  const isNoise = (txt: string) => isNoiseElement(txt);
-
   // If the user is asking a question (how, what, where, kaise, kahan), bypass fast-path and let the LLM explain it.
   const isQuestion = /\b(kaise|kahan|kaha|kya|kyu|kaun|how|what|where|why|who)\b/i.test(qLower);
   if (isQuestion) {

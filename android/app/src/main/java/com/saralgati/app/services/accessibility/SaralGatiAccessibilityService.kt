@@ -185,7 +185,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     val packageChanged = pkg.isNotEmpty() && pkg != activeFraudPackage
                     val activityChanged = cls.isNotEmpty() && activeFraudWindow != null && cls != activeFraudWindow
                     if (packageChanged || activityChanged) {
-                        Log.i(TAG, "User switched away from fraud screen ($activeFraudPackage/$activeFraudWindow -> $pkg/$cls): dismissing warning")
+                        Log.i(
+                            TAG,
+                            "User switched away from fraud screen ($activeFraudPackage/$activeFraudWindow -> $pkg/$cls): dismissing warning"
+                        )
                         clearFraudWarning()
                     }
                 }

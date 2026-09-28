@@ -65,11 +65,13 @@ jobs:
           INPUT_NAME: ${{ inputs.version_name }}
           RUN_NUM: ${{ github.run_number }}
         run: |
-          CODE="${INPUT_CODE:-$RUN_NUM}"
-          BASE_VERSION=$(jq -r '.version_name' version.json 2>/dev/null || echo "1.1.0")
-          MAJOR_MINOR=$(echo "$BASE_VERSION" | cut -d'.' -f1,2)
-          MAJOR_MINOR="${MAJOR_MINOR:-1.1}"
-          NAME="${INPUT_NAME:-$MAJOR_MINOR.$RUN_NUM}"
+          BASE_VERSION=$(jq -r '.version_name' version.json 2>/dev/null || echo "5.0.0")
+          BASE_CODE=$(jq -r '.version_code' version.json 2>/dev/null || echo "$RUN_NUM")
+          CODE="${INPUT_CODE:-$BASE_CODE}"
+          if [ "$CODE" -lt "$RUN_NUM" ]; then
+            CODE="$RUN_NUM"
+          fi
+          NAME="${INPUT_NAME:-$BASE_VERSION}"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 

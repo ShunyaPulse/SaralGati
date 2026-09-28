@@ -30,7 +30,7 @@ export async function GET() {
           if (parsed && typeof parsed.version_code === 'number') {
             const data = {
               version_code: parsed.version_code,
-              version_name: parsed.version_name || `1.1.${parsed.version_code}`,
+              version_name: parsed.version_name || versionData.version_name,
               download_url: parsed.download_url || versionData.download_url,
               force_update: Boolean(parsed.force_update),
               changelog: parsed.changelog || versionData.changelog,

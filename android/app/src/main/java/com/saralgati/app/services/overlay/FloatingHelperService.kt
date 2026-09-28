@@ -44,6 +44,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         const val ACTION_SHOW_RAGE_TAP = "com.saralgati.app.ACTION_SHOW_RAGE_TAP"
         const val ACTION_SHOW_FRAUD_WARNING = "com.saralgati.app.ACTION_SHOW_FRAUD_WARNING"
         const val ACTION_DISMISS_FRAUD_WARNING = "com.saralgati.app.ACTION_DISMISS_FRAUD_WARNING"
+
         /** Sent by the app when the elder picks the other language. */
         const val ACTION_LANGUAGE_CHANGED = "com.saralgati.app.ACTION_LANGUAGE_CHANGED"
         const val EXTRA_FRAUD_TITLE = "fraud_title"
@@ -58,6 +59,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
          */
         private val DEVANAGARI = Regex("[\\u0900-\\u097F]")
         private val HINDI_LOCALE = Locale("hi", "IN")
+
         /** English (India) is the natural voice here; en-US is only a fallback. */
         private val ENGLISH_LOCALE = Locale("en", "IN")
 

@@ -1,7 +1,7 @@
 {
-  "version_code": 24,
-  "version_name": "1.1.24",
+  "version_code": 63,
+  "version_name": "5.0.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": ""
+  "changelog": "Bilingual (Hindi/English) companion, Real-time Anti-Fraud Scam Shield, hardened screen & sleep lifecycle, and Phone Doctor controls."
 }

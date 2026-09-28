@@ -46,12 +46,22 @@
 - **CodeQL Action Pinning**: In `.github/workflows/codeql.yml`, all `github/codeql-action` steps (`init`, `analyze`, `upload-sarif`) must be pinned to the exact same commit SHA to prevent version mismatch crashes and satisfy Semgrep immutable action tag rules.
 - **Docker Dependency Resolution**: Always keep `RUN npm ci --legacy-peer-deps` in the `Dockerfile` to avoid `ERESOLVE` failures with peer-optional dependencies (such as `next-auth` and `nodemailer`).
 
-## 6. Versioning & Release Lifecycle Rules
+## 6. Versioning & Release Lifecycle Rules (AI Model Instructions)
 
-- **Major Milestone Bumps (`1.2.1`, `1.3.1`, `1.4.1`...)**:
-  - Only bump the milestone version in `version.json` (e.g. to `1.2.1`, then `1.3.1`, `1.4.1`) when a major change or architectural milestone is completely implemented AND thoroughly verified/tested.
-- **Automated Incremental Builds (`1.1.28` -> `1.1.29`...)**:
-  - For minor changes, ongoing iterations, untested versions, or runs where tests failed, let the CI workflow automatically bump the patch number (e.g., `1.1.<run_number>` or `<major_minor>.<run_number>`) via GitHub Actions.
+Every AI assistant/model preparing a commit or release MUST inspect the changes, classify the update level, and update `version.json` accordingly before committing or pushing:
+
+- **Major Update (`MAJOR.0.0`)**:
+  - **Triggers**: Architectural paradigm shifts, core accessibility pipeline redesign, major framework migrations, or introducing an entirely new standalone capability pillar (e.g. `5.0.0` -> `6.0.0`).
+  - **Action**: Increment `MAJOR` by 1, reset `MINOR` to 0, reset `PATCH` to 0. Increment `version_code` by 1.
+- **Minor Update (`MAJOR.MINOR.0`)**:
+  - **Triggers**: New features, new capabilities (e.g. adding a new language, new Phone Doctor diagnostic tool, new flow categories, new dashboard analytics tab), non-breaking feature additions.
+  - **Action**: Keep `MAJOR`, increment `MINOR` by 1, reset `PATCH` to 0 (e.g. `5.0.0` -> `5.1.0`). Increment `version_code` by 1.
+- **Patch Update (`MAJOR.MINOR.PATCH`)**:
+  - **Triggers**: Bug fixes, security fixes, CodeQL/lint fixes, edge-case hardening, performance optimizations, copy/i18n adjustments, minor UI polish, documentation, or dependency bumps.
+  - **Action**: Keep `MAJOR` and `MINOR`, increment `PATCH` by 1 sequentially (e.g. `5.0.0` -> `5.0.1`, `5.0.1` -> `5.0.2`). Never skip numbers or use CI run numbers for the patch. Increment `version_code` by 1.
+- **Invariants**:
+  - Always update `version_name`, `version_code`, and `changelog` in `version.json`.
+  - Android `version_code` must strictly increase monotonically so Android `PackageInstaller` never rejects in-app updates as a downgrade.
 
 ## 7. Flywheel & Active Learning Invariants
 

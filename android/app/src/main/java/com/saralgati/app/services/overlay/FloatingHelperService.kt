@@ -108,9 +108,16 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 showVisualCue(left, top, right, bottom)
             } else if (action == "com.saralgati.app.ACTION_CLEAR_VISUAL_CUE") {
                 highlightHandler.post { removeCurrentHighlight() }
-            } else if (action == Intent.ACTION_SCREEN_OFF) {
+            }
+        }
+    }
+
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
                 // Phone went to sleep: stop any speech immediately and take the
                 // warning card / highlight down so nothing keeps talking.
+                Log.i(TAG, "Screen off / phone asleep: stopping speech and collapsing overlay")
                 if (this@FloatingHelperService::tts.isInitialized) tts.stop()
                 highlightHandler.post { removeCurrentHighlight() }
                 collapseHelper()
@@ -129,12 +136,18 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             addAction("com.saralgati.app.ACTION_SPEAK_EXPLANATION")
             addAction("com.saralgati.app.ACTION_SHOW_VISUAL_CUE")
             addAction("com.saralgati.app.ACTION_CLEAR_VISUAL_CUE")
-            addAction(Intent.ACTION_SCREEN_OFF)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(explanationReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(explanationReceiver, filter)
+        }
+
+        val screenFilter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenStateReceiver, screenFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(screenStateReceiver, screenFilter)
         }
 
         createBubbleView()
@@ -156,6 +169,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_DISMISS_FRAUD_WARNING) {
             if (this::tts.isInitialized) tts.stop()
+            highlightHandler.post { removeCurrentHighlight() }
             collapseHelper()
         } else if (intent?.action == ACTION_LANGUAGE_CHANGED) {
             onLanguageChanged()
@@ -243,6 +257,13 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private fun speak(text: String, isExplanation: Boolean = false) {
         if (!localPrefs.getBoolean("pref_voice", true)) return
         if (text.isBlank()) return
+        if (!this::tts.isInitialized) return
+        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        if (pm?.isInteractive == false) {
+            Log.i(TAG, "Screen is off / phone asleep: suppressing speech")
+            tts.stop()
+            return
+        }
         // Per-utterance voice: the engine's language is set for the sentence
         // about to be spoken, not once at service start.
         applyVoice(voiceLocaleFor(text, isGuidance = isExplanation))
@@ -556,6 +577,12 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
      * elder may have TTS muted.
      */
     private fun showFraudWarning(title: String, message: String, advice: String) {
+        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        if (pm?.isInteractive == false) {
+            Log.i(TAG, "Phone in sleep / screen off: suppressing fraud warning overlay")
+            return
+        }
+
         val titleView = expandedView.findViewWithTag<TextView>("titleView")
         val bodyText = expandedView.findViewWithTag<TextView>("bodyView")
 
@@ -740,6 +767,11 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             unregisterReceiver(explanationReceiver)
         } catch (e: Exception) {
             Log.e(TAG, "Receiver not registered")
+        }
+        try {
+            unregisterReceiver(screenStateReceiver)
+        } catch (e: Exception) {
+            Log.e(TAG, "Screen state receiver not registered")
         }
         Log.i(TAG, "Floating Helper Service destroyed")
     }

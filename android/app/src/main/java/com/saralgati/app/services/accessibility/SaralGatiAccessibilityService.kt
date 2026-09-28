@@ -40,11 +40,13 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var lastFraudSignature: String? = null
     private var fraudScanInFlight = false
 
-    // Package whose trap is currently being warned about. While it is set the
-    // same trap is never announced again, and a fresh alert is throttled so an
-    // animated trap screen cannot re-speak on every content change. A safe
-    // screen, or the screen turning off, clears it.
-    private var fraudWarnedPackage: String? = null
+    // Active fraud tracking:
+    // Once warned on a screen, it is spoken ONCE and never re-spoken on content changes
+    // or periodic cooldowns. If the user leaves the screen/app or locks the phone,
+    // the warning and speech are immediately dismissed.
+    private var activeFraudPackage: String? = null
+    private var activeFraudWindow: String? = null
+    private var hasSpokenForActiveFraud = false
     private var lastFraudWarnedAt = 0L
 
     // Variables for Continuous Learning Implicit Feedback Loop
@@ -117,13 +119,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    // Phone is asleep: forget the last screen and take the warning
-                    // card down so nothing is re-spoken while the display is off.
-                    lastFraudSignature = null
-                    if (fraudWarnedPackage != null) {
-                        fraudWarnedPackage = null
-                        dismissFraudWarning()
-                    }
+                    // Phone is asleep: clear active fraud state, stop any speech and
+                    // take the warning card down so nothing is spoken while display is off.
+                    Log.i(TAG, "Screen off / phone in sleep: dismissing fraud warning")
+                    clearFraudWarning()
                 }
 
                 Intent.ACTION_SCREEN_ON -> {
@@ -164,7 +163,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             addAction(Intent.ACTION_SCREEN_ON)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(screenStateReceiver, screenFilter, Context.RECEIVER_NOT_EXPORTED)
+            registerReceiver(screenStateReceiver, screenFilter, Context.RECEIVER_EXPORTED)
         } else {
             registerReceiver(screenStateReceiver, screenFilter)
         }
@@ -180,14 +179,30 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val pkg = event.packageName?.toString() ?: ""
                 val cls = event.className?.toString() ?: ""
                 Log.d(TAG, "Window switched: $pkg / $cls")
-                scanScreenForFraud(pkg)
+
+                // If user leaves the screen/app where fraud was detected, dismiss immediately:
+                if (activeFraudPackage != null) {
+                    val packageChanged = pkg.isNotEmpty() && pkg != activeFraudPackage
+                    val activityChanged = cls.isNotEmpty() && activeFraudWindow != null && cls != activeFraudWindow
+                    if (packageChanged || activityChanged) {
+                        Log.i(TAG, "User switched away from fraud screen ($activeFraudPackage/$activeFraudWindow -> $pkg/$cls): dismissing warning")
+                        clearFraudWarning()
+                    }
+                }
+
+                scanScreenForFraud(pkg, cls)
                 handleWindowStateChanged(pkg, cls)
             }
 
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
-                // Catches text that appears without a window switch (an incoming
-                // WhatsApp message, a payment sheet drawn over the same activity).
-                scanScreenForFraud(event.packageName?.toString() ?: "")
+                if (!isScreenInteractive()) return
+                val pkg = event.packageName?.toString() ?: ""
+                // If this package is already actively showing fraud warning and has already spoken,
+                // do not re-scan or re-trigger speech on content changes
+                if (pkg.isNotEmpty() && pkg == activeFraudPackage && hasSpokenForActiveFraud) {
+                    return
+                }
+                scanScreenForFraud(pkg, activeFraudWindow)
             }
 
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
@@ -361,27 +376,27 @@ class SaralGatiAccessibilityService : AccessibilityService() {
      * request per burst and skipped when the element set is unchanged, so
      * scrolling or typing cannot exhaust the server's per-device rate limit.
      */
-    private fun scanScreenForFraud(pkg: String) {
+    private fun scanScreenForFraud(pkg: String, cls: String? = null) {
         if (pkg.isEmpty() || pkg == packageName) return
         if (!localPrefs.isPaired()) return
         // Never scan or speak while the phone is asleep / the display is off.
         if (!isScreenInteractive()) return
         if (fraudScanInFlight) return
+        // Once warned on a screen, do not keep re-scanning or re-speaking while still on it.
+        if (pkg == activeFraudPackage && hasSpokenForActiveFraud) return
+
         val now = System.currentTimeMillis()
-        // A genuinely new app is screened immediately so the warning can appear
-        // while the elder is still on the trap. Only rapid changes within the
-        // same app are throttled - the signature check already drops unchanged
-        // screens, so this just caps how often a mutating screen is re-sent.
         val sameApp = pkg == lastFraudScanPackage
         if (sameApp && now - lastFraudScanAt < FRAUD_SCAN_MIN_INTERVAL_MS) return
         lastFraudScanAt = now
         lastFraudScanPackage = pkg
-        serviceScope.launch { runFraudScan(pkg) }
+        serviceScope.launch { runFraudScan(pkg, cls) }
     }
 
-    private suspend fun runFraudScan(pkg: String) {
+    private suspend fun runFraudScan(pkg: String, cls: String?) {
         fraudScanInFlight = true
         try {
+            if (!isScreenInteractive()) return
             val rootNode = rootInActiveWindow ?: return
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
@@ -390,6 +405,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             }
             rootNode.recycle()
             if (elements.isEmpty()) return
+            if (!isScreenInteractive()) return
 
             val scanElements = elements.take(FRAUD_SCAN_MAX_ELEMENTS)
             val scanBounds = elementBounds.take(FRAUD_SCAN_MAX_ELEMENTS)
@@ -405,6 +421,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 // advice all come from the same locale.
                 warnAboutFraud(
                     pkg,
+                    cls,
                     offline.level,
                     offline.category,
                     if (isEn) offline.titleEn else offline.title,
@@ -422,23 +439,20 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
             val response = NetworkModule.agentApi.checkFraud(FraudCheckRequest(pkg, scanElements))
             if (!response.isSuccessful) return
+            if (!isScreenInteractive()) return
             val verdict = response.body() ?: return
             lastFraudSignature = signature
 
             if (!verdict.isDangerous) {
                 // The elder left the trap for a safe screen: take the lingering
-                // warning card down. Only a server-confirmed safe screen clears it -
-                // an offline hit the server has not judged yet must keep protecting.
-                if (offline == null && fraudWarnedPackage != null) {
-                    fraudWarnedPackage = null
-                    dismissFraudWarning()
+                // warning card down.
+                if (offline == null && activeFraudPackage == pkg) {
+                    clearFraudWarning()
                 }
                 return
             }
 
             val safeBounds = verdict.actionDecision.safeActionIndex?.let { scanBounds.getOrNull(it) }
-            // A Hindi card never shows English advice, and an English card never
-            // falls back to Devanagari copy.
             val alertTitle = if (isEn) {
                 verdict.userAlert.titleEn ?: "Warning: Potential Scam"
             } else {
@@ -452,6 +466,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             }
             warnAboutFraud(
                 pkg,
+                cls,
                 verdict.threatLevel,
                 verdict.threatCategory,
                 alertTitle,
@@ -467,36 +482,38 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Take down a warning that belonged to another app, and forget the screen it
-     * was raised for so returning to the trap is screened (and warned about)
-     * again instead of staying silent behind the stale signature.
+     * Take down a warning that belonged to a screen/app the elder has left,
+     * stop speech, and clear state so returning to a scam screens again.
      */
-    private fun clearFraudWarningForOwnUi() {
+    private fun clearFraudWarning() {
         lastFraudSignature = null
         lastFraudScanPackage = null
-        if (fraudWarnedPackage == null) return
-        fraudWarnedPackage = null
-        dismissFraudWarning()
+        val hadWarning = activeFraudPackage != null
+        activeFraudPackage = null
+        activeFraudWindow = null
+        hasSpokenForActiveFraud = false
+        if (hadWarning) {
+            dismissFraudWarning()
+            Log.i(TAG, "Fraud warning dismissed and state cleared")
+        }
+    }
+
+    private fun clearFraudWarningForOwnUi() {
+        clearFraudWarning()
         Log.i(TAG, "Own UI in the foreground: took down the fraud warning card")
     }
 
     /**
-     * True while `pkg` is still the screen the elder is looking at.
-     *
-     * A verdict takes a moment to arrive, and the elder can leave the trap in
-     * that moment - often straight into SaralGati's own UI. Warning about a
-     * screen that is no longer in front of them would put a scam card over
-     * whatever they are actually reading.
-     *
-     * Only a *known* different app suppresses the warning: an unreadable window
-     * keeps protecting, the same way an unreachable model leaves the rule
-     * verdict in place rather than failing open into silence.
+     * True while `pkg` is genuinely the active screen in the foreground.
+     * When display is off or window root is null, returns false to prevent
+     * hovering over lockscreen or background sleep.
      */
     private fun isPackageInForeground(pkg: String): Boolean {
-        val root = rootInActiveWindow ?: return true
+        if (!isScreenInteractive()) return false
+        val root = rootInActiveWindow ?: return false
         val current = root.packageName?.toString()
         root.recycle()
-        return current == null || current == pkg
+        return current == pkg
     }
 
     private fun dismissFraudWarning() {
@@ -516,12 +533,12 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Say one warning per trap. While a warning is active for this package
-     * nothing is spoken again, and a brand-new alert is throttled so a trap
-     * screen that keeps mutating cannot re-alert on every content change.
+     * Say one warning per trap screen. Once spoken, it does NOT re-speak in a loop
+     * or on periodic cooldowns. If the elder leaves or sleeps, it is silenced.
      */
     private fun warnAboutFraud(
         pkg: String,
+        cls: String?,
         level: String,
         category: String,
         title: String,
@@ -529,15 +546,15 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         advice: String,
         safeBounds: android.graphics.Rect?,
     ) {
-        if (pkg == fraudWarnedPackage) return
-        if (!isPackageInForeground(pkg)) return
-        val now = System.currentTimeMillis()
-        if (now - lastFraudWarnedAt < FRAUD_WARNING_COOLDOWN_MS) return
         if (!isScreenInteractive()) return
+        if (pkg == activeFraudPackage && hasSpokenForActiveFraud) return
+        if (!isPackageInForeground(pkg)) return
 
-        Log.w(TAG, "Fraud sentinel: $level/$category on $pkg")
-        fraudWarnedPackage = pkg
-        lastFraudWarnedAt = now
+        Log.w(TAG, "Fraud sentinel: $level/$category on $pkg ($cls)")
+        activeFraudPackage = pkg
+        activeFraudWindow = cls
+        hasSpokenForActiveFraud = true
+        lastFraudWarnedAt = System.currentTimeMillis()
         warnElderAboutFraud(title, message, advice, safeBounds)
     }
 

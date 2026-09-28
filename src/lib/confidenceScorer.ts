@@ -6,8 +6,100 @@ export interface ConfidenceScore {
   score: number; // 0 to 100
   targetIndex: number | null;
   reasons: string[];
+  /**
+   * The sentence names a different on-screen element than the one it points at.
+   * A score is a matter of degree; this is a fact, and the cache gate needs the
+   * fact (a 25-point penalty is not always enough to drop an answer below the
+   * floor, because an in-bounds actionable target already scores 65).
+   */
+  contradictsTarget: boolean;
 }
 
+/**
+ * The score an answer must reach before it may be promoted into the 7-day
+ * global screen cache. Reaching an in-bounds actionable element alone scores
+ * 65, so this floor is exactly "an answer that points at something tappable and
+ * is not contradicted by its own sentence". Without it a weak answer (no
+ * validated target, or one naming a different button) was cached for a week and
+ * replayed to every elder on that screen - a single bad answer, amplified.
+ *
+ * Answers promoted by `/api/v1/agent/feedback` are unaffected: those were
+ * confirmed by the elder actually tapping the button.
+ */
+export const MIN_PROMOTABLE_CONFIDENCE = 50;
+
+/** Words that describe *any* button, so sharing one identifies nothing. */
+const GENERIC_TOKENS = new Set([
+  'button',
+  'buttons',
+  'option',
+  'options',
+  'next',
+  'back',
+  'done',
+  'close',
+  'cancel',
+  'continue',
+  'submit',
+  'confirm',
+  'allow',
+  'deny',
+  'skip',
+  'menu',
+  'more',
+  'home',
+  'search',
+  'send',
+  'call',
+  'calls',
+  'this',
+  'that',
+  'here',
+  'there',
+  'with',
+  'your',
+  'you',
+  'what',
+  'which',
+  'should',
+  'must',
+  'yahan',
+  'dabayein',
+  'karein',
+  'karna',
+  'karne',
+  'liye',
+  'screen',
+  'please',
+  'elder',
+]);
+
+/** Short tokens that still name one specific thing on an elder's screen. */
+const SHORT_SPECIFIC_TOKEN = /^(otp|pin|upi|kyc|apk|sim|net)$/;
+
+/** Split a sentence into comparable words, Latin or Devanagari. */
+const TOKEN_SPLITTER = /[^a-z0-9\u0900-\u097F]+/;
+
+/**
+ * Tokens of a screen element that are specific enough to identify it. Role tags
+ * are stripped first and generic button words dropped, so `[BUTTON] Calls`
+ * contributes nothing while `[BUTTON] Electricity Bill` contributes the two
+ * words that make it the only element an answer could mean.
+ */
+function identifyingTokens(elementText: string): string[] {
+  return elementText
+    .replace(/^\[BELOW-FOLD\]\s*/i, '')
+    .replace(/^\[.*?\]\s*/g, '')
+    .toLowerCase()
+    .split(TOKEN_SPLITTER)
+    .filter((token) => token.length >= 4 || SHORT_SPECIFIC_TOKEN.test(token))
+    .filter((token) => !GENERIC_TOKENS.has(token));
+}
+
+/** Whether the sentence mentions any of the given tokens. */
+function mentions(text: string, tokens: string[]): boolean {
+  return tokens.some((token) => text.includes(token));
+}
 /**
  * Calculates an objective grounding confidence score (0 to 100) for a model's generated output.
  * Evaluates:
@@ -24,6 +116,7 @@ export function scoreOutputConfidence(
   lang: GuidanceLang = "hi",
 ): ConfidenceScore {
   let score = 0;
+  let contradictsTarget = false;
   const reasons: string[] = [];
 
   const targetMatch = output.match(/TARGET:\s*(\d+)/i);
@@ -32,6 +125,7 @@ export function scoreOutputConfidence(
       score: 20,
       targetIndex: null,
       reasons: ["No TARGET tag found in output"],
+      contradictsTarget: false,
     };
   }
 
@@ -44,6 +138,7 @@ export function scoreOutputConfidence(
         score: 10,
         targetIndex,
         reasons: ["TARGET index is out of screen bounds"],
+        contradictsTarget: false,
       };
     }
     score += 35;
@@ -55,6 +150,11 @@ export function scoreOutputConfidence(
       .replace(/^\[below-fold\]\s*/i, "")
       .trim();
     const lowerClean = cleanEl.toLowerCase();
+    // The spoken sentence, without its control tag: what the elder actually hears.
+    const cleanExplanation = output
+      .replace(/TARGET:\s*\d+/gi, "")
+      .trim()
+      .toLowerCase();
 
     // 2. Noise Check: Penalize targeting preview counters or timestamps
     if (isNoiseElement(lowerClean)) {
@@ -131,11 +231,28 @@ export function scoreOutputConfidence(
       score += 15;
     }
 
-    // 5. Explanation internal consistency
-    const cleanExplanation = output
-      .replace(/TARGET:\s*\d+/i, "")
-      .trim()
-      .toLowerCase();
+    // 5. Explanation / target agreement. The elder hears the sentence and looks
+    //    at the spotlight, so an answer that names a *different* element on the
+    //    same screen is not an answer about the highlighted one - it is the
+    //    most common way a model is confidently wrong. Only a specific mention
+    //    counts, so a generic "tap the button" is never punished, and a
+    //    sentence that names the target is never punished either.
+    const targetTokens = identifyingTokens(targetEl);
+    if (targetTokens.length > 0 && !mentions(cleanExplanation, targetTokens)) {
+      const otherTokens = uiElements
+        .filter((_, index) => index !== targetIndex)
+        .flatMap((element) => identifyingTokens(element))
+        .filter((token) => !targetTokens.includes(token));
+      if (mentions(cleanExplanation, otherTokens)) {
+        score -= 25;
+        contradictsTarget = true;
+        reasons.push(
+          "Explanation names a different element than the highlighted target (-25)",
+        );
+      }
+    }
+
+    // 6. Explanation internal consistency
     const commonActionVerbs = [
       "कॉल",
       "दबाएं",
@@ -161,7 +278,7 @@ export function scoreOutputConfidence(
     if (targetMatch) score += 30;
   }
 
-  // 6. Language match. The elder chose a language, so an answer written in the
+  // 7. Language match. The elder chose a language, so an answer written in the
   //    other script is a worse answer even when it points at the right button.
   //    Latin-script Hinglish cannot be detected this way, which is fine: the
   //    penalty only has to beat the other engine's score in arbitration.
@@ -178,5 +295,6 @@ export function scoreOutputConfidence(
     score: normalizedScore,
     targetIndex,
     reasons,
+    contradictsTarget,
   };
 }

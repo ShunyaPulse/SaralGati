@@ -10,6 +10,7 @@ import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/semanticValidator";
 import { query } from "@/lib/db";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import { MIN_PROMOTABLE_CONFIDENCE } from "@/lib/confidenceScorer";
 import { hasDevanagari, type GuidanceLang } from "@/lib/guidanceLanguage";
 import { buildAskSystemPrompt } from "@/lib/guidancePrompt";
 import { normalizeScreenQuestion, screenCacheKey } from "@/lib/screenCache";
@@ -39,6 +40,30 @@ const askRequestSchema = z.object({
     .default([]),
   guidance_lang: z.enum(["hi", "en"]).optional().default("hi"),
 });
+
+/**
+ * Self-consistency sampling (k draws, plurality validated target wins) costs
+ * model calls, so it runs where it buys something and nowhere else.
+ *
+ * The flywheel runs in a batch with nobody waiting, and the label it writes is
+ * what the next adapter learns from - a wrong label is re-taught for weeks, so
+ * the teacher is sampled three times and the majority answer becomes the label.
+ * The LoRA is deliberately left greedy (`scope` defaults to 'teacher'): it is the
+ * student those very rows train, and voting on a model's own opinions only
+ * teaches it its own habits back. `AI_SELF_CONSISTENCY=2|3` opts the interactive
+ * paths in instead - there nothing is trained, so voting both engines is simply
+ * a better chance at a better answer, at the cost of the elder waiting for it.
+ */
+function selfConsistencyOptions(isFlywheel: boolean): {
+  selfConsistency?: number;
+  selfConsistencyScope?: "teacher" | "all";
+} {
+  if (isFlywheel) return { selfConsistency: 3 };
+  const override = Number(process.env.AI_SELF_CONSISTENCY ?? "");
+  return Number.isFinite(override) && override > 1
+    ? { selfConsistency: Math.min(3, Math.floor(override)), selfConsistencyScope: "all" }
+    : {};
+}
 
 async function recordModelInteraction(params: {
   interactionId: string;
@@ -350,6 +375,7 @@ export async function POST(req: NextRequest) {
         conversationHistory: safeConversationHistory,
         uiElements: safeUIElements,
         lang: guidanceLang,
+        ...selfConsistencyOptions(isFlywheel),
       });
 
       const rawExplanation = aiResult.text;
@@ -389,7 +415,27 @@ export async function POST(req: NextRequest) {
       // elder for a week, which is the bug this change is fixing.
       const answerMatchesLanguage =
         guidanceLang !== "en" || !hasDevanagari(cleanExplanation);
-      if (validation.isValid && answerMatchesLanguage) {
+      // ...and never promote a weak answer either. The score is the grounded one
+      // the arbiter already computed: an answer with no validated target, or one
+      // whose sentence names a different button, or one the other engine
+      // disagreed with, stays uncached instead of being replayed to every elder
+      // on this screen for a week. A cache entry is the strongest claim this
+      // system makes, so only a grounded answer is allowed to make it.
+      const confidence = aiResult.confidence ?? 0;
+      // An answer whose own sentence names a different button is never cached,
+      // whatever it scores: the mismatch is a fact about this answer, and the
+      // 25-point penalty alone is not always enough to fall under the floor.
+      const contradictsTarget = aiResult.grounding?.contradictsTarget === true;
+      const cacheable =
+        validation.isValid &&
+        answerMatchesLanguage &&
+        !contradictsTarget &&
+        confidence >= MIN_PROMOTABLE_CONFIDENCE;
+      if (cacheable) {
+        console.log(
+          `[Screen Cache] Promoting ${guidanceLang} answer for ${safeAppPackage} ` +
+            `(confidence ${confidence}, target ${highlightIndex}).`,
+        );
         await cacheSet(
           cacheKey,
           {

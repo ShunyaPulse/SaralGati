@@ -131,13 +131,13 @@ flowchart TD
         C1 -- "No" --> C2{"Redis Screen Cache Hit?"}
         C2 -- "Yes (Normalized Screen Hash)" --> ANS3["🚀 CASE 3: Redis Screen Cache (<5ms)<br/>Instant sub-5ms cache hit from verified global history"]
 
-        %% Case 4: Cloudflare Workers AI LoRA
-        C2 -- "No (Cache Miss)" --> PREP["UI Pruning + Habit Context + Few-Shot Retriever"]
-        PREP --> CF["🧠 CASE 4: Cloudflare Workers AI (<800ms)<br/>Llama 3.1 8B with Custom LoRA Adapter (saralgati-elder-llama31-8b)"]
+        %% Case 4: Dual-engine generation on Cloudflare Workers AI + Gemini
+        C2 -- "No (Cache Miss)" --> PREP["UI Pruning + Habit Context + BM25 Few-Shot Retriever"]
+        PREP --> CF["🧠 CASE 4: Dual-Engine Generation (<900ms)<br/>Cloudflare Workers AI LoRA + Gemini<br/>every answer validated before it is compared"]
         CF --> VAL{"Semantic Validator Check"}
 
         %% Case 5: Semantic Validation & Recovery
-        VAL -- "Target Validated" -->        ANS4["✅ Verified Target Index & Explanation in the Elder's Language"]
+        VAL -- "Target Validated" -->        ANS4["✅ Grounded Target Index & Explanation in the Elder's Language"]
         VAL -- "Hallucination / Noise Detected" --> ANS5["🛡️ CASE 5: Semantic Fallback Recovery<br/>Re-anchors target to nearest verified actionable button"]
 
         ANS4 --> PROMOTE["Promote to Redis Screen Cache"]
@@ -189,6 +189,18 @@ flowchart TD
   - **Bilingual by construction**: every captured interaction stores the language it was answered in (`model_interactions.guidance_lang`), the synthetic self-play generator writes both Hindi and English queries (per batch, biased toward the language whose answers were recently rejected, and pinnable with the `FLYWHEEL_GUIDANCE_LANG` repo variable), the training-data export rebuilds each sample under the *same* prompt the app really sends, in the sample's own language, and the Kaggle run oversamples the minority language so the adapter cannot drift back to one language. An interaction whose answer contradicts its own recorded language - an English request answered in Devanagari - is counted and dropped instead of taught. Without this a "fine-tuned on Hinglish" adapter quietly pushed back against the elder's own language choice, so English mode fell back to the general model.
   - Weekly scheduled GitHub Action trains DPO preference datasets on Kaggle Dual-T4 GPUs using Unsloth.
   - Automatically exports and deploys updated LoRA adapters to Cloudflare Workers AI with zero downtime.
+
+### Accuracy Engineering (measurable, free, no extra service)
+
+The guidance stack is scored, not guessed, and every technique below is a published method that costs nothing to run:
+
+- **Verifier before comparison (grounding).** Every candidate answer is parsed, checked against the real screen by the semantic validator, repaired when the intent dictionary knows a better element, and only then scored - so a confident sentence pointing at the wrong element loses on merit instead of winning arbitration and being repaired after the better answer was discarded. Each verdict carries `grounding.status`/`grounding.reasons` for logs.
+- **Self-consistency voting.** One sample from a stochastic decoder is a guess; several samples that agree are evidence (Wang et al., 2022). The engine draws `k` samples at a sampling temperature and the **plurality validated target** wins (`src/lib/selfConsistency.ts`) - voting on *which button*, the discrete decision the spotlight depends on, rather than on wording that differs every time.
+- **Teacher votes, student answers greedily.** The two engines are not symmetric: Gemini is a frozen general model (and the flywheel's scenario/fraud-ground-truth writer), while the Cloudflare LoRA is the adapter those very rows train. So the flywheel samples the **teacher** three times and keeps the majority answer as the label, while the **student** stays greedy (`temperature: 0`, one draw) - a plurality of a model's own opinions is still its own opinion, and feeding it back would be self-distillation, the standard way a fine-tune drifts and loses diversity. `AI_SELF_CONSISTENCY=2|3` is the interactive opt-in (nothing is trained there, so both engines may vote; the elder simply waits longer for a better answer).
+- **BM25 few-shot retrieval.** The examples that steer the model are ranked with BM25 (term saturation, document-length normalisation and inverse document frequency) instead of a word-overlap count, so a rare, distinctive word (`PNR`, `bijli`, `AnyDesk`) selects the example and a common one does not. Sparse retrieval, no embedding endpoint, microseconds per request.
+- **Calibrated confidence + abstention.** The delivered answer's score is the grounded one plus a small, capped bonus when both engines independently validated the same element, and a penalty when they disagreed. Only an answer that is in bounds, actionable, non-contradictory and above `MIN_PROMOTABLE_CONFIDENCE` may be promoted into the 7-day shared cache - a cache entry replayed to every elder is the strongest claim the system makes, so a weak answer abstains from it rather than being amplified.
+- **Deterministic decoding with a real time budget.** Guidance is generated at `temperature: 0` (sampling only where votes are cast), with a 96-token budget so a two-sentence Hinglish answer is never cut off mid-sentence, and every outbound call carries an abort deadline. A stalled engine can no longer keep the other engine's better answer from being delivered.
+- **Implicit-feedback loop.** A correction that enough elders make independently is promoted into the cache naming the element they actually tapped (`correctionExplanation`), so the corrected answer tells the elder about the button they chose instead of an empty "Tap here."
 
 ### Security & Reliability Hardening
 

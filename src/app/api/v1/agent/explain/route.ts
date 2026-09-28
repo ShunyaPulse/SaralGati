@@ -118,6 +118,10 @@ Tell them where they are and what they can do next. Be comforting and respectful
           ? "Explain this screen and tell me what I should do."
           : "Is screen ke baare mein samjhao aur batao mujhe kya karna chahiye.",
       lang: guidanceLang,
+      // The screen travels with the request: without it the two engines were
+      // compared on a score that could not tell a well-grounded sentence from an
+      // invented one, because nothing was available to ground against.
+      uiElements: safeUIElements,
     });
 
     return NextResponse.json({

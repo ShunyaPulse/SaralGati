@@ -9,8 +9,12 @@
  * 5. Retain query-relevant keywords and top screen titles.
  */
 
+import { elementLabel, elementLabelLower, isActionableElement } from './uiElement';
+
 export function isNoiseUIElement(text: string): boolean {
-  const clean = text.replace(/^\[.*?\]\s*/g, '').trim();
+  // The label, not the raw line: an index prefix or a role tag in front of a
+  // timestamp used to stop these patterns from matching at all.
+  const clean = elementLabel(text);
   return (
     /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
     /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(clean) ||
@@ -44,10 +48,9 @@ export function pruneUITree(
     const trimmed = el.trim();
     if (!trimmed) return;
 
-    const cleanRole = trimmed.replace(/^\[BELOW-FOLD\]\s*/i, '');
-    const isActionable = /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(cleanRole);
+    const isActionable = isActionableElement(trimmed);
 
-    const lower = trimmed.toLowerCase();
+    const lower = elementLabelLower(trimmed);
 
     // 1. Actionable buttons, inputs, toggles: ALWAYS keep (never prune buttons like OK, Yes, No)
     if (isActionable) {
@@ -55,8 +58,9 @@ export function pruneUITree(
       return;
     }
 
-    // 2. Static text filtering:
-    if (isNoiseUIElement(lower)) return;
+    // 2. Static text filtering. An element the client called tappable is never
+    //    furniture, so a real "Video call" button survives the preview patterns.
+    if (!isActionable && isNoiseUIElement(trimmed)) return;
 
     // Retain if relevant to elder's query
     const matchesKeyword = questionKeywords.some((kw) => lower.includes(kw));

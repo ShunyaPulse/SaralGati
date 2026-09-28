@@ -10,7 +10,8 @@
     "test": "tsx --test src/**/*.test.ts",
     "db:migrate": "npx tsx scripts/migrate.ts",
     "db:seed": "npx tsx scripts/seed.ts",
-    "rules:export": "npx tsx scripts/export-offline-fraud-rules.ts"
+    "rules:export": "npx tsx scripts/export-offline-fraud-rules.ts",
+    "bench:guidance": "npx tsx scripts/benchmark-guidance.ts"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",

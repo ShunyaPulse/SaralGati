@@ -1,7 +1,7 @@
 {
-  "version_code": 65,
-  "version_name": "5.0.2",
+  "version_code": 66,
+  "version_name": "5.1.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "AI accuracy upgrade: both engine answers are validated before arbitration, the teacher model is self-consistency sampled, few-shot retrieval uses BM25, and only grounded answers are cached. Fixes real 'Video call' buttons and emoji call previews being misread as noise."
+  "changelog": "Offline accuracy benchmark: `npm run bench:guidance` scores the guidance stack against labelled screens and fails CI on a regression. Deterministic answers are now measured (100% precision, up from 73%, on 67% of questions answered without inference). One shared element reader fixes the flywheel's \"[3] [BUTTON] X\" format being misread as static text. Fixes wrong spotlights for 'Amit ko phone lagao' (keypad instead of the contact's call button), 'akshar bade karne hain' and balance questions, and now flags answers that name one button while pointing at another."
 }

@@ -1,6 +1,5 @@
 import {
   hasDevanagari,
-  normalizeGuidanceLang,
   type GuidanceLang,
 } from "./guidanceLanguage";
 import { buildAskSystemPrompt } from "./guidancePrompt";

@@ -45,6 +45,17 @@ const LORA_ENV = {
   GEMINI_API_KEY: 'gemini-key',
 };
 
+/**
+ * The two engines' hosts. Compared as whole hosts, not as substrings: a
+ * substring test can be satisfied by any URL that merely contains the name.
+ */
+const LORA_HOST = 'api.cloudflare.com';
+const GEMINI_HOST = 'generativelanguage.googleapis.com';
+
+function hostOf(url: string): string {
+  return new URL(url).host;
+}
+
 function withEnv(overrides: Record<string, string | undefined>): () => void {
   const saved: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(overrides)) {
@@ -98,7 +109,7 @@ function stubEngines(lora: EngineReply | EngineReply[], gemini: EngineReply | En
       signal: init.signal,
     });
 
-    if (href.includes('api.cloudflare.com')) {
+    if (hostOf(href) === LORA_HOST) {
       return respond(pick(lora, 'lora'), (text) =>
         json({ result: { response: text } }),
       );
@@ -125,12 +136,12 @@ function json(payload: unknown): Response {
 
 /** The fine-tuned adapter's calls - the student the flywheel trains. */
 function loraCalls(calls: CapturedRequest[]): CapturedRequest[] {
-  return calls.filter((call) => call.url.includes('api.cloudflare.com'));
+  return calls.filter((call) => hostOf(call.url) === LORA_HOST);
 }
 
 /** The general model's calls - the frozen teacher. */
 function geminiCalls(calls: CapturedRequest[]): CapturedRequest[] {
-  return calls.filter((call) => call.url.includes('generativelanguage'));
+  return calls.filter((call) => hostOf(call.url) === GEMINI_HOST);
 }
 
 describe('grounded arbitration between the two engines', () => {
@@ -307,9 +318,8 @@ describe('grounded arbitration between the two engines', () => {
     try {
       await generateAIResponse(OPTIONS);
       const loraCall = loraCalls(stub.calls)[0];
-      const geminiCall = stub.calls.find((call) =>
-        call.url.includes('generativelanguage'),
-      );
+      assert.equal(geminiCalls(stub.calls).length, 1);
+      const geminiCall = stub.calls.find((call) => hostOf(call.url) === GEMINI_HOST);
 
       assert.equal(loraCall?.body.temperature, 0);
       const geminiConfig = geminiCall?.body.generationConfig as {

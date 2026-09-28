@@ -1,6 +1,12 @@
 // Comprehensive 50+ Elder Intent Dictionary for Hindi, Hinglish, and English Android screen actions.
 
 import type { GuidanceLang } from './guidanceLanguage';
+import {
+  elementLabelLower,
+  isActionableElement,
+  isStaticTextElement,
+} from './uiElement';
+import { isNoiseElement } from './noiseElement';
 
 export interface IntentDefinition {
   id: string;
@@ -458,8 +464,9 @@ export const ELDER_INTENTS: IntentDefinition[] = [
     id: 'zoom_magnify',
     name: 'Zoom / Text Size / Bada Dikhao',
     queryPatterns: [
-      'zoom', 'bada dikhao', 'akshar bade karo', 'text size', 'dikhai nahi de raha',
-      'bada karo', 'magnify', 'font size',
+      'zoom', 'bada dikhao', 'akshar bade karo', 'akshar bade', 'akshar bada',
+      'akshar bade karne', 'text size', 'dikhai nahi de raha',
+      'bada karo', 'bade karne', 'magnify', 'font size',
       'ज़ूम', 'बड़ा दिखाओ', 'अक्षर बड़े करो', 'बड़ा करें'
     ],
     elementKeywords: ['zoom', 'font size', 'display size', 'magnification', 'ज़ूम']
@@ -616,6 +623,19 @@ export const ELDER_INTENTS: IntentDefinition[] = [
       'हिंदी', 'भाषा', 'हिंदी में करो', 'भाषा बदलो'
     ],
     elementKeywords: ['language', 'hindi', 'bhasha', 'हिंदी', 'भाषा']
+  },
+
+  // 51. Check Balance / How Much Money Is Left
+  {
+    id: 'check_balance',
+    name: 'Balance / Balance Enquiry',
+    queryPatterns: [
+      'balance', 'balance kitna', 'balance check', 'mera balance', 'account balance',
+      'kitne paise', 'paise kitne', 'paise bache', 'paise bacha', 'khate mein kitne',
+      'khata balance', 'paisa bacha',
+      'बैलेंस', 'कितने पैसे', 'पैसे बचे', 'खाते में कितने', 'बैलेंस कितना'
+    ],
+    elementKeywords: ['balance', 'check balance', 'passbook', 'बैलेंस', 'खाता']
   }
 ];
 
@@ -670,6 +690,7 @@ export const INTENT_HINDI_EXPLANATIONS: Record<string, string> = {
   contacts_addressbook: 'Sampark (Contacts) suchi dekhne ke liye yahan dabayein.',
   screenshot_capture: 'Screenshot lene ke liye yahan dabayein.',
   language_hindi: 'Bhasha badalne ya Hindi karne ke liye yahan dabayein.',
+  check_balance: 'Apna balance ya khata dekhne ke liye yahan dabayein.',
 };
 
 /**
@@ -728,6 +749,7 @@ export const INTENT_ENGLISH_EXPLANATIONS: Record<string, string> = {
   contacts_addressbook: 'Tap here to see your contacts.',
   screenshot_capture: 'Tap here to take a screenshot.',
   language_hindi: 'Tap here to change the language.',
+  check_balance: 'Tap here to see your balance or account.',
 };
 
 export function getIntentExplanation(
@@ -758,6 +780,130 @@ export function matchQueryPattern(qLower: string, pattern: string): boolean {
   return normalizedQ.includes(' ' + p + ' ');
 }
 
+/**
+ * Words that carry no element signal. This list only decides how much a bonus
+ * is worth, never whether an element is eligible.
+ */
+const WEAK_QUESTION_TOKENS = new Set([
+  'hai',
+  'hain',
+  'karo',
+  'karna',
+  'karni',
+  'karne',
+  'kaise',
+  'mein',
+  'mera',
+  'meri',
+  'mujhe',
+  'kya',
+  'ye',
+  'yeh',
+  'is',
+  'us',
+  'par',
+  'aur',
+  'ke',
+  'ki',
+  'ka',
+  'ko',
+  'se',
+  'do',
+  'dedo',
+  'the',
+  'for',
+  'and',
+  'this',
+  'that',
+  'please',
+]);
+
+/** Question words worth matching against an element label. */
+function questionTokens(qLower: string): string[] {
+  return qLower
+    .split(/[^a-z0-9\u0900-\u097F]+/)
+    .filter((token) => token.length >= 3 && !WEAK_QUESTION_TOKENS.has(token));
+}
+
+/**
+ * Pick the element an intent points at - the *best* one, not the first one.
+ *
+ * First-match was a real source of wrong spotlights: for "Ramesh se baat karni
+ * hai" the `call` intent's keyword "call" is inside "Video call", so the elder
+ * asking for a voice call was pointed at the video call button simply because
+ * it came first on the screen. The score below weighs three signals:
+ *
+ * - how specific the intent's matched keyword is (`voice call` beats `call`),
+ * - whether the element quotes the *query pattern* that made this intent fire
+ *   ("bijli ka bill" must choose "Electricity Bill", not "Mobile Recharge"),
+ * - whether it quotes the elder's own words ("Amit", "hospital").
+ *
+ * An element that only matches the elder's words is never enough on its own -
+ * "ticket" appears in "Cancel Ticket" on a screen the elder asked about PNR
+ * status, which is why the dictionary signal carries the most weight.
+ */
+function scoreElement(
+  label: string,
+  intent: IntentDefinition,
+  matchedPattern: string,
+  tokens: string[],
+): number {
+  const keywordLength = intent.elementKeywords
+    .filter((keyword) => label.includes(keyword))
+    .reduce((longest, keyword) => Math.max(longest, keyword.length), 0);
+  if (keywordLength === 0) return 0;
+
+  const patternBonus = matchedPattern
+    .split(/[^a-z0-9\u0900-\u097F]+/)
+    .filter((token) => token.length >= 3 && label.includes(token))
+    .reduce((sum, token) => sum + token.length, 0);
+  const questionBonus = tokens
+    .filter((token) => label.includes(token))
+    .reduce((sum, token) => sum + token.length, 0);
+
+  return 4 * patternBonus + 2 * questionBonus + 2 * keywordLength;
+}
+
+/**
+ * The best-scoring element for one intent, or null when nothing on the screen
+ * matches it. Index order only breaks exact ties, so a curated screen keeps a
+ * deterministic answer.
+ */
+function bestElementFor(
+  entry: { intent: IntentDefinition; matchedText: string },
+  uiElements: string[],
+  qLower: string,
+  requireActionable: boolean,
+  skipStaticText = false,
+): number | null {
+  const tokens = questionTokens(qLower);
+  let bestIndex: number | null = null;
+  let bestScore = 0;
+
+  for (let i = 0; i < uiElements.length; i++) {
+    const element = uiElements[i];
+    // Furniture is never a target, and neither is a preview line the client
+    // called static text: that is how a "📹 Video call" subtitle used to be
+    // "recovered" as the answer to a video call question.
+    if (isNoiseElement(element)) continue;
+    if (requireActionable && !isActionableElement(element)) continue;
+    if (skipStaticText && isStaticTextElement(element)) continue;
+
+    const score = scoreElement(
+      elementLabelLower(element),
+      entry.intent,
+      entry.matchedText,
+      tokens,
+    );
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
+
 export function matchElderIntent(
   question: string,
   uiElements: string[],
@@ -765,14 +911,7 @@ export function matchElderIntent(
 ): { highlightIndex: number | null; matchedIntent: IntentDefinition | null; explanation: string } {
   const qLower = question.toLowerCase();
 
-  const isNoise = (txt: string) => {
-    const isActionable = /^\[(button|input|toggle)\]/i.test(txt.trim());
-    const clean = txt.replace(/^\[.*?\]\s*/g, '').trim();
-    return /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
-           /\b(yesterday|am|pm|today)\b/i.test(clean) ||
-           (!isActionable && /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call)$/i.test(clean)) ||
-           /^[📹🎥📞📱]\s*$/i.test(clean);
-  };
+  const isNoise = (txt: string) => isNoiseElement(txt);
 
   // If the user is asking a question (how, what, where, kaise, kahan), bypass fast-path and let the LLM explain it.
   const isQuestion = /\b(kaise|kahan|kaha|kya|kyu|kaun|how|what|where|why|who)\b/i.test(qLower);
@@ -819,40 +958,32 @@ export function matchElderIntent(
     };
   }
 
-  // Pass 1: Prioritize actionable elements ([BUTTON], [INPUT], [TOGGLE])
-  for (const intent of sortedIntents) {
-    for (let i = 0; i < uiElements.length; i++) {
-      const elLower = uiElements[i].toLowerCase();
-      if (isNoise(elLower)) continue;
-
-      const clean = elLower.replace(/^\[below-fold\]\s*/i, '');
-      const isActionable =
-        clean.startsWith('[button]') ||
-        clean.startsWith('[input]') ||
-        clean.startsWith('[toggle]');
-
-      if (isActionable) {
-        if (intent.elementKeywords.some((keyword) => clean.includes(keyword))) {
-          return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent, lang) };
-        }
-      }
+  // Pass 1: actionable elements only ([BUTTON], [INPUT], [TOGGLE]). The best
+  // matching element wins, not the first one encountered - see scoreElement.
+  for (const entry of matchingIntents) {
+    const best = bestElementFor(entry, uiElements, qLower, true);
+    if (best !== null) {
+      return {
+        highlightIndex: best,
+        matchedIntent: entry.intent,
+        explanation: getIntentExplanation(entry.intent, lang),
+      };
     }
   }
 
-  // Pass 2: Fallback to any element (strictly excluding static [TEXT] if user asked for an action)
-  for (const intent of sortedIntents) {
-    for (let i = 0; i < uiElements.length; i++) {
-      const elLower = uiElements[i].toLowerCase();
-      if (isNoise(elLower)) continue;
-
-      const clean = elLower.replace(/^\[below-fold\]\s*/i, '');
-      // Never fallback to [TEXT] for call or action intents to avoid highlighting message snippets!
-      if (clean.startsWith('[text]') && (intent.id === 'call' || intent.id === 'video_call' || intent.id === 'payment_upi')) {
-        continue;
-      }
-      if (intent.elementKeywords.some((keyword) => clean.includes(keyword))) {
-        return { highlightIndex: i, matchedIntent: intent, explanation: getIntentExplanation(intent, lang) };
-      }
+  // Pass 2: fallback to any element (strictly excluding static [TEXT] if user asked for an action)
+  for (const entry of matchingIntents) {
+    const skipText =
+      entry.intent.id === 'call' ||
+      entry.intent.id === 'video_call' ||
+      entry.intent.id === 'payment_upi';
+    const best = bestElementFor(entry, uiElements, qLower, false, skipText);
+    if (best !== null) {
+      return {
+        highlightIndex: best,
+        matchedIntent: entry.intent,
+        explanation: getIntentExplanation(entry.intent, lang),
+      };
     }
   }
 

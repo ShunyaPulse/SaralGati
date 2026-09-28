@@ -1,5 +1,6 @@
 import { matchElderIntent } from './intentDictionary';
 import type { GuidanceLang } from './guidanceLanguage';
+import { elementLabelLower, isActionableElement } from './uiElement';
 
 /**
  * Deterministic, zero-latency answers for the questions elders ask most.
@@ -59,6 +60,14 @@ const FAST_PATH_COPY = {
     hi: 'Number dial karne ke liye yahan dabayein.',
     en: 'Tap here to dial a number.',
   },
+  dialerCallContact: {
+    hi: 'Is vyakti ko call lagane ke liye yahan dabayein.',
+    en: 'Tap here to call this person.',
+  },
+  dialerPlaceCall: {
+    hi: 'Number lag chuka hai, call karne ke liye niche Call par dabayein.',
+    en: 'The number is already entered; tap Call below to place the call.',
+  },
   dialerContacts: {
     hi: 'Sampark (Contacts) dekhne ke liye yahan dabayein.',
     en: 'Tap here to see your contacts.',
@@ -110,11 +119,12 @@ type FastPathCopyKey = keyof typeof FAST_PATH_COPY;
 /**
  * Labels that are dynamic furniture rather than targets: an elder asking
  * "video call" should not be pointed at "3 videos" or a "12:30" timestamp.
+ * Takes the label, not the raw line, so index prefixes cannot hide it.
  */
-function isNoiseLabel(text: string): boolean {
+function isNoiseLabel(label: string): boolean {
   return (
-    /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(text) ||
-    /\b(yesterday|am|pm|today)\b/i.test(text)
+    /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(label) ||
+    /\b(yesterday|am|pm|today)\b/i.test(label)
   );
 }
 
@@ -129,10 +139,8 @@ function findUIIndex(
   requireActionable = true,
 ): number {
   const interactiveIdx = uiElements.findIndex((el: string) => {
-    const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
-    const isActionable = /^\[(BUTTON|INPUT|TOGGLE)\]/i.test(clean);
-    if (!isActionable) return false;
-    const txt = clean.toLowerCase();
+    if (!isActionableElement(el)) return false;
+    const txt = elementLabelLower(el);
     if (isNoiseLabel(txt)) return false;
     return keywords.some((k) => txt.includes(k.toLowerCase()));
   });
@@ -141,13 +149,88 @@ function findUIIndex(
 
   if (!requireActionable) {
     return uiElements.findIndex((el: string) => {
-      const txt = el.toLowerCase();
+      const txt = elementLabelLower(el);
       if (isNoiseLabel(txt)) return false;
       return keywords.some((k) => txt.includes(k.toLowerCase()));
     });
   }
 
   return -1;
+}
+
+/**
+ * Words in a "call someone" sentence that name no person. A dialer question is
+ * usually three parts - an action (call/dial), a target (number/phone) and
+ * filler (lagao/karo/ko) - and none of them is a name to look for on screen.
+ */
+const CALL_ACTION_WORDS = new Set([
+  'call',
+  'calls',
+  'phone',
+  'dial',
+  'dialer',
+  'number',
+  'lagao',
+  'lagaye',
+  'lagana',
+  'lagani',
+  'milao',
+  'milaye',
+  'bajao',
+  'ghanti',
+  'karo',
+  'karna',
+  'karni',
+  'karne',
+  'karke',
+  'hai',
+  'hain',
+  'ho',
+  'mujhe',
+  'mera',
+  'meri',
+  'ko',
+  'se',
+  'ka',
+  'ki',
+  'ke',
+  'par',
+  'please',
+  'the',
+  'now',
+  'फोन',
+  'कॉल',
+  'नंबर',
+  'डायल',
+  'लगाओ',
+  'करो',
+  'करना',
+  'मिलाओ',
+]);
+
+/**
+ * The call button of a person the elder named, or -1.
+ *
+ * "Amit ko phone lagao" on a screen that already shows Amit's row must tap
+ * "Call Amit Beta", not send the elder to the keypad to type a number the
+ * screen is holding. The name is whatever in the sentence is not an action,
+ * target or filler word, so no person name has to be hardcoded.
+ */
+function callButtonForNamedContact(
+  questionLower: string,
+  uiElements: string[],
+): number {
+  const names = questionLower
+    .split(/[^a-z0-9\u0900-\u097F]+/)
+    .filter((token) => token.length >= 3 && !CALL_ACTION_WORDS.has(token));
+  if (names.length === 0) return -1;
+
+  return uiElements.findIndex((element) => {
+    if (!isActionableElement(element)) return false;
+    const label = elementLabelLower(element);
+    if (!label.includes('call')) return false;
+    return names.some((name) => label.includes(name));
+  });
 }
 
 export function matchFastPathRule(
@@ -233,10 +316,25 @@ export function matchFastPathRule(
       questionLower.includes('फोन') ||
       questionLower.includes('dial')
     ) {
-      fpIndex = findUIIndex(uiElements, ['keypad', 'dialpad', 'dial', 'कॉल', 'key']);
-      if (fpIndex !== -1) {
-        fpCopy = 'dialerKeypad';
+      // The person's own call button first, then the keypad to type a number,
+      // then the call button for an already-entered number.
+      const namedIndex = callButtonForNamedContact(questionLower, uiElements);
+      if (namedIndex !== -1) {
+        fpIndex = namedIndex;
+        fpCopy = 'dialerCallContact';
         fpMatch = true;
+      } else {
+        fpIndex = findUIIndex(uiElements, ['keypad', 'dialpad', 'dial', 'कॉल', 'key']);
+        if (fpIndex !== -1) {
+          fpCopy = 'dialerKeypad';
+          fpMatch = true;
+        } else {
+          fpIndex = findUIIndex(uiElements, ['call sim', 'call']);
+          if (fpIndex !== -1) {
+            fpCopy = 'dialerPlaceCall';
+            fpMatch = true;
+          }
+        }
       }
     } else if (
       questionLower.includes('contact') ||

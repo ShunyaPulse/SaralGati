@@ -96,6 +96,21 @@ function identifyingTokens(elementText: string): string[] {
     .filter((token) => !GENERIC_TOKENS.has(token));
 }
 
+/**
+ * Every word of a label, generic ones included. Used to decide whether the
+ * sentence is talking about the *target*: a target labelled "Calls" and a
+ * sentence that says "Calls par dabayein" agree, even though "calls" is far too
+ * generic to distinguish it from anything else on the screen.
+ */
+function labelTokens(elementText: string): string[] {
+  return elementText
+    .replace(/^\[BELOW-FOLD\]\s*/i, '')
+    .replace(/^\[.*?\]\s*/g, '')
+    .toLowerCase()
+    .split(TOKEN_SPLITTER)
+    .filter((token) => token.length >= 3);
+}
+
 /** Whether the sentence mentions any of the given tokens. */
 function mentions(text: string, tokens: string[]): boolean {
   return tokens.some((token) => text.includes(token));
@@ -237,12 +252,20 @@ export function scoreOutputConfidence(
     //    most common way a model is confidently wrong. Only a specific mention
     //    counts, so a generic "tap the button" is never punished, and a
     //    sentence that names the target is never punished either.
-    const targetTokens = identifyingTokens(targetEl);
-    if (targetTokens.length > 0 && !mentions(cleanExplanation, targetTokens)) {
+    //
+    //    The check used to be skipped whenever the *target* was generic
+    //    ("Calls", "Search"), which meant the two most dangerous shapes -
+    //    naming "Camera" while pointing at Calls, naming "New chat" while
+    //    pointing at Calls - passed unflagged exactly because the right answer
+    //    was a one-word tab. Reading the target generously instead (any word of
+    //    its label counts as agreement) keeps a correct sentence safe without
+    //    going blind on short labels.
+    const targetWords = labelTokens(targetEl);
+    if (!mentions(cleanExplanation, targetWords)) {
       const otherTokens = uiElements
         .filter((_, index) => index !== targetIndex)
         .flatMap((element) => identifyingTokens(element))
-        .filter((token) => !targetTokens.includes(token));
+        .filter((token) => !targetWords.includes(token));
       if (mentions(cleanExplanation, otherTokens)) {
         score -= 25;
         contradictsTarget = true;

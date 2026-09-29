@@ -1,7 +1,7 @@
 {
-  "version_code": 76,
-  "version_name": "5.11.0",
+  "version_code": 77,
+  "version_name": "5.11.1",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "`src/lib/fraud/offlineFraudRules.ts` (452 lines) splits two ways: the serialisable ruleset - types, the string patterns that go into the Android asset and the curated 12-rule list - moves to `ruleset.ts`, and the compiled matching engine (precompiled regexes, tie-breaking, the instant verdict, the safe-action finder and the asset serialiser) to `engine.ts`, with `index.ts` re-exporting the same public API. Import path unchanged, so no caller changed, including the Android asset exporter. Previous release: the AI fallback's engines, types, scoring and self-consistency sampler split into an `aiFallback/` folder."
+  "changelog": "Dead-code hardening: the unused `ok` import in the register endpoint, the unused NextAuth `profile` callback parameter and the validator's unused `llmExplanation` parameter (now `_llmExplanation`, signature unchanged) are removed, so `tsc --noUnusedLocals --noUnusedParameters` is clean across `src/lib` and `src/server`. No behaviour change. Previous release: the offline fraud ruleset and its matching engine split into `ruleset.ts` and `engine.ts`."
 }

@@ -1,7 +1,7 @@
 {
-  "version_code": 74,
-  "version_name": "5.9.0",
+  "version_code": 75,
+  "version_name": "5.10.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "`src/lib/guidance/agentFastPath.ts` (484 lines) splits into `copy.ts` (the bilingual sentence table with its key type, still `as const` so the compiler refuses a half-translated rule) and `matching.ts` (the rule chain, node lookups and the `FastPathMatch` result), while `index.ts` keeps the module's doc and the same public API. No caller changed. Previous release: the few-shot corpus and its BM25 retrieval split into `examples.ts`, `bm25.ts` and `index.ts`."
+  "changelog": "`src/lib/ai/aiFallback.ts` (517 lines) splits five ways along its real seams: the Cloudflare LoRA and Gemini HTTP clients to `engines.ts`, the shared `GenerateOptions`/`AIResponse`/`AnswerGrounding` types to `types.ts`, the grounded scoring and engine budgets to `scoring.ts`, and the self-consistency sampler to `selfConsistency.ts`, while `index.ts` keeps the arbitration flow and re-exports the same public API. Import path unchanged, so no caller changed. Previous release: the agent fast path's bilingual copy table and its rule chain split into `copy.ts` and `matching.ts`."
 }

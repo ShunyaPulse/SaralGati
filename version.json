@@ -1,7 +1,7 @@
 {
-  "version_code": 70,
-  "version_name": "5.5.0",
+  "version_code": 71,
+  "version_name": "5.6.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Every API route is now a thin adapter: the logic moved out of `src/app/api` into a new `src/server` service layer (agent, alerts, elders, habits, auth, app), whose modules return a status plus a body so that `src/server/http.ts` is the only place that speaks HTTP. URLs, verbs, status codes and payloads are unchanged - only the framework's NextAuth handler stays where it is. The stale `src/lib/...` paths the earlier module splits left behind in README and code comments are corrected. Previous release: `intentDictionary` and `fraudSentinel` split into module folders behind unchanged import paths."
+  "changelog": "`SaralGatiAccessibilityService` drops from 1341 to 936 lines: the five helpers that only ever read the node they are handed - element role, human-readable label, Activity-vs-widget classification, endless-feed detection and scrollable discovery - moved into `UiElementLabels.kt` and `ScreenTraversal.kt` in the same package, so no call site changed and the service keeps only the part that needs its own state. Every moved block was diffed byte-for-byte against the original. Previous release: every API route became a thin adapter over a new `src/server` service layer."
 }

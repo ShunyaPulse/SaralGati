@@ -17,9 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.content.ComponentName
 import android.content.Context
-import android.text.TextUtils
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -27,7 +25,6 @@ import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.data.local.LocalPrefs
 import com.saralgati.app.data.model.AssistanceLog
-import com.saralgati.app.services.accessibility.SaralGatiAccessibilityService
 import com.saralgati.app.utils.AutoStartHelper
 import kotlinx.coroutines.launch
 
@@ -359,35 +356,4 @@ fun DashboardScreen(
             }
         }
     }
-}
-
-private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-    if (SaralGatiAccessibilityService.isServiceRunning) {
-        return true
-    }
-    val enabledServices = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-    ) ?: return false
-    val colonSplitter = TextUtils.SimpleStringSplitter(':')
-    colonSplitter.setString(enabledServices)
-    val myComponentName = ComponentName(context, SaralGatiAccessibilityService::class.java)
-    while (colonSplitter.hasNext()) {
-        val componentNameString = colonSplitter.next()
-        val enabledComponent = ComponentName.unflattenFromString(componentNameString)
-        if (enabledComponent != null && enabledComponent == myComponentName) {
-            return true
-        }
-    }
-    return false
-}
-
-private fun isOverlayPermissionGranted(context: Context): Boolean {
-    return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(context)
-}
-
-private fun isBatteryOptimizationIgnored(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
-    val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
-    return pm?.isIgnoringBatteryOptimizations(context.packageName) ?: true
 }

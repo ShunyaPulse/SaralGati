@@ -3,7 +3,7 @@ import React from 'react';
 import { Battery } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
-import { getDeviceStatus } from '@/lib/utils';
+import { getDeviceStatus } from '@/lib/shared/utils';
 import Link from 'next/link';
 
 const DEVICE_DOT_CLASS = { online: 'bg-green-500', offline: 'bg-amber-400', unpaired: 'bg-slate-300' } as const;

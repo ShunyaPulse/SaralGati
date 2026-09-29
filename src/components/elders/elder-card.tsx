@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Battery, Smartphone, PhoneCall, Clock, QrCode } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ElderProfile } from '@/types';
-import { getDeviceStatus } from '@/lib/utils';
+import { getDeviceStatus } from '@/lib/shared/utils';
 import Link from 'next/link';
 import { PairingModal } from './pairing-modal';
 

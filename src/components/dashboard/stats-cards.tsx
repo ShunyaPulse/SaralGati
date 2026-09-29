@@ -2,7 +2,7 @@
 import React from 'react';
 import { Users, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import { ElderProfile, AssistanceLog } from '@/types';
-import { getDeviceStatus, isDeviceOnline, normalizeSeverity } from '@/lib/utils';
+import { getDeviceStatus, isDeviceOnline, normalizeSeverity } from '@/lib/shared/utils';
 
 interface StatsCardsProps {
   elders: ElderProfile[];

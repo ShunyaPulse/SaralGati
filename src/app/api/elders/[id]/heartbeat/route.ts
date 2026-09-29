@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { query, queryOne } from '@/lib/db';
-import { invalidatePattern } from '@/lib/redis';
+import { query, queryOne } from '@/lib/data/db';
+import { invalidatePattern } from '@/lib/data/redis';
 
-import { validateDeviceToken } from '@/lib/agent-auth';
-import { heartbeatSchema } from '@/lib/validations';
-import { notifySafeZoneExit } from '@/lib/safeZoneAlerts';
+import { validateDeviceToken } from '@/lib/auth/agent-auth';
+import { heartbeatSchema } from '@/lib/shared/validations';
+import { notifySafeZoneExit } from '@/lib/geo/safeZoneAlerts';
 import {
   GEOFENCE_ALERT_COOLDOWN_MS,
   distanceToFenceCenterM,
@@ -14,7 +14,7 @@ import {
   toGeoPoint,
   type GeoPoint,
   type Geofence,
-} from '@/lib/geo';
+} from '@/lib/geo/geo';
 
 interface ElderLocationRow {
   id: string;

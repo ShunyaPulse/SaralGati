@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { validateDeviceToken } from '@/lib/agent-auth';
-import { query, queryOne } from '@/lib/db';
-import { cacheGet, cacheSet } from '@/lib/redis';
+import { validateDeviceToken } from '@/lib/auth/agent-auth';
+import { query, queryOne } from '@/lib/data/db';
+import { cacheGet, cacheSet } from '@/lib/data/redis';
 import { ElderProfile, HabitRule } from '@/types';
 
 // Hardcoded guidance strings based on language

@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
-import { cacheDelete } from '@/lib/redis';
+import { getAuthSession } from '@/lib/auth/auth';
+import { queryOne } from '@/lib/data/db';
+import { cacheDelete } from '@/lib/data/redis';
 import { HabitRule, ApiResponse } from '@/types';
-import { parseGeofence } from '@/lib/geo';
+import { parseGeofence } from '@/lib/geo/geo';
 import { z } from 'zod';
 
 const updateHabitSchema = z.object({

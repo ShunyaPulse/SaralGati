@@ -5,8 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AssistanceLog } from '@/types';
-import { alertDescription, alertMapUrl, alertTitle } from '@/lib/alerts';
-import { normalizeSeverity } from '@/lib/utils';
+import { alertDescription, alertMapUrl, alertTitle } from '@/lib/notify/alerts';
+import { normalizeSeverity } from '@/lib/shared/utils';
 
 const SEVERITY_VARIANT = { high: 'danger', medium: 'warning', low: 'info' } as const;
 const SEVERITY_LABEL = { high: 'HIGH', medium: 'MEDIUM', low: 'LOW' } as const;

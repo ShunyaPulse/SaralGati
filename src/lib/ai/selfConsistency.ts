@@ -22,7 +22,7 @@
  */
 
 import { groundAnswer, type GroundedAnswer } from './answerGrounding';
-import type { GuidanceLang } from './guidanceLanguage';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 
 export interface ConsistencyVote {
   /** The winning sentence, with its TARGET tag already validated. */

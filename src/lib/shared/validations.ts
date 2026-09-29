@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { parseGeofence } from './geo';
+import { parseGeofence } from '@/lib/geo/geo';
 
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),

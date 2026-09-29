@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { validateDeviceToken } from '@/lib/agent-auth';
-import { queryOne, transaction } from '@/lib/db';
-import { cacheDelete, invalidatePattern, rateLimiter } from '@/lib/redis';
-import { planSyncedHabits } from '@/lib/habits';
-import { syncHabitsSchema } from '@/lib/validations';
+import { validateDeviceToken } from '@/lib/auth/agent-auth';
+import { queryOne, transaction } from '@/lib/data/db';
+import { cacheDelete, invalidatePattern, rateLimiter } from '@/lib/data/redis';
+import { planSyncedHabits } from '@/lib/data/habits';
+import { syncHabitsSchema } from '@/lib/shared/validations';
 
 export async function POST(request: Request) {
   try {

@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { queryOne } from '@/lib/db';
-import redis, { cacheSet, rateLimiter } from '@/lib/redis';
-import { isFlywheelRequest, validateDeviceToken } from '@/lib/agent-auth';
-import { normalizeGuidanceLang } from '@/lib/guidanceLanguage';
+import { queryOne } from '@/lib/data/db';
+import redis, { cacheSet, rateLimiter } from '@/lib/data/redis';
+import { isFlywheelRequest, validateDeviceToken } from '@/lib/auth/agent-auth';
+import { normalizeGuidanceLang } from '@/lib/guidance/guidanceLanguage';
 import {
   correctionExplanation,
   normalizeScreenQuestion,
   screenCacheKey,
-} from '@/lib/screenCache';
+} from '@/lib/guidance/screenCache';
 
 /**
  * Feedback drives the self-learning cache: a verified answer is promoted to a

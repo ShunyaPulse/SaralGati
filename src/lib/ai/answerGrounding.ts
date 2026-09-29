@@ -16,11 +16,11 @@
  */
 
 import { scoreOutputConfidence } from './confidenceScorer';
-import type { GuidanceLang } from './guidanceLanguage';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 import {
   validateSemanticTarget,
   type SemanticValidationResult,
-} from './semanticValidator';
+} from '@/lib/guidance/semanticValidator';
 
 export interface GroundedAnswer {
   /** The sentence with its TARGET tag rewritten to the validated index. */

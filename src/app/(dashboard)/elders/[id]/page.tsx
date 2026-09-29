@@ -13,7 +13,7 @@ import { AssistanceLogsTimeline } from '@/components/elders/assistance-logs-time
 import { Modal } from '@/components/ui/modal';
 import { PairingModal } from '@/components/elders/pairing-modal';
 import { ElderProfile } from '@/types';
-import { getDeviceStatus } from '@/lib/utils';
+import { getDeviceStatus } from '@/lib/shared/utils';
 
 const CONNECTION_BADGE_CLASS = {
   online: 'bg-green-100 text-green-800',

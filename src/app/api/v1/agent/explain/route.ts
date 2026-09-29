@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { generateAIResponse } from "@/lib/aiFallback";
-import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraudSentinel";
+import { generateAIResponse } from "@/lib/ai/aiFallback";
+import { isFlywheelRequest, validateDeviceToken } from "@/lib/auth/agent-auth";
+import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraud/fraudSentinel";
 import {
   analyzeForFraudWithAdvisor,
   INTERACTIVE_ADVISOR_TIMEOUT_MS,
-} from "@/lib/fraudAdvisor";
-import { rateLimiter } from "@/lib/redis";
+} from "@/lib/fraud/fraudAdvisor";
+import { rateLimiter } from "@/lib/data/redis";
 
 const explainRequestSchema = z.object({
   app_package: z

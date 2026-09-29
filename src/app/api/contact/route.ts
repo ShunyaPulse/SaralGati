@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter, getSubnet } from '@/lib/redis';
+import { rateLimiter, getSubnet } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
-import { createMailer } from '@/lib/mailer';
+import { createMailer } from '@/lib/notify/mailer';
 
 const contactSchema = z.object({
   name: z.string().min(1, 'Name is required'),

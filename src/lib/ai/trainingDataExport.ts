@@ -1,8 +1,8 @@
 import {
   hasDevanagari,
   type GuidanceLang,
-} from "./guidanceLanguage";
-import { buildAskSystemPrompt } from "./guidancePrompt";
+} from "@/lib/guidance/guidanceLanguage";
+import { buildAskSystemPrompt } from "@/lib/guidance/guidancePrompt";
 
 /**
  * Turns captured interactions into LoRA training rows.

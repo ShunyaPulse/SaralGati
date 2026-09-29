@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
-import { queryOne } from '@/lib/db';
-import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet } from '@/lib/redis';
+import { queryOne } from '@/lib/data/db';
+import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
-import { verifyTurnstile } from '@/lib/turnstile';
+import { verifyTurnstile } from '@/lib/auth/turnstile';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),

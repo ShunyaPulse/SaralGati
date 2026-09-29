@@ -13,7 +13,7 @@ import {
   BENCHMARK_THRESHOLDS,
   formatBenchmarkReport,
   runGuidanceBenchmark,
-} from '../src/lib/accuracyBenchmark';
+} from '../src/lib/ai/accuracyBenchmark';
 
 const report = runGuidanceBenchmark();
 console.log(formatBenchmarkReport(report));

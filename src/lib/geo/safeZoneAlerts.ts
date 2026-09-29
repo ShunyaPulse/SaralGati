@@ -1,5 +1,5 @@
-import { safeZoneExitEmail, shouldEmailSafeZoneExit } from './alerts';
-import { sendMail, type MailMessage } from './mailer';
+import { safeZoneExitEmail, shouldEmailSafeZoneExit } from '@/lib/notify/alerts';
+import { sendMail, type MailMessage } from '@/lib/notify/mailer';
 import type { GeoPoint, Geofence } from './geo';
 
 /**

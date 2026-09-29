@@ -18,7 +18,7 @@
  * so a loud advertisement never freezes the phone the way an OTP request does.
  */
 
-import type { GuidanceLang } from './guidanceLanguage';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 
 export type ThreatLevel = 'SAFE' | 'SUSPICIOUS' | 'DANGEROUS' | 'CRITICAL';
 

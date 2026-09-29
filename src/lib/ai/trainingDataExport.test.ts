@@ -1,7 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeGuidanceLang } from './guidanceLanguage';
-import { guidanceInstructions } from './guidancePrompt';
+import { normalizeGuidanceLang } from '@/lib/guidance/guidanceLanguage';
+import { guidanceInstructions } from '@/lib/guidance/guidancePrompt';
 import {
   REJECTED_GUIDANCE_COPY,
   buildDpoSample,

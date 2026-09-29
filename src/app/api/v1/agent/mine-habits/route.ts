@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
-import { generateAIResponse } from "@/lib/aiFallback";
-import { isFlywheelRequest } from "@/lib/agent-auth";
+import { query } from "@/lib/data/db";
+import { generateAIResponse } from "@/lib/ai/aiFallback";
+import { isFlywheelRequest } from "@/lib/auth/agent-auth";
 
 /** Mirrors the CHECK constraint on habit_rules.rule_type - the model is free to
  * invent other labels, and an unchecked insert would fail the whole write. */

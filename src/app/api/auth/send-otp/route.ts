@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet } from '@/lib/redis';
+import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
-import { createMailer } from '@/lib/mailer';
-import { queryOne } from '@/lib/db';
-import { verifyTurnstile } from '@/lib/turnstile';
+import { createMailer } from '@/lib/notify/mailer';
+import { queryOne } from '@/lib/data/db';
+import { verifyTurnstile } from '@/lib/auth/turnstile';
 import crypto from 'crypto';
 
 const sendOtpSchema = z.object({

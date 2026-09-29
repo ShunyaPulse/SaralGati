@@ -1,5 +1,5 @@
-import { getDeviceSession, setDeviceSession } from './redis';
-import { queryOne } from './db';
+import { getDeviceSession, setDeviceSession } from '@/lib/data/redis';
+import { queryOne } from '@/lib/data/db';
 import crypto from 'crypto';
 import { verifyAndroidHmac } from './hmac';
 

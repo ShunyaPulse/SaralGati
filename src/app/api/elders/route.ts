@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { query, queryOne } from '@/lib/db';
-import { cacheGet, cacheSet, invalidatePattern } from '@/lib/redis';
-import { elderProfileSchema } from '@/lib/validations';
-import { toApiElder } from '@/lib/utils';
+import { getAuthSession } from '@/lib/auth/auth';
+import { query, queryOne } from '@/lib/data/db';
+import { cacheGet, cacheSet, invalidatePattern } from '@/lib/data/redis';
+import { elderProfileSchema } from '@/lib/shared/validations';
+import { toApiElder } from '@/lib/shared/utils';
 import { ElderProfile, ApiResponse } from '@/types';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<ElderProfile[]>>> {

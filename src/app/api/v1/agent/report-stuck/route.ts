@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { validateDeviceToken } from '@/lib/agent-auth';
-import { queryOne } from '@/lib/db';
-import { deduplicateAlert, invalidatePattern } from '@/lib/redis';
-import { reportStuckSchema } from '@/lib/validations';
+import { validateDeviceToken } from '@/lib/auth/agent-auth';
+import { queryOne } from '@/lib/data/db';
+import { deduplicateAlert, invalidatePattern } from '@/lib/data/redis';
+import { reportStuckSchema } from '@/lib/shared/validations';
 
 export async function POST(request: Request) {
   try {

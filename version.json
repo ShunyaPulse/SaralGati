@@ -1,7 +1,7 @@
 {
-  "version_code": 75,
-  "version_name": "5.10.0",
+  "version_code": 76,
+  "version_name": "5.11.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "`src/lib/ai/aiFallback.ts` (517 lines) splits five ways along its real seams: the Cloudflare LoRA and Gemini HTTP clients to `engines.ts`, the shared `GenerateOptions`/`AIResponse`/`AnswerGrounding` types to `types.ts`, the grounded scoring and engine budgets to `scoring.ts`, and the self-consistency sampler to `selfConsistency.ts`, while `index.ts` keeps the arbitration flow and re-exports the same public API. Import path unchanged, so no caller changed. Previous release: the agent fast path's bilingual copy table and its rule chain split into `copy.ts` and `matching.ts`."
+  "changelog": "`src/lib/fraud/offlineFraudRules.ts` (452 lines) splits two ways: the serialisable ruleset - types, the string patterns that go into the Android asset and the curated 12-rule list - moves to `ruleset.ts`, and the compiled matching engine (precompiled regexes, tie-breaking, the instant verdict, the safe-action finder and the asset serialiser) to `engine.ts`, with `index.ts` re-exporting the same public API. Import path unchanged, so no caller changed, including the Android asset exporter. Previous release: the AI fallback's engines, types, scoring and self-consistency sampler split into an `aiFallback/` folder."
 }

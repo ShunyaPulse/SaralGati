@@ -1,7 +1,7 @@
 {
-  "version_code": 72,
-  "version_name": "5.7.0",
+  "version_code": 73,
+  "version_name": "5.8.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "`src/lib/ai/accuracyBenchmark.ts` (921 lines) is now a folder: the 30 labelled screens moved to `fixtures.ts`, the verifier's perturbation builders to `verifierCases.ts`, and `index.ts` keeps the harness (runners, floors, printable report) with the same public API. Import paths did not change, so the test file and `npm run bench:guidance` needed no edit and the printed numbers are identical to before. Previous release: the accessibility service's node readers moved into UiElementLabels.kt and ScreenTraversal.kt."
+  "changelog": "`src/lib/ai/fewShotGrounding.ts` (562 lines) splits three ways: the 374-line curated example corpus and its `FewShotExample` type move to `examples.ts`, the BM25 ranking (stop-words, tokenizer, scoring) to `bm25.ts`, and `index.ts` keeps the formatter and selector with the same public API. Import paths did not change, so no caller was edited and the retrieval pins still pass. Previous release: the accuracy benchmark split into fixtures.ts, verifierCases.ts and index.ts."
 }

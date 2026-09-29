@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect } from 'react';
 import { useHabitStore } from '@/stores/habit-store';
-import { parseGeofence } from '@/lib/geo';
+import { parseGeofence } from '@/lib/geo/geo';
 import { HabitRule } from '@/types';
 
 /** The stored enum values are not meant to be read by a caregiver. */

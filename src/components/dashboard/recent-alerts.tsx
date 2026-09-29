@@ -3,8 +3,8 @@ import React from 'react';
 import { AssistanceLog } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
 import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { alertDescription, alertTitle, isGeofenceExitAlert } from '@/lib/alerts';
-import { normalizeSeverity } from '@/lib/utils';
+import { alertDescription, alertTitle, isGeofenceExitAlert } from '@/lib/notify/alerts';
+import { normalizeSeverity } from '@/lib/shared/utils';
 
 export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loading: boolean }) {
   if (loading) {

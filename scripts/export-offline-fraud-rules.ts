@@ -1,6 +1,6 @@
 /**
  * Regenerates the Android asset `android/app/src/main/assets/offline_fraud_rules.json`
- * from `src/lib/offlineFraudRules.ts`.
+ * from `src/lib/fraud/offlineFraudRules.ts`.
  *
  * Run with `npm run rules:export` after changing the offline ruleset. The asset
  * is committed and pinned in sync by `offlineFraudRules.test.ts`, so a stale
@@ -10,7 +10,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { serializeOfflineFraudRules } from '../src/lib/offlineFraudRules';
+import { serializeOfflineFraudRules } from '../src/lib/fraud/offlineFraudRules';
 
 const target = path.join(
   process.cwd(),

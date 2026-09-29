@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
-import { cacheDelete, invalidatePattern } from '@/lib/redis';
-import { validateDeviceToken } from '@/lib/agent-auth';
-import { elderProfileSchema, elderPreferencesSchema } from '@/lib/validations';
-import { toApiElder } from '@/lib/utils';
+import { getAuthSession } from '@/lib/auth/auth';
+import { queryOne } from '@/lib/data/db';
+import { cacheDelete, invalidatePattern } from '@/lib/data/redis';
+import { validateDeviceToken } from '@/lib/auth/agent-auth';
+import { elderProfileSchema, elderPreferencesSchema } from '@/lib/shared/validations';
+import { toApiElder } from '@/lib/shared/utils';
 import { ElderProfile, ApiResponse } from '@/types';
 
 export async function GET(

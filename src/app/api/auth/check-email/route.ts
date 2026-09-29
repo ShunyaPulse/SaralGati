@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { queryOne } from '@/lib/db';
-import { rateLimiter, getSubnet } from '@/lib/redis';
+import { queryOne } from '@/lib/data/db';
+import { rateLimiter, getSubnet } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 
 export const dynamic = 'force-dynamic';

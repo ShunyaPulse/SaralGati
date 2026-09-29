@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ElderProfile } from '@/types';
-import { elderProfileSchema } from '@/lib/validations';
+import { elderProfileSchema } from '@/lib/shared/validations';
 import { Smartphone } from 'lucide-react';
 
 type ElderFormData = z.infer<typeof elderProfileSchema>;

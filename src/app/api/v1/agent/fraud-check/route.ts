@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
-import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
+import { isFlywheelRequest, validateDeviceToken } from "@/lib/auth/agent-auth";
 import {
   analyzeForFraudWithAdvisor,
   DEVICE_ADVISOR_TIMEOUT_MS,
-} from "@/lib/fraudAdvisor";
-import { query } from "@/lib/db";
-import { rateLimiter } from "@/lib/redis";
+} from "@/lib/fraud/fraudAdvisor";
+import { query } from "@/lib/data/db";
+import { rateLimiter } from "@/lib/data/redis";
 
 /**
  * Request for the Autonomous Anti-Fraud Sentinel.

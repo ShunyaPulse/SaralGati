@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
-import { cacheDelete, setDeviceSession } from '@/lib/redis';
+import { getAuthSession } from '@/lib/auth/auth';
+import { queryOne } from '@/lib/data/db';
+import { cacheDelete, setDeviceSession } from '@/lib/data/redis';
 import { randomBytes } from 'crypto';
 
 export async function POST(request: Request) {

@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { query, queryOne } from '@/lib/db';
-import { cacheGet, cacheSet, invalidatePattern, rateLimiter } from '@/lib/redis';
+import { getAuthSession } from '@/lib/auth/auth';
+import { query, queryOne } from '@/lib/data/db';
+import { cacheGet, cacheSet, invalidatePattern, rateLimiter } from '@/lib/data/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
-import { androidAlertSchema } from '@/lib/validations';
-import { verifyAndroidHmac } from '@/lib/hmac';
+import { androidAlertSchema } from '@/lib/shared/validations';
+import { verifyAndroidHmac } from '@/lib/auth/hmac';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<AssistanceLog[]>>> {
   try {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AssistanceLog } from '@/types';
-import { alertTitle, isGeofenceExitAlert } from '@/lib/alerts';
+import { alertTitle, isGeofenceExitAlert } from '@/lib/notify/alerts';
 import { formatDistanceToNow } from 'date-fns';
 
 export function AssistanceLogsTimeline({ logs, loading }: { logs: AssistanceLog[], loading: boolean }) {

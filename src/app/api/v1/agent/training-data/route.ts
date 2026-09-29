@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
-import { pruneUITree } from "@/lib/uiPruner";
-import { isFlywheelRequest } from "@/lib/agent-auth";
-import { FRAUD_ANALYST_SYSTEM_PROMPT } from "@/lib/fraudAdvisor";
+import { query } from "@/lib/data/db";
+import { pruneUITree } from "@/lib/guidance/uiPruner";
+import { isFlywheelRequest } from "@/lib/auth/agent-auth";
+import { FRAUD_ANALYST_SYSTEM_PROMPT } from "@/lib/fraud/fraudAdvisor";
 import {
   normalizeGuidanceLang,
   type GuidanceLang,
-} from "@/lib/guidanceLanguage";
+} from "@/lib/guidance/guidanceLanguage";
 import {
   buildDpoSample,
   buildSftSample,
   partitionTrainable,
   summarizeLanguageCoverage,
-} from "@/lib/trainingDataExport";
+} from "@/lib/ai/trainingDataExport";
 
 export async function GET(req: NextRequest) {
   try {

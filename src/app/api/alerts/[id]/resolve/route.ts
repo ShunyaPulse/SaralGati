@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
-import { invalidatePattern } from '@/lib/redis';
+import { getAuthSession } from '@/lib/auth/auth';
+import { queryOne } from '@/lib/data/db';
+import { invalidatePattern } from '@/lib/data/redis';
 import { AssistanceLog, ApiResponse } from '@/types';
 
 export async function PATCH(

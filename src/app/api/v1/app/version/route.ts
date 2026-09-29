@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import versionData from '../../../../../../version.json';
-import { cacheGet, cacheSet } from '@/lib/redis';
+import { cacheGet, cacheSet } from '@/lib/data/redis';
 
 export const dynamic = 'force-dynamic';
 

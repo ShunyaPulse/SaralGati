@@ -1,6 +1,6 @@
-import { ELDER_INTENTS, matchQueryPattern } from "./intentDictionary";
-import { isNoiseElement } from "./semanticValidator";
-import { hasDevanagari, type GuidanceLang } from "./guidanceLanguage";
+import { ELDER_INTENTS, matchQueryPattern } from "@/lib/guidance/intentDictionary";
+import { isNoiseElement } from "@/lib/guidance/semanticValidator";
+import { hasDevanagari, type GuidanceLang } from "@/lib/guidance/guidanceLanguage";
 
 export interface ConfidenceScore {
   score: number; // 0 to 100

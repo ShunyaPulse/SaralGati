@@ -7,7 +7,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Mail, Lock, AlertCircle } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
-import { safeRedirectPath } from '@/lib/utils';
+import { safeRedirectPath } from '@/lib/shared/utils';
 
 export default function LoginPage() {
   const router = useRouter();

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import type { MailMessage } from './mailer';
+import type { MailMessage } from '@/lib/notify/mailer';
 import { notifySafeZoneExit, type SafeZoneExitNotice } from './safeZoneAlerts';
 
 const NOTICE: SafeZoneExitNotice = {

@@ -1,10 +1,10 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { matchFastPathRule } from './agentFastPath';
-import { scoreOutputConfidence } from './confidenceScorer';
-import { formatRelevantFewShots } from './fewShotGrounding';
-import { analyzeForFraud, sentinelExplanation } from './fraudSentinel';
-import { flowStepInstruction } from './flowEngine';
+import { scoreOutputConfidence } from '@/lib/ai/confidenceScorer';
+import { formatRelevantFewShots } from '@/lib/ai/fewShotGrounding';
+import { analyzeForFraud, sentinelExplanation } from '@/lib/fraud/fraudSentinel';
+import { flowStepInstruction } from '@/lib/data/flowEngine';
 import { hasDevanagari } from './guidanceLanguage';
 import {
   ELDER_INTENTS,

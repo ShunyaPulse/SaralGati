@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
-import { generateAIResponse } from "@/lib/aiFallback";
-import { cacheGet, cacheSet } from "@/lib/redis";
-import { matchFastPathRule } from "@/lib/agentFastPath";
-import { pruneUITree } from "@/lib/uiPruner";
-import { evaluateMultiStepFlow } from "@/lib/flowEngine";
-import { formatRelevantFewShots } from "@/lib/fewShotGrounding";
-import { validateSemanticTarget } from "@/lib/semanticValidator";
-import { query } from "@/lib/db";
-import { isFlywheelRequest, validateDeviceToken } from "@/lib/agent-auth";
-import { MIN_PROMOTABLE_CONFIDENCE } from "@/lib/confidenceScorer";
-import { hasDevanagari, type GuidanceLang } from "@/lib/guidanceLanguage";
-import { buildAskSystemPrompt } from "@/lib/guidancePrompt";
-import { normalizeScreenQuestion, screenCacheKey } from "@/lib/screenCache";
-import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraudSentinel";
+import { generateAIResponse } from "@/lib/ai/aiFallback";
+import { cacheGet, cacheSet } from "@/lib/data/redis";
+import { matchFastPathRule } from "@/lib/guidance/agentFastPath";
+import { pruneUITree } from "@/lib/guidance/uiPruner";
+import { evaluateMultiStepFlow } from "@/lib/data/flowEngine";
+import { formatRelevantFewShots } from "@/lib/ai/fewShotGrounding";
+import { validateSemanticTarget } from "@/lib/guidance/semanticValidator";
+import { query } from "@/lib/data/db";
+import { isFlywheelRequest, validateDeviceToken } from "@/lib/auth/agent-auth";
+import { MIN_PROMOTABLE_CONFIDENCE } from "@/lib/ai/confidenceScorer";
+import { hasDevanagari, type GuidanceLang } from "@/lib/guidance/guidanceLanguage";
+import { buildAskSystemPrompt } from "@/lib/guidance/guidancePrompt";
+import { normalizeScreenQuestion, screenCacheKey } from "@/lib/guidance/screenCache";
+import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraud/fraudSentinel";
 import {
   analyzeForFraudWithAdvisor,
   INTERACTIVE_ADVISOR_TIMEOUT_MS,
-} from "@/lib/fraudAdvisor";
-import { rateLimiter } from "@/lib/redis";
+} from "@/lib/fraud/fraudAdvisor";
+import { rateLimiter } from "@/lib/data/redis";
 
 const askRequestSchema = z.object({
   app_package: z

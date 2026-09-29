@@ -1,4 +1,4 @@
-import { mapsUrl, toGeoPoint, type GeoPoint, type Geofence } from './geo';
+import { mapsUrl, toGeoPoint, type GeoPoint, type Geofence } from '@/lib/geo/geo';
 
 /** `metadata.kind` the heartbeat route writes for a "left the safe zone" alert. */
 export const GEOFENCE_EXIT_KIND = 'geofence_exit';

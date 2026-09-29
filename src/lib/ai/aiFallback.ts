@@ -10,7 +10,7 @@
  */
 
 import { groundAnswer, type GroundedAnswer } from './answerGrounding';
-import type { GuidanceLang } from './guidanceLanguage';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 import { voteOnAnswers } from './selfConsistency';
 
 /**

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fenceAccuracyMarginM, isFenceExit } from './geo';
+import { fenceAccuracyMarginM, isFenceExit } from '@/lib/geo/geo';
 import {
   alertDescription,
   alertMapUrl,

@@ -29,12 +29,12 @@
  * role-tagged lines) and the way an elder speaks (imperative, mostly Hinglish).
  */
 
-import { matchFastPathRule } from './agentFastPath';
+import { matchFastPathRule } from '@/lib/guidance/agentFastPath';
 import { groundAnswer } from './answerGrounding';
 import { formatRelevantFewShots } from './fewShotGrounding';
-import type { GuidanceLang } from './guidanceLanguage';
-import { matchElderIntent } from './intentDictionary';
-import { isNoiseElement } from './semanticValidator';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
+import { matchElderIntent } from '@/lib/guidance/intentDictionary';
+import { isNoiseElement } from '@/lib/guidance/semanticValidator';
 
 export interface GuidanceCase {
   id: string;

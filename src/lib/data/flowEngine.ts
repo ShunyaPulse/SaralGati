@@ -1,5 +1,5 @@
-import { cacheGet, cacheSet, cacheDelete } from '@/lib/redis';
-import type { GuidanceLang } from '@/lib/guidanceLanguage';
+import { cacheGet, cacheSet, cacheDelete } from './redis';
+import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 
 import {
   FlowStep,

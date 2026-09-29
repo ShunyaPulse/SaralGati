@@ -1,7 +1,7 @@
 import { NextAuthOptions, getServerSession } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { query, queryOne } from '@/lib/db';
+import { query, queryOne } from '@/lib/data/db';
 import bcrypt from 'bcryptjs';
 
 export const authOptions: NextAuthOptions = {
@@ -45,7 +45,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         if (credentials.otp) {
-          const { cacheGet, cacheDelete, cacheSet } = await import('@/lib/redis');
+          const { cacheGet, cacheDelete, cacheSet } = await import('@/lib/data/redis');
 
           // OTP attempt capping: max 5 invalid attempts before auto-wipe
           const attemptKey = `otp_attempts:login:${cleanEmail}`;

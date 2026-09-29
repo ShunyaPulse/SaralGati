@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getAuthSession } from '@/lib/auth';
-import { query, queryOne } from '@/lib/db';
-import { cacheDelete } from '@/lib/redis';
+import { getAuthSession } from '@/lib/auth/auth';
+import { query, queryOne } from '@/lib/data/db';
+import { cacheDelete } from '@/lib/data/redis';
 import { HabitRule, ApiResponse } from '@/types';
-import { habitRuleSchema } from '@/lib/validations';
+import { habitRuleSchema } from '@/lib/shared/validations';
 
 export async function GET(request: Request): Promise<NextResponse<ApiResponse<HabitRule[]>>> {
   try {

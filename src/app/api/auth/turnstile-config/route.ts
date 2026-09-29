@@ -1,14 +1,12 @@
-import { NextResponse } from 'next/server';
+import { toResponse } from '@/server/http';
+import { getTurnstileConfig } from '@/server/auth/turnstileConfig';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * GET /api/auth/turnstile-config - the public Turnstile site key.
+ * Logic: src/server/auth/turnstileConfig.ts.
+ */
 export async function GET() {
-  const siteKey =
-    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ||
-    process.env.CLOUDFLARE_TURNSTILE_SITE_KEY ||
-    '';
-
-  return NextResponse.json({
-    siteKey,
-  });
+  return toResponse(await getTurnstileConfig());
 }

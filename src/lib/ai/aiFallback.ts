@@ -43,7 +43,7 @@ interface GenerateOptions {
   lang?: GuidanceLang;
   /**
    * How many times to sample the teacher engine (see `selfConsistencyScope`).
-   * >1 turns on self-consistency voting (src/lib/selfConsistency.ts): samples
+   * >1 turns on self-consistency voting (src/lib/ai/selfConsistency.ts): samples
    * are drawn at a sampling temperature and the plurality validated target
    * wins. Left at 1 where an elder is waiting; raised where a label is being
    * produced for training.

@@ -1,7 +1,7 @@
 {
-  "version_code": 73,
-  "version_name": "5.8.0",
+  "version_code": 74,
+  "version_name": "5.9.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "`src/lib/ai/fewShotGrounding.ts` (562 lines) splits three ways: the 374-line curated example corpus and its `FewShotExample` type move to `examples.ts`, the BM25 ranking (stop-words, tokenizer, scoring) to `bm25.ts`, and `index.ts` keeps the formatter and selector with the same public API. Import paths did not change, so no caller was edited and the retrieval pins still pass. Previous release: the accuracy benchmark split into fixtures.ts, verifierCases.ts and index.ts."
+  "changelog": "`src/lib/guidance/agentFastPath.ts` (484 lines) splits into `copy.ts` (the bilingual sentence table with its key type, still `as const` so the compiler refuses a half-translated rule) and `matching.ts` (the rule chain, node lookups and the `FastPathMatch` result), while `index.ts` keeps the module's doc and the same public API. No caller changed. Previous release: the few-shot corpus and its BM25 retrieval split into `examples.ts`, `bm25.ts` and `index.ts`."
 }

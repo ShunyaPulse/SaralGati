@@ -1,4 +1,4 @@
-import { fail, ok, type ServiceResult } from '@/server/http';
+import { fail, type ServiceResult } from '@/server/http';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { queryOne } from '@/lib/data/db';

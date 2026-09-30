@@ -62,7 +62,7 @@ jobs:
           # -f so an auth failure aborts instead of saving the error body as a
           # dataset that then gets uploaded as a training artifact.
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
-            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000" \
             -o dataset.jsonl
           echo "Downloaded $(wc -l < dataset.jsonl) SFT rows to dataset.jsonl"
 
@@ -72,7 +72,7 @@ jobs:
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
         run: |
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
-            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000" \
             -o fraud_dataset.jsonl 2>/dev/null || true
           if [ -s fraud_dataset.jsonl ]; then
             FRAUD_LINES=$(wc -l < fraud_dataset.jsonl)
@@ -108,12 +108,16 @@ jobs:
           echo "📦 Isolating Kaggle files..."
           mkdir -p kaggle_push
           cp scripts/train_unsloth_lora.py kaggle_push/
+          cp dataset.jsonl kaggle_push/
+
+          echo "📦 Bundling verified dataset into self-contained payload..."
+          python scripts/bundle_dataset.py dataset.jsonl kaggle_push
 
           echo "🔄 Updating kernel-metadata.json with correct Kaggle username..."
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
           jq --arg username "$USERNAME_LOWER" '.id = $username + "/saralgati-lora-training"' scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
 
-          echo "🔑 Injecting Cloudflare deploy credentials into ephemeral Kaggle payload..."
+          echo "🔑 Checking deploy credentials..."
           python scripts/inject_kaggle_secrets.py
 
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."

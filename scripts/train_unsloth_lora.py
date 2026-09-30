@@ -5,19 +5,12 @@ optimizations, using live verified dataset from SaralGati Flywheel, and auto-dep
 to Cloudflare Workers AI.
 """
 
+import glob
 import os
 import sys
 import json
 import subprocess
 import requests
-
-# The verified dataset travels *inside* this file. `kaggle kernels push` only
-# uploads the code file named in kernel-metadata.json, so sibling modules
-# (dataset_payload.py) and dataset.jsonl never reach the Kaggle container - a
-# plain import therefore fails with "No module named 'dataset_payload'" and the
-# run silently falls back to six seed samples. CI replaces this empty string with
-# the compressed dataset (scripts/bundle_dataset.py).
-EMBEDDED_DATASET_B64 = ""
 
 # Enforce Single GPU for Maximum Unsloth Speed
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -115,50 +108,40 @@ def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max
     return balanced
 
 
-def embedded_dataset_lines():
-    """Rows injected into this file by CI (scripts/bundle_dataset.py).
+def find_attached_dataset():
+    """Path of the attached Kaggle Dataset's dataset.jsonl, or None.
 
-    This is the only source that is guaranteed to survive the Kaggle push, since
-    the runner is one file and Kaggle uploads nothing else.
+    The verified pool is published as a private Kaggle Dataset and attached to
+    this kernel through `dataset_sources`, which lands it under /kaggle/input/.
+    It cannot travel beside this script: `kaggle kernels push` uploads only the
+    code file named in kernel-metadata.json, and a Kaggle notebook source is
+    capped at 1 MB, so embedding a 1.7 MB pool here is rejected by the SaveKernel
+    API with 400 Bad Request.
     """
-    if not EMBEDDED_DATASET_B64:
-        return []
-    import base64
-    import gzip
-
-    raw = gzip.decompress(base64.b64decode(EMBEDDED_DATASET_B64)).decode("utf-8")
-    return [line for line in raw.split("\n") if line.strip()]
+    for root in ("/kaggle/input", "/kaggle/working"):
+        for path in sorted(glob.glob(os.path.join(root, "**", "dataset.jsonl"), recursive=True)):
+            if os.path.getsize(path) > 0:
+                return path
+    return None
 
 
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
     lines = []
 
-    # 1. First priority: dataset embedded in this script by the CI workflow.
-    try:
-        lines = embedded_dataset_lines()
-        if lines:
-            print(f"[Dataset] Step 1: Loaded {len(lines)} verified training samples embedded in this script by CI.")
-        else:
-            print("[Dataset] Info: No embedded dataset in this script (running outside CI?). Checking Kaggle files...")
-    except Exception as e:
-        print(f"[Dataset] Warning: Embedded dataset failed to decode ({e}).")
-
-    # 2. Second priority: legacy dataset_payload module (only present when the
-    # runner was launched with its sibling files, e.g. from a notebook).
-    if not lines:
+    # 1. First priority: the dataset attached to this Kaggle run as an input.
+    attached = find_attached_dataset()
+    if attached:
         try:
-            _script_dir = os.path.dirname(os.path.abspath(__file__))
-            if _script_dir not in sys.path:
-                sys.path.insert(0, _script_dir)
-            from dataset_payload import get_dataset_lines
-            lines = get_dataset_lines()
-            if lines:
-                print(f"[Dataset] Step 1: Successfully loaded {len(lines)} verified training samples from bundled dataset_payload.")
+            with open(attached, "r", encoding="utf-8") as f:
+                lines = [line for line in f.read().split("\n") if line.strip()]
+            print(f"[Dataset] Step 1: Loaded {len(lines)} verified training samples from the attached Kaggle dataset: {attached}")
         except Exception as e:
-            print(f"[Dataset] Info: Bundled dataset_payload not found or failed ({e}). Checking local files...")
+            print(f"[Dataset] Warning: Could not read attached dataset {attached} ({e}).")
+    else:
+        print("[Dataset] Info: No attached Kaggle dataset found. Checking local files...")
 
-    # 3. Third priority: Check local dataset.jsonl candidates
+    # 2. Second priority: Check local dataset.jsonl candidates
     if not lines:
         candidates = [
             "dataset.jsonl",
@@ -178,7 +161,7 @@ def fetch_live_dataset():
                 except Exception as e:
                     print(f"[Dataset] Warning reading {candidate}: {e}")
 
-    # 4. Fourth priority: Live API fetch from Flywheel
+    # 3. Third priority: Live API fetch from Flywheel
     if not lines:
         url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
         fraud_url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000"

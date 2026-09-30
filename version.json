@@ -1,7 +1,7 @@
 {
-  "version_code": 89,
-  "version_name": "5.11.13",
+  "version_code": 90,
+  "version_name": "5.11.14",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Deploy the trained LoRA adapter from CI instead of Kaggle. A green Kaggle run still ended with the old adapter live, because Kaggle's UserSecrets service is not reliable inside a pushed batch kernel and returned \"Connection error trying to communicate with service\" even with the secrets attached. The workflow now waits for the kernel, downloads the adapter it produced, and uploads it to Cloudflare Workers AI with the repository secrets, failing the job when the adapter is missing or the upload fails - so a run can no longer report success without deploying. The runner gained a --deploy-only mode for that path. Previous release: gave every Kaggle training row the same shape."
+  "changelog": "Cut Kaggle training time from ~10.5 to ~2.5-3 GPU-hours without lowering quality. The real v12 run measured ~27.5s per step at seq 1024 plus a ~7.5-minute eval pass every 50 steps, mostly spent re-evaluating identical data - a third of the weekly GPU quota per run. Training now uses seq length 512 (still covering every guidance row), one epoch for 5000+ samples where the loss already converged to 0.39 within a fraction of one epoch, and evaluates only once at the end, keeping the eval-loss gate that blocks blind deploys. The CI deploy also moved out of the trigger workflow: an hourly Deploy LoRA Adapter (Kernel Sweeper) workflow checks the kernel status, skips adapters already deployed via a freshness comparison against the live Cloudflare fine-tune, and uploads the adapter with repository secrets - GitHub jobs no longer wait hours for Kaggle inside the trigger run. Previous release: deployed the trained LoRA adapter from CI instead of Kaggle secrets."
 }

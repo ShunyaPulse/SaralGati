@@ -306,7 +306,7 @@ def train_lora(dataset_file):
     from transformers import TrainingArguments
     from unsloth.chat_templates import get_chat_template
 
-    max_seq_length = 1024
+    max_seq_length = 512
 
     print("\n[Model] Step 2: Loading Unsloth Llama-3.1-8B-Instruct...")
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -347,17 +347,24 @@ def train_lora(dataset_file):
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Dynamic epoch count: more data = fewer epochs needed; tiny dataset = more epochs
+    # Quality vs Kaggle quota trade-off, tuned against real run timings
+    # (v12 measured ~27.5 s/step at seq 1024 plus a ~7.5 min eval pass every
+    # 50 steps, i.e. ~10.5 GPU-hours for a 7.8k-sample run - a third of the
+    # weekly quota). A single epoch over that much data converges just as well
+    # (v12's loss fell 1.34 -> 0.39 within a fraction of one epoch), seq 512
+    # still covers every guidance row, and eval only once at the end keeps the
+    # blind-deploy guard without spending 2.5 hours on mid-training evals.
     if total_samples < 20:
-        num_epochs = 1
-    elif total_samples >= 5000:
         num_epochs = 2
+    elif total_samples >= 5000:
+        num_epochs = 1
     elif total_samples >= 1000:
-        num_epochs = 3
+        num_epochs = 2
     else:
-        num_epochs = 5
+        num_epochs = 4
 
     print(f"[Train] Starting Fast Fine-Tuning: {num_epochs} epochs over {total_samples} samples...")
+    # Eval runs once, after trainer.train(), through the eval-loss gate below.
     args_dict = dict(
         per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
@@ -368,15 +375,11 @@ def train_lora(dataset_file):
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         logging_steps=25,
-        eval_steps=50,
         output_dir="lora_checkpoints",
         seed=3407,
         save_strategy="no",
     )
-    try:
-        training_args = TrainingArguments(eval_strategy="steps", **args_dict)
-    except TypeError:
-        training_args = TrainingArguments(evaluation_strategy="steps", **args_dict)
+    training_args = TrainingArguments(**args_dict)
 
     trainer_kwargs = dict(
         model=model,

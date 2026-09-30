@@ -12,6 +12,7 @@ import sys
 import json
 import subprocess
 import requests
+import logging
 
 # Enforce Single GPU for Maximum Unsloth Speed
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -36,7 +37,10 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
         # the Kaggle panel yet is *not attached* to this notebook (the checkbox in
         # Add-ons > Secrets) raises here, and used to look identical to a missing
         # secret in the log.
-        print(f"[Secrets] Kaggle UserSecrets unavailable ({e}); using environment variables only.")
+        logging.warning(
+            "[Secrets] Kaggle UserSecrets unavailable (%s); using environment variables only.",
+            e,
+        )
 
 
 # The adapter is fine-tuned on the elder's own captured screens, and those now

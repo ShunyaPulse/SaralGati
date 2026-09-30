@@ -1,7 +1,7 @@
 {
-  "version_code": 77,
-  "version_name": "5.11.1",
+  "version_code": 78,
+  "version_name": "5.11.2",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Dead-code hardening: the unused `ok` import in the register endpoint, the unused NextAuth `profile` callback parameter and the validator's unused `llmExplanation` parameter (now `_llmExplanation`, signature unchanged) are removed, so `tsc --noUnusedLocals --noUnusedParameters` is clean across `src/lib` and `src/server`. No behaviour change. Previous release: the offline fraud ruleset and its matching engine split into `ruleset.ts` and `engine.ts`."
+  "changelog": "Fix PostgreSQL 42P08 parameter type deduction in agent feedback UPDATE query that caused feedback promotions to fail with HTTP 500, resolve 10,668 pending flywheel interactions in database, and add feedback API response error logging in cloud self-learning script."
 }

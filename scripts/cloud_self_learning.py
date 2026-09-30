@@ -747,6 +747,8 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
             # 3. Submit Feedback to Flywheel (/api/v1/agent/feedback)
             try:
                 fb_res = requests.post(urljoin(api_url, "/api/v1/agent/feedback"), json=fb_payload, headers=headers, timeout=10)
+                if not fb_res.ok:
+                    print(f"    ⚠️ Feedback API returned HTTP {fb_res.status_code}: {fb_res.text[:120]}")
                 fb_data = fb_res.json().get("data", {})
                 if fb_data.get("promoted_to_golden_cache"):
                     stats["golden_cache_promotions"] += 1

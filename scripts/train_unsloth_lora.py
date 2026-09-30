@@ -125,6 +125,34 @@ def find_attached_dataset():
     return None
 
 
+def normalize_training_rows(lines):
+    """Reduce every exported row to the single field the trainer reads.
+
+    The guidance and fraud exports both carry `messages`, but their `metadata`
+    structs hold different keys. `load_dataset("json", ...)` infers one Arrow
+    schema for the whole file, so a mixed file dies at the load step with
+    "Couldn't cast array of type struct<...> into struct<...>" on datasets 4.x,
+    which aborted an 8733-row run. Only `messages` is consumed below, so every
+    other key is dropped and each row gets the same shape.
+    """
+    normalized = []
+    skipped = 0
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        messages = row.get("messages")
+        if not isinstance(messages, list) or not messages:
+            skipped += 1
+            continue
+        normalized.append(json.dumps({"messages": messages}, ensure_ascii=False))
+    if skipped:
+        print(f"[Dataset] Normalized rows: dropped {skipped} row(s) without a usable messages list.")
+    return normalized
+
+
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
     lines = []
@@ -241,6 +269,9 @@ def fetch_live_dataset():
     # Keep the two guidance languages in balance before the rows reach the
     # trainer, so an English elder's screens are not drowned by Hinglish ones.
     lines = balance_guidance_languages(lines)
+    lines = normalize_training_rows(lines)
+    if not lines:
+        raise SystemExit("[Dataset] No usable training rows; refusing to train on an empty dataset.")
 
     with open(dataset_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))

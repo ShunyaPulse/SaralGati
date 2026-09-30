@@ -1,7 +1,7 @@
 {
-  "version_code": 87,
-  "version_name": "5.11.11",
+  "version_code": 88,
+  "version_name": "5.11.12",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle LoRA training data path for good. A sibling dataset.jsonl is never uploaded by kaggle kernels push, and embedding the pool inside the runner exceeds Kaggle's 1 MB notebook source limit (the SaveKernel API answered 400 Bad Request), so each run still trained on six seed samples. The workflow now publishes the verified pool as a private Kaggle Dataset and attaches it through dataset_sources, the runner loads it from /kaggle/input/, and the job refuses to launch a training run when no dataset was published or it never became ready. Previous release: embedded the dataset in the runner script."
+  "changelog": "Fix the Kaggle LoRA training crash on mixed-shape rows. Once the verified pool started reaching the runner, the 8733-row run died at the load step: datasets 4.x infers one Arrow schema for the whole file, and the guidance and fraud exports carry different metadata keys, so the cast failed. The loader now reduces every row to the single messages field the trainer reads, so all rows share one shape, and it refuses to start when nothing usable is left. Previous release: attached the verified dataset as a private Kaggle Dataset."
 }

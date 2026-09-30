@@ -1,7 +1,7 @@
 {
-  "version_code": 85,
-  "version_name": "5.11.9",
+  "version_code": 86,
+  "version_name": "5.11.10",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle LoRA training: add sys.path fix so dataset_payload module imports correctly from /kaggle/src/ directory."
+  "changelog": "Fix Kaggle LoRA training data loss: kaggle kernels push only uploads the code file named in kernel-metadata.json, so the sibling dataset_payload.py and dataset.jsonl never reached the container and each run silently trained on six seed samples. The dataset is now embedded directly inside train_unsloth_lora.py by scripts/bundle_dataset.py, and the loader resolves it from there first, so a real 8600-row run trains with hundreds of steps instead of one. The run also reports why Kaggle UserSecrets could not be read, instead of silently continuing without them. Previous release: added a sys.path fix for importing dataset_payload from /kaggle/src/."
 }

@@ -1,7 +1,7 @@
 {
-  "version_code": 88,
-  "version_name": "5.11.12",
+  "version_code": 89,
+  "version_name": "5.11.13",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix the Kaggle LoRA training crash on mixed-shape rows. Once the verified pool started reaching the runner, the 8733-row run died at the load step: datasets 4.x infers one Arrow schema for the whole file, and the guidance and fraud exports carry different metadata keys, so the cast failed. The loader now reduces every row to the single messages field the trainer reads, so all rows share one shape, and it refuses to start when nothing usable is left. Previous release: attached the verified dataset as a private Kaggle Dataset."
+  "changelog": "Deploy the trained LoRA adapter from CI instead of Kaggle. A green Kaggle run still ended with the old adapter live, because Kaggle's UserSecrets service is not reliable inside a pushed batch kernel and returned \"Connection error trying to communicate with service\" even with the secrets attached. The workflow now waits for the kernel, downloads the adapter it produced, and uploads it to Cloudflare Workers AI with the repository secrets, failing the job when the adapter is missing or the upload fails - so a run can no longer report success without deploying. The runner gained a --deploy-only mode for that path. Previous release: gave every Kaggle training row the same shape."
 }

@@ -135,6 +135,7 @@ jobs:
           echo "dataset_id=$DATASET_ID" >> $GITHUB_OUTPUT
 
       - name: Trigger Kaggle GPU Kernel
+        id: trigger_kernel
         if: steps.check_data.outputs.should_train == 'true'
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
@@ -170,3 +171,55 @@ jobs:
 
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
           kaggle kernels push -p kaggle_push/
+          echo "kernel_id=$(jq -r .id kaggle_push/kernel-metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Wait for Kaggle Kernel and Deploy Adapter
+        if: steps.check_data.outputs.should_train == 'true'
+        timeout-minutes: 150
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          KERNEL_ID: ${{ steps.trigger_kernel.outputs.kernel_id }}
+        run: |
+          if [ -z "$KERNEL_ID" ]; then
+            echo "::error::No Kaggle kernel was pushed, so no adapter can be deployed."
+            exit 1
+          fi
+          pip install requests
+
+          # Pushing a kernel only queues it, so without this wait the job used to
+          # go green seconds after the push and never noticed that training died
+          # or that the adapter was never deployed.
+          echo "⏳ Waiting for $KERNEL_ID to finish..."
+          STATUS=""
+          for attempt in $(seq 1 180); do
+            STATUS=$(kaggle kernels status "$KERNEL_ID" 2>&1 || true)
+            echo "Attempt $attempt/180: $STATUS"
+            case "$STATUS" in
+              *COMPLETE*) break ;;
+              *ERROR*|*CANCEL*) echo "::error::Kaggle kernel ended as: $STATUS"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          if ! printf '%s' "$STATUS" | grep -qi complete; then
+            echo "::error::Timed out waiting for $KERNEL_ID ($STATUS)."
+            exit 1
+          fi
+
+          echo "⬇️ Downloading the trained adapter from the kernel output..."
+          kaggle kernels output "$KERNEL_ID" -p kaggle_output
+
+          ADAPTER_DIR=$(dirname "$(find kaggle_output -name adapter_model.safetensors | head -1)")
+          if [ -z "$ADAPTER_DIR" ] || [ "$ADAPTER_DIR" = "." ]; then
+            echo "::error::The kernel produced no adapter_model.safetensors; nothing to deploy."
+            exit 1
+          fi
+          echo "Found adapter files in: $ADAPTER_DIR"
+
+          # Deployed from CI because the Cloudflare credentials are repository
+          # secrets here: Kaggle's UserSecrets service is not reliable inside a
+          # pushed batch kernel, and a deploy that silently does nothing leaves
+          # the old adapter live. A failure below fails the workflow.
+          python scripts/train_unsloth_lora.py --deploy-only "$ADAPTER_DIR"

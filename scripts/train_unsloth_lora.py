@@ -7,6 +7,7 @@ to Cloudflare Workers AI.
 
 import glob
 import os
+import shutil
 import sys
 import json
 import subprocess
@@ -437,6 +438,31 @@ def train_lora(dataset_file):
     return output_dir
 
 
+def mirror_adapter_into_kernel_output(output_dir):
+    """Make sure the adapter lands where Kaggle collects kernel output.
+
+    Kaggle only publishes what ends up under /kaggle/working, and this runner's
+    working directory is not guaranteed to be there, so the adapter is copied in
+    before returning. GitHub Actions downloads that output and deploys it, so a
+    missing copy would abort the deploy with nothing to upload.
+    """
+    working_root = "/kaggle/working"
+    if not os.path.isdir(working_root):
+        return
+    if os.path.abspath(output_dir).startswith(os.path.abspath(working_root)):
+        return
+
+    destination = os.path.join(working_root, os.path.basename(output_dir.rstrip("/")) or "saralgati_lora_output")
+    os.makedirs(destination, exist_ok=True)
+    copied = 0
+    for file_name in ("adapter_config.json", "adapter_model.safetensors"):
+        source = os.path.join(output_dir, file_name)
+        if os.path.exists(source):
+            shutil.copy2(source, os.path.join(destination, file_name))
+            copied += 1
+    print(f"[Save] Mirrored {copied} adapter file(s) into {destination} for the CI deploy.")
+
+
 def deploy_to_cloudflare(output_dir):
     print("\n[Deploy] Step 3: Deploying new LoRA adapter to Cloudflare Workers AI...")
     global CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
@@ -444,6 +470,13 @@ def deploy_to_cloudflare(output_dir):
         print("[Deploy] Warning: CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not found in environment.")
         print(f"[Deploy] Adapter is saved locally in: {output_dir}")
         return None
+
+    config_file = os.path.join(output_dir, "adapter_config.json")
+    weights_file = os.path.join(output_dir, "adapter_model.safetensors")
+    for required in (config_file, weights_file):
+        if not os.path.exists(required):
+            print(f"[Deploy] Warning: {required} is missing, so there is nothing to deploy.")
+            return None
 
     finetune_name = os.environ.get("CLOUDFLARE_LORA_NAME", "saralgati-elder-llama31-8b")
     headers = {
@@ -489,7 +522,6 @@ def deploy_to_cloudflare(output_dir):
     upload_headers = {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
 
     # Upload config
-    config_file = os.path.join(output_dir, "adapter_config.json")
     with open(config_file, "rb") as f:
         r1 = requests.post(
             upload_url,
@@ -500,7 +532,6 @@ def deploy_to_cloudflare(output_dir):
     print(f"[Deploy] Uploaded adapter_config.json: {r1.status_code}")
 
     # Upload safetensors
-    weights_file = os.path.join(output_dir, "adapter_model.safetensors")
     with open(weights_file, "rb") as f:
         r2 = requests.post(
             upload_url,
@@ -519,7 +550,21 @@ def deploy_to_cloudflare(output_dir):
 
 
 if __name__ == "__main__":
+    # CI mode: deploy an adapter that was trained somewhere else. GitHub Actions
+    # already holds the Cloudflare credentials as repository secrets, so it can
+    # push the adapter the Kaggle kernel produced. The kernel itself runs as a
+    # `kaggle kernels push` batch job, where Kaggle's UserSecrets service is
+    # unreliable ("Connection error trying to communicate with service."), so
+    # the deploy must not be the only place those credentials exist.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--deploy-only":
+        if not deploy_to_cloudflare(sys.argv[2]):
+            print("[Deploy] ERROR: the adapter was not deployed to Cloudflare Workers AI.")
+            sys.exit(1)
+        print("\n[Deploy] Continuous Learning Cycle Complete!")
+        sys.exit(0)
+
     dataset_path = fetch_live_dataset()
     output_dir = train_lora(dataset_path)
+    mirror_adapter_into_kernel_output(output_dir)
     deploy_to_cloudflare(output_dir)
     print("\n[Complete] Continuous Learning Cycle Complete!")

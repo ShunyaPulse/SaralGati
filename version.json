@@ -1,7 +1,7 @@
 {
-  "version_code": 81,
-  "version_name": "5.11.5",
+  "version_code": 82,
+  "version_name": "5.11.6",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle LoRA GPU training pipeline: restore scripts/kernel-metadata.json required by GitHub Actions workflow to trigger autonomous training."
+  "changelog": "Fix Kaggle LoRA training: support eval_strategy parameter in TrainingArguments across newer and legacy transformers versions."
 }

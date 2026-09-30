@@ -270,7 +270,7 @@ def train_lora(dataset_file):
         num_epochs = 5
 
     print(f"[Train] Starting Fast Fine-Tuning: {num_epochs} epochs over {total_samples} samples...")
-    training_args = TrainingArguments(
+    args_dict = dict(
         per_device_train_batch_size=4,
         gradient_accumulation_steps=4,
         warmup_ratio=0.05,
@@ -280,12 +280,15 @@ def train_lora(dataset_file):
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         logging_steps=25,
-        evaluation_strategy="steps",
         eval_steps=50,
         output_dir="lora_checkpoints",
         seed=3407,
         save_strategy="no",
     )
+    try:
+        training_args = TrainingArguments(eval_strategy="steps", **args_dict)
+    except TypeError:
+        training_args = TrainingArguments(evaluation_strategy="steps", **args_dict)
 
     trainer_kwargs = dict(
         model=model,

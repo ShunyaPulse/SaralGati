@@ -1,7 +1,7 @@
 {
-  "version_code": 78,
-  "version_name": "5.11.2",
+  "version_code": 80,
+  "version_name": "5.11.4",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix PostgreSQL 42P08 parameter type deduction in agent feedback UPDATE query that caused feedback promotions to fail with HTTP 500, resolve 10,668 pending flywheel interactions in database, and add feedback API response error logging in cloud self-learning script."
+  "changelog": "Security hardening: override nested `brace-expansion` dependency to ^2.0.1 to resolve high severity ReDoS vulnerability (GHSA-q2hr-2g5m-vwhr)."
 }

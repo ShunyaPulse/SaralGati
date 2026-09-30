@@ -305,8 +305,20 @@ def train_lora(dataset_file):
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    from unsloth.chat_templates import train_on_responses_only_with_padding
-    trainer = train_on_responses_only_with_padding(trainer, instruction_part="<|start_header_id|>user<|end_header_id|>\n\n", response_part="<|start_header_id|>assistant<|end_header_id|>\n\n")
+    try:
+        from unsloth.chat_templates import train_on_responses_only
+        trainer = train_on_responses_only(
+            trainer,
+            instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+            response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
+        )
+    except (ImportError, AttributeError):
+        from unsloth.chat_templates import train_on_responses_only_with_padding
+        trainer = train_on_responses_only_with_padding(
+            trainer,
+            instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+            response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
+        )
 
     trainer.train()
     

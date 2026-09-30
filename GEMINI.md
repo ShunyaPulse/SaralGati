@@ -81,7 +81,7 @@ Every AI assistant/model preparing a commit or release MUST inspect the changes,
 ## 8. Autonomous LoRA Training & Deployment Invariants
 
 - **Response Masking (`train_on_responses_only`)**:
-  - All Unsloth / SFT trainers for Llama-3.1 MUST enable `train_on_responses_only_with_padding` (`response_part="<|start_header_id|>assistant<|end_header_id|>\n\n"`). Loss must never be computed on system prompts or user inputs.
+  - All Unsloth / SFT trainers for Llama-3.1 MUST enable `train_on_responses_only` (`response_part="<|start_header_id|>assistant<|end_header_id|>\n\n"`). Loss must never be computed on system prompts or user inputs.
 - **Automated Validation Gate**:
   - Autonomous GPU training scripts must split a test set (`train_test_split(test_size=0.1)`) and execute `trainer.evaluate()`. Deployment to Cloudflare Workers AI must abort immediately if `eval_loss > 3.0` or divergence occurs.
 - **Seed Overfitting Guard**:

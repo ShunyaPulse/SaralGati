@@ -1,7 +1,7 @@
 {
-  "version_code": 80,
-  "version_name": "5.11.4",
+  "version_code": 81,
+  "version_name": "5.11.5",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Security hardening: override nested `brace-expansion` dependency to ^2.0.1 to resolve high severity ReDoS vulnerability (GHSA-q2hr-2g5m-vwhr)."
+  "changelog": "Fix Kaggle LoRA GPU training pipeline: restore scripts/kernel-metadata.json required by GitHub Actions workflow to trigger autonomous training."
 }

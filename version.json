@@ -1,7 +1,7 @@
 {
-  "version_code": 84,
-  "version_name": "5.11.8",
+  "version_code": 85,
+  "version_name": "5.11.9",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle LoRA training pipeline: bundle verified dataset directly into self-contained payload to ensure full 8,000+ sample training over multiple epochs without API dependencies."
+  "changelog": "Fix Kaggle LoRA training: add sys.path fix so dataset_payload module imports correctly from /kaggle/src/ directory."
 }

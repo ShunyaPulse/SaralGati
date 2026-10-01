@@ -5,10 +5,14 @@ optimizations, using live verified dataset from SaralGati Flywheel, and auto-dep
 to Cloudflare Workers AI.
 """
 
+import glob
+import math
 import os
+import shutil
 import sys
 import json
 import subprocess
+import logging
 import requests
 
 # Enforce Single GPU for Maximum Unsloth Speed
@@ -30,8 +34,8 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
         CLOUDFLARE_API_TOKEN = CLOUDFLARE_API_TOKEN or secrets.get_secret("CLOUDFLARE_API_TOKEN")
         FLYWHEEL_SECRET = FLYWHEEL_SECRET or secrets.get_secret("FLYWHEEL_SECRET")
     except Exception:
-        # Fallback gracefully if running outside Kaggle environment
-        pass
+        # Fallback gracefully outside Kaggle or when UserSecretsClient is unavailable
+        logging.getLogger(__name__).info("Kaggle platform integration bypassed; using environment variables.")
 
 
 # The adapter is fine-tuned on the elder's own captured screens, and those now
@@ -83,7 +87,6 @@ def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max
 
     # Duplicate round-robin until the minority reaches its share, or the cap bites.
     # extras solves (minority + extras) >= min_share * (total + extras).
-    import math
 
     needed = math.ceil(
         (min_share * total - counts[minority]) / (1 - min_share)
@@ -104,33 +107,113 @@ def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max
     return balanced
 
 
+def find_attached_dataset():
+    """Path of the attached Kaggle Dataset's dataset.jsonl, or None.
+
+    The verified pool is published as a private Kaggle Dataset and attached to
+    this kernel through `dataset_sources`, which lands it under /kaggle/input/.
+    It cannot travel beside this script: `kaggle kernels push` uploads only the
+    code file named in kernel-metadata.json, and a Kaggle notebook source is
+    capped at 1 MB, so embedding a 1.7 MB pool here is rejected by the SaveKernel
+    API with 400 Bad Request.
+    """
+    for root in ("/kaggle/input", "/kaggle/working"):
+        for path in sorted(glob.glob(os.path.join(root, "**", "dataset.jsonl"), recursive=True)):
+            if os.path.getsize(path) > 0:
+                return path
+    return None
+
+
+def normalize_training_rows(lines):
+    """Reduce every exported row to the single field the trainer reads.
+
+    The guidance and fraud exports both carry `messages`, but their `metadata`
+    structs hold different keys. `load_dataset("json", ...)` infers one Arrow
+    schema for the whole file, so a mixed file dies at the load step with
+    "Couldn't cast array of type struct<...> into struct<...>" on datasets 4.x,
+    which aborted an 8733-row run. Only `messages` is consumed below, so every
+    other key is dropped and each row gets the same shape.
+    """
+    normalized = []
+    skipped = 0
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        messages = row.get("messages")
+        if not isinstance(messages, list) or not messages:
+            skipped += 1
+            continue
+        normalized.append(json.dumps({"messages": messages}, ensure_ascii=False))
+    if skipped:
+        print(f"[Dataset] Normalized rows: dropped {skipped} row(s) without a usable messages list.")
+    return normalized
+
+
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
-    url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
-    fraud_url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000"
-    print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
     lines = []
-    try:
-        if not FLYWHEEL_SECRET:
-            raise RuntimeError("FLYWHEEL_SECRET / API_SECRET is not available in this environment")
-        res = requests.get(url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
-        res.raise_for_status()
-        content = res.text.strip()
-        lines.extend([l for l in content.split("\n") if l.strip()])
-        print(f"[Dataset] Downloaded {len(lines)} verified training interactions from live Flywheel.")
-    except Exception as e:
-        print(f"[Dataset] Warning: Failed to fetch live interaction data ({e}).")
 
-    try:
-        if FLYWHEEL_SECRET:
-            f_res = requests.get(fraud_url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
-            if f_res.ok:
-                f_content = f_res.text.strip()
-                f_lines = [l for l in f_content.split("\n") if l.strip()]
-                print(f"[Dataset] Downloaded {len(f_lines)} fraud training cases from live Flywheel.")
-                lines.extend(f_lines)
-    except Exception as e:
-        print(f"[Dataset] Warning: Failed to fetch fraud data ({e}).")
+    # 1. First priority: the dataset attached to this Kaggle run as an input.
+    attached = find_attached_dataset()
+    if attached:
+        try:
+            with open(attached, "r", encoding="utf-8") as f:
+                lines = [line for line in f.read().split("\n") if line.strip()]
+            print(f"[Dataset] Step 1: Loaded {len(lines)} verified training samples from the attached Kaggle dataset: {attached}")
+        except Exception as e:
+            print(f"[Dataset] Warning: Could not read attached dataset {attached} ({e}).")
+    else:
+        print("[Dataset] Info: No attached Kaggle dataset found. Checking local files...")
+
+    # 2. Second priority: Check local dataset.jsonl candidates
+    if not lines:
+        candidates = [
+            "dataset.jsonl",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "dataset.jsonl"),
+            "/kaggle/src/dataset.jsonl",
+            "/kaggle/working/dataset.jsonl",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                try:
+                    with open(candidate, "r", encoding="utf-8") as f:
+                        candidate_lines = [l for l in f.read().split("\n") if l.strip()]
+                    if candidate_lines:
+                        lines = candidate_lines
+                        print(f"[Dataset] Step 1: Loaded {len(lines)} verified samples from local file: {candidate}")
+                        break
+                except Exception as e:
+                    print(f"[Dataset] Warning reading {candidate}: {e}")
+
+    # 3. Third priority: Live API fetch from Flywheel
+    if not lines:
+        url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000"
+        fraud_url = f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000"
+        print(f"[Dataset] Step 1: Fetching verified training data from {url}...")
+        try:
+            if not FLYWHEEL_SECRET:
+                raise RuntimeError("FLYWHEEL_SECRET / API_SECRET is not available in this environment")
+            res = requests.get(url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
+            res.raise_for_status()
+            content = res.text.strip()
+            lines.extend([l for l in content.split("\n") if l.strip()])
+            print(f"[Dataset] Downloaded {len(lines)} verified training interactions from live Flywheel.")
+        except Exception as e:
+            print(f"[Dataset] Warning: Failed to fetch live interaction data ({e}).")
+
+        try:
+            if FLYWHEEL_SECRET:
+                f_res = requests.get(fraud_url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=30)
+                if f_res.ok:
+                    f_content = f_res.text.strip()
+                    f_lines = [l for l in f_content.split("\n") if l.strip()]
+                    print(f"[Dataset] Downloaded {len(f_lines)} fraud training cases from live Flywheel.")
+                    lines.extend(f_lines)
+        except Exception as e:
+            print(f"[Dataset] Warning: Failed to fetch fraud data ({e}).")
 
     # Supplement with high-quality seed pairs if dataset is small
     if len(lines) < 20:
@@ -185,6 +268,9 @@ def fetch_live_dataset():
     # Keep the two guidance languages in balance before the rows reach the
     # trainer, so an English elder's screens are not drowned by Hinglish ones.
     lines = balance_guidance_languages(lines)
+    lines = normalize_training_rows(lines)
+    if not lines:
+        raise SystemExit("[Dataset] No usable training rows; refusing to train on an empty dataset.")
 
     with open(dataset_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
@@ -195,16 +281,148 @@ def fetch_live_dataset():
 def ensure_unsloth():
     try:
         import unsloth
+        return
     except ImportError:
-        print("[Install] Installing unsloth and compatible dependencies for GPU...")
+        pass
+
+    print("[Install] Installing Unsloth and compatible dependencies for Kaggle GPU environment...")
+    # Step 1: Pre-install compatible xformers from PyTorch cu121 wheel repository
+    try:
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "--no-deps",
-            "xformers<0.0.29", "trl<0.9.0", "peft", "accelerate", "bitsandbytes"
+            sys.executable, "-m", "pip", "install", "-U", "xformers",
+            "--index-url", "https://download.pytorch.org/whl/cu121", "--quiet"
         ])
+    except Exception as e:
+        print(f"[Install] Notice: pre-installing xformers cu121 wheel skipped ({e}); proceeding...")
+
+    # Step 2: Install Unsloth using official [kaggle-new] extra
+    try:
         subprocess.check_call([
             sys.executable, "-m", "pip", "install",
-            "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+            "unsloth[kaggle-new] @ git+https://github.com/unslothai/unsloth.git"
         ])
+    except Exception as e:
+        print(f"[Install] Notice: git install failed ({e}); falling back to PyPI release...")
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "unsloth", "unsloth_zoo"
+        ])
+
+
+def auto_tune_hyperparameters(dataset_file, tokenizer):
+    """Dynamically compute training hyperparameters from the live dataset.
+
+    Industry-standard approach: profile the actual data instead of hardcoding
+    values that may not match the current dataset distribution. Four parameters
+    are auto-tuned:
+
+    1. max_seq_length   — P99 token length, rounded up to nearest 64, clamped
+                          [256, 768]. Prevents OOM on long tails while not
+                          wasting VRAM on unused positions.
+    2. num_train_epochs — Target ~450 gradient steps (the sweet spot for LoRA
+                          on 1–10k samples). Capped [1, 4] and hard-capped at
+                          1 if ≤20 seed-only samples to prevent overfitting.
+    3. learning_rate    — Inverse-scaled by dataset size. Smaller datasets need
+                          higher LR to learn in fewer steps; larger datasets
+                          need lower LR to avoid catastrophic forgetting.
+    4. gradient_accumulation_steps — Keeps effective batch size constant at 16
+                          regardless of per_device_train_batch_size, which is
+                          pinned at 4 (the T4's sweet-spot for 4-bit LoRA).
+    """
+    from datasets import load_dataset
+
+    PER_DEVICE_BATCH = 4
+    TARGET_EFFECTIVE_BATCH = 16
+    TARGET_GRAD_STEPS = 450        # Sweet spot for LoRA convergence
+    MIN_SEQ_LEN = 256
+    MAX_SEQ_LEN = 768              # T4 VRAM ceiling for 4-bit Llama-3.1-8B
+    ROUND_TO = 64
+
+    # --- Load dataset and profile token lengths ---
+    dataset = load_dataset("json", data_files=dataset_file, split="train")
+    total_samples = len(dataset)
+    print(f"[AutoTune] Dataset size: {total_samples} samples")
+
+    # Tokenize a representative sample (up to 2000 rows) to profile lengths
+    sample_size = min(total_samples, 2000)
+    sample_indices = list(range(0, total_samples, max(1, total_samples // sample_size)))[:sample_size]
+    token_lengths = []
+    for idx in sample_indices:
+        row = dataset[idx]
+        messages = row.get("messages", [])
+        if not messages:
+            continue
+        try:
+            text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+            tokens = tokenizer(text, add_special_tokens=False)["input_ids"]
+            token_lengths.append(len(tokens))
+        except Exception:
+            continue
+
+    if not token_lengths:
+        print("[AutoTune] WARNING: Could not tokenize any samples, using safe defaults.")
+        return {
+            "max_seq_length": MAX_SEQ_LEN,
+            "num_train_epochs": 1,
+            "learning_rate": 2e-4,
+            "gradient_accumulation_steps": TARGET_EFFECTIVE_BATCH // PER_DEVICE_BATCH,
+            "per_device_train_batch_size": PER_DEVICE_BATCH,
+        }
+
+    token_lengths.sort()
+    p50 = token_lengths[len(token_lengths) // 2]
+    p99_idx = min(int(len(token_lengths) * 0.99), len(token_lengths) - 1)
+    p99 = token_lengths[p99_idx]
+    max_tok = token_lengths[-1]
+
+    # 1. max_seq_length: P99 rounded up to nearest 64, clamped
+    seq_len = math.ceil(p99 / ROUND_TO) * ROUND_TO
+    seq_len = max(MIN_SEQ_LEN, min(seq_len, MAX_SEQ_LEN))
+
+    # 2. gradient_accumulation_steps: constant effective batch = 16
+    grad_accum = max(1, TARGET_EFFECTIVE_BATCH // PER_DEVICE_BATCH)
+
+    # 3. num_train_epochs: target ~450 gradient steps
+    #    steps_per_epoch = ceil(total_samples / effective_batch)
+    effective_batch = PER_DEVICE_BATCH * grad_accum
+    steps_per_epoch = math.ceil(total_samples / effective_batch)
+    if steps_per_epoch > 0:
+        raw_epochs = TARGET_GRAD_STEPS / steps_per_epoch
+    else:
+        raw_epochs = 1
+
+    # Clamp epochs
+    num_epochs = max(1, min(4, round(raw_epochs)))
+    # Overfitting guard: seed data only → cap at 1 epoch
+    if total_samples < 20:
+        num_epochs = 1
+
+    # 4. learning_rate: inversely scaled by dataset size
+    if total_samples < 500:
+        lr = 2.8e-4
+    elif total_samples < 1000:
+        lr = 2.4e-4
+    elif total_samples < 3000:
+        lr = 2.0e-4
+    elif total_samples < 6000:
+        lr = 1.6e-4
+    else:
+        lr = 1.2e-4
+
+    total_steps = steps_per_epoch * num_epochs
+    print(f"[AutoTune] Token profile: p50={p50}, p99={p99}, max={max_tok}")
+    print(f"[AutoTune] → max_seq_length   = {seq_len}  (P99={p99} → rounded to {ROUND_TO})")
+    print(f"[AutoTune] → num_train_epochs  = {num_epochs}  (target ~{TARGET_GRAD_STEPS} steps, actual ~{total_steps})")
+    print(f"[AutoTune] → learning_rate     = {lr}  (n={total_samples})")
+    print(f"[AutoTune] → grad_accum_steps  = {grad_accum}  (eff_batch={effective_batch})")
+    print(f"[AutoTune] → per_device_batch  = {PER_DEVICE_BATCH}")
+
+    return {
+        "max_seq_length": seq_len,
+        "num_train_epochs": num_epochs,
+        "learning_rate": lr,
+        "gradient_accumulation_steps": grad_accum,
+        "per_device_train_batch_size": PER_DEVICE_BATCH,
+    }
 
 
 def train_lora(dataset_file):
@@ -218,12 +436,15 @@ def train_lora(dataset_file):
     from transformers import TrainingArguments
     from unsloth.chat_templates import get_chat_template
 
-    max_seq_length = 1024
+    # Load model with maximum supported seq length; auto_tune will compute the
+    # actual training max_seq_length from data. The model itself supports up to
+    # 131072, but we cap at 768 for T4 VRAM safety.
+    MODEL_SEQ_CEILING = 768
 
     print("\n[Model] Step 2: Loading Unsloth Llama-3.1-8B-Instruct...")
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name="unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit",
-        max_seq_length=max_seq_length,
+        max_seq_length=MODEL_SEQ_CEILING,
         dtype=None,
         load_in_4bit=True,
     )
@@ -242,6 +463,15 @@ def train_lora(dataset_file):
 
     tokenizer = get_chat_template(tokenizer, chat_template="llama-3.1")
 
+    # --- Auto-Tune: profile dataset and compute epochs, LR, grad_accum ---
+    hp = auto_tune_hyperparameters(dataset_file, tokenizer)
+    # IMPORTANT: Do NOT use auto-tune's max_seq_length for the trainer.
+    # Unsloth's train_on_responses_only bypasses SFTTrainer's truncation,
+    # letting oversized sequences crash the cross-entropy loss. We always
+    # use MODEL_SEQ_CEILING so model and trainer agree, and explicitly
+    # filter outliers below.
+    max_seq_length = MODEL_SEQ_CEILING
+
     def formatting_prompts_func(examples):
         convos = examples["messages"]
         texts = [tokenizer.apply_chat_template(convo, tokenize=False, add_generation_prompt=False) for convo in convos]
@@ -249,6 +479,25 @@ def train_lora(dataset_file):
 
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     dataset = dataset.map(formatting_prompts_func, batched=True)
+
+    # --- Explicit sequence length filter ---
+    # SFTTrainer's max_seq_length truncation is unreliable when Unsloth's
+    # train_on_responses_only is applied (v14 and v15 both crashed because
+    # oversized sequences bypassed truncation and hit cross_entropy with
+    # mismatched input/target dimensions). Drop any sample that exceeds
+    # the model's actual capacity BEFORE the trainer ever sees it.
+    pre_filter_count = len(dataset)
+
+    def within_seq_limit(example):
+        toks = tokenizer(example["text"], add_special_tokens=False, truncation=False)
+        return len(toks["input_ids"]) <= max_seq_length
+
+    dataset = dataset.filter(within_seq_limit, num_proc=2)
+    dropped = pre_filter_count - len(dataset)
+    if dropped:
+        print(f"[Train] ⚠️  Dropped {dropped} sample(s) exceeding max_seq_length={max_seq_length} "
+              f"to prevent Unsloth cross-entropy crash (out of {pre_filter_count})")
+
     dataset_split = dataset.train_test_split(test_size=0.1, seed=42)
     train_dataset = dataset_split["train"]
     eval_dataset = dataset_split["test"]
@@ -259,33 +508,25 @@ def train_lora(dataset_file):
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Dynamic epoch count: more data = fewer epochs needed; tiny dataset = more epochs
-    if total_samples < 20:
-        num_epochs = 1
-    elif total_samples >= 5000:
-        num_epochs = 2
-    elif total_samples >= 1000:
-        num_epochs = 3
-    else:
-        num_epochs = 5
-
-    print(f"[Train] Starting Fast Fine-Tuning: {num_epochs} epochs over {total_samples} samples...")
-    training_args = TrainingArguments(
-        per_device_train_batch_size=4,
-        gradient_accumulation_steps=4,
+    print(f"[Train] Starting Fast Fine-Tuning: {hp['num_train_epochs']} epochs, "
+          f"lr={hp['learning_rate']}, seq={max_seq_length}, "
+          f"batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
+    # Eval runs once, after trainer.train(), through the eval-loss gate below.
+    args_dict = dict(
+        per_device_train_batch_size=hp["per_device_train_batch_size"],
+        gradient_accumulation_steps=hp["gradient_accumulation_steps"],
         warmup_ratio=0.05,
-        num_train_epochs=num_epochs,
-        learning_rate=2e-4,
+        num_train_epochs=hp["num_train_epochs"],
+        learning_rate=hp["learning_rate"],
         weight_decay=0.01,
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
         logging_steps=25,
-        evaluation_strategy="steps",
-        eval_steps=50,
         output_dir="lora_checkpoints",
         seed=3407,
         save_strategy="no",
     )
+    training_args = TrainingArguments(**args_dict)
 
     trainer_kwargs = dict(
         model=model,
@@ -294,7 +535,7 @@ def train_lora(dataset_file):
         dataset_text_field="text",
         max_seq_length=max_seq_length,
         dataset_num_proc=2,
-        packing=True,
+        packing=False,
         args=training_args,
     )
     try:
@@ -302,8 +543,20 @@ def train_lora(dataset_file):
     except TypeError:
         trainer = SFTTrainer(tokenizer=tokenizer, **trainer_kwargs)
 
-    from unsloth.chat_templates import train_on_responses_only_with_padding
-    trainer = train_on_responses_only_with_padding(trainer, instruction_part="<|start_header_id|>user<|end_header_id|>\n\n", response_part="<|start_header_id|>assistant<|end_header_id|>\n\n")
+    try:
+        from unsloth.chat_templates import train_on_responses_only
+        trainer = train_on_responses_only(
+            trainer,
+            instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+            response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
+        )
+    except (ImportError, AttributeError):
+        from unsloth.chat_templates import train_on_responses_only_with_padding
+        trainer = train_on_responses_only_with_padding(
+            trainer,
+            instruction_part="<|start_header_id|>user<|end_header_id|>\n\n",
+            response_part="<|start_header_id|>assistant<|end_header_id|>\n\n",
+        )
 
     trainer.train()
     
@@ -335,6 +588,31 @@ def train_lora(dataset_file):
     return output_dir
 
 
+def mirror_adapter_into_kernel_output(output_dir):
+    """Make sure the adapter lands where Kaggle collects kernel output.
+
+    Kaggle only publishes what ends up under /kaggle/working, and this runner's
+    working directory is not guaranteed to be there, so the adapter is copied in
+    before returning. GitHub Actions downloads that output and deploys it, so a
+    missing copy would abort the deploy with nothing to upload.
+    """
+    working_root = "/kaggle/working"
+    if not os.path.isdir(working_root):
+        return
+    if os.path.abspath(output_dir).startswith(os.path.abspath(working_root)):
+        return
+
+    destination = os.path.join(working_root, os.path.basename(output_dir.rstrip("/")) or "saralgati_lora_output")
+    os.makedirs(destination, exist_ok=True)
+    copied = 0
+    for file_name in ("adapter_config.json", "adapter_model.safetensors"):
+        source = os.path.join(output_dir, file_name)
+        if os.path.exists(source):
+            shutil.copy2(source, os.path.join(destination, file_name))
+            copied += 1
+    print(f"[Save] Mirrored {copied} adapter file(s) into {destination} for the CI deploy.")
+
+
 def deploy_to_cloudflare(output_dir):
     print("\n[Deploy] Step 3: Deploying new LoRA adapter to Cloudflare Workers AI...")
     global CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
@@ -342,6 +620,13 @@ def deploy_to_cloudflare(output_dir):
         print("[Deploy] Warning: CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not found in environment.")
         print(f"[Deploy] Adapter is saved locally in: {output_dir}")
         return None
+
+    config_file = os.path.join(output_dir, "adapter_config.json")
+    weights_file = os.path.join(output_dir, "adapter_model.safetensors")
+    for required in (config_file, weights_file):
+        if not os.path.exists(required):
+            print(f"[Deploy] Warning: {required} is missing, so there is nothing to deploy.")
+            return None
 
     finetune_name = os.environ.get("CLOUDFLARE_LORA_NAME", "saralgati-elder-llama31-8b")
     headers = {
@@ -367,11 +652,11 @@ def deploy_to_cloudflare(output_dir):
     except Exception as e:
         print(f"[Deploy] Info: Fine-tune listing check: {e}")
 
-    # 2. Create fresh fine-tune container
+    # 2. Create fresh fine-tune container (use llama-guard-3-8b for container registration per Workers AI API quirk)
     print(f"[Deploy] Creating Cloudflare finetune container: {finetune_name}...")
     create_res = requests.post(list_url, headers=headers, json={
         "name": finetune_name,
-        "model": "@cf/meta/llama-3.1-8b-instruct-fast",
+        "model": "@cf/meta/llama-guard-3-8b",
         "description": "SaralGati Autonomous Self-Improving LoRA"
     })
 
@@ -387,7 +672,6 @@ def deploy_to_cloudflare(output_dir):
     upload_headers = {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
 
     # Upload config
-    config_file = os.path.join(output_dir, "adapter_config.json")
     with open(config_file, "rb") as f:
         r1 = requests.post(
             upload_url,
@@ -398,7 +682,6 @@ def deploy_to_cloudflare(output_dir):
     print(f"[Deploy] Uploaded adapter_config.json: {r1.status_code}")
 
     # Upload safetensors
-    weights_file = os.path.join(output_dir, "adapter_model.safetensors")
     with open(weights_file, "rb") as f:
         r2 = requests.post(
             upload_url,
@@ -417,7 +700,21 @@ def deploy_to_cloudflare(output_dir):
 
 
 if __name__ == "__main__":
+    # CI mode: deploy an adapter that was trained somewhere else. GitHub Actions
+    # already holds the Cloudflare credentials as repository secrets, so it can
+    # push the adapter the Kaggle kernel produced. The kernel itself runs as a
+    # `kaggle kernels push` batch job, where Kaggle's UserSecrets service is
+    # unreliable ("Connection error trying to communicate with service."), so
+    # the deploy must not be the only place those credentials exist.
+    if len(sys.argv) >= 3 and sys.argv[1] == "--deploy-only":
+        if not deploy_to_cloudflare(sys.argv[2]):
+            print("[Deploy] ERROR: the adapter was not deployed to Cloudflare Workers AI.")
+            sys.exit(1)
+        print("\n[Deploy] Continuous Learning Cycle Complete!")
+        sys.exit(0)
+
     dataset_path = fetch_live_dataset()
     output_dir = train_lora(dataset_path)
+    mirror_adapter_into_kernel_output(output_dir)
     deploy_to_cloudflare(output_dir)
     print("\n[Complete] Continuous Learning Cycle Complete!")

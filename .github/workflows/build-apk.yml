@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "android/**"
-      - "version.json"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
     inputs:

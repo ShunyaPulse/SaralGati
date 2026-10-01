@@ -15,6 +15,9 @@ on:
 jobs:
   check-and-trigger-training:
     runs-on: ubuntu-latest
+    outputs:
+      should_train: ${{ steps.check_data.outputs.should_train }}
+      kernel_id: ${{ steps.trigger_kernel.outputs.kernel_id }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,7 +65,7 @@ jobs:
           # -f so an auth failure aborts instead of saving the error body as a
           # dataset that then gets uploaded as a training artifact.
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
-            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000" \
             -o dataset.jsonl
           echo "Downloaded $(wc -l < dataset.jsonl) SFT rows to dataset.jsonl"
 
@@ -72,7 +75,7 @@ jobs:
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
         run: |
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
-            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000" \
             -o fraud_dataset.jsonl 2>/dev/null || true
           if [ -s fraud_dataset.jsonl ]; then
             FRAUD_LINES=$(wc -l < fraud_dataset.jsonl)
@@ -91,13 +94,12 @@ jobs:
           path: dataset.jsonl
           retention-days: 14
 
-      - name: Trigger Kaggle GPU Kernel
+      - name: Publish Verified Dataset to Kaggle
+        id: publish_dataset
         if: steps.check_data.outputs.should_train == 'true'
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if [ -z "$KAGGLE_API_TOKEN" ] || [ -z "$KAGGLE_USERNAME" ]; then
             echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
@@ -105,16 +107,107 @@ jobs:
           fi
           pip install kaggle
 
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          DATASET_ID="$USERNAME_LOWER/saralgati-verified-training-set"
+
+          # The runner reads the pool from /kaggle/input/, so it must be published
+          # as a dataset first. A sibling file is never uploaded by kernels push,
+          # and embedding it in the script exceeds Kaggle's 1 MB source limit.
+          echo "📦 Packaging verified dataset for Kaggle..."
+          python scripts/bundle_dataset.py dataset.jsonl kaggle_dataset "$USERNAME_LOWER"
+
+          # `create` fails once the dataset exists, so fall back to a new version.
+          kaggle datasets create -p kaggle_dataset \
+            || kaggle datasets version -p kaggle_dataset -m "Verified refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # A kernel can only attach a dataset that has finished processing.
+          READY="false"
+          for attempt in $(seq 1 12); do
+            STATUS=$(kaggle datasets status "$DATASET_ID" 2>&1 || true)
+            echo "Attempt $attempt: $STATUS"
+            if printf '%s' "$STATUS" | grep -qi ready; then
+              READY="true"
+              break
+            fi
+            sleep 10
+          done
+          if [ "$READY" != "true" ]; then
+            echo "::error::Dataset $DATASET_ID did not become ready; not launching a training run."
+            exit 1
+          fi
+          echo "dataset_id=$DATASET_ID" >> $GITHUB_OUTPUT
+
+      - name: Trigger Kaggle GPU Kernel
+        id: trigger_kernel
+        if: steps.check_data.outputs.should_train == 'true'
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DATASET_ID: ${{ steps.publish_dataset.outputs.dataset_id }}
+        run: |
+          if [ -z "$KAGGLE_API_TOKEN" ] || [ -z "$KAGGLE_USERNAME" ]; then
+            echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
+            exit 0
+          fi
+          # Refuse to run without the dataset: that is exactly how a run silently
+          # trained on the six seed samples and still reported success.
+          if [ -z "$DATASET_ID" ]; then
+            echo "::error::No dataset was published. Refusing to launch a run that would train on seed data."
+            exit 1
+          fi
+          pip install kaggle
+
           echo "📦 Isolating Kaggle files..."
           mkdir -p kaggle_push
           cp scripts/train_unsloth_lora.py kaggle_push/
 
-          echo "🔄 Updating kernel-metadata.json with correct Kaggle username..."
+          echo "🔄 Updating kernel-metadata.json with the Kaggle username and dataset source..."
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
-          jq --arg username "$USERNAME_LOWER" '.id = $username + "/saralgati-lora-training"' scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
+          jq --arg username "$USERNAME_LOWER" --arg dataset "$DATASET_ID" \
+            '.id = $username + "/saralgati-lora-training" | .dataset_sources = [$dataset]' \
+            scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
 
-          echo "🔑 Injecting Cloudflare deploy credentials into ephemeral Kaggle payload..."
+          echo "🔑 Checking deploy credentials..."
           python scripts/inject_kaggle_secrets.py
 
           echo "🚀 Triggering Kaggle GPU kernel for autonomous fine-tuning..."
           kaggle kernels push -p kaggle_push/
+          echo "kernel_id=$(jq -r .id kaggle_push/kernel-metadata.json)" >> $GITHUB_OUTPUT
+
+      - name: Print kernel status
+        if: steps.trigger_kernel.outputs.kernel_id != ''
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+        run: |
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          echo "Queued kernel: $USERNAME_LOWER/saralgati-lora-training"
+          kaggle kernels status "$USERNAME_LOWER/saralgati-lora-training" || true
+
+  deploy-adapter:
+    name: Wait for Kaggle and Deploy Adapter
+    needs: check-and-trigger-training
+    if: needs.check-and-trigger-training.outputs.should_train == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
+      - name: Wait for Kaggle and Deploy Adapter
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          pip install kaggle requests --quiet
+          python scripts/sweep_deploy_adapter.py --wait

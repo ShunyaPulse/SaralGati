@@ -41,7 +41,7 @@ export function validateSemanticTarget(
   question: string,
   rawTargetIndex: number | null,
   uiElements: string[],
-  llmExplanation: string = ''
+  _llmExplanation = ''
 ): SemanticValidationResult {
   const qLower = question.toLowerCase();
 

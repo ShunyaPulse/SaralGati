@@ -95,18 +95,18 @@ export async function recordFeedback(req: NextRequest): Promise<ServiceResult> {
       ui_elements: unknown;
     }>(
       `UPDATE model_interactions
-       SET feedback_status = $1,
+       SET feedback_status = $1::varchar,
            actual_tapped_index = CASE 
-               WHEN $1 = 'verified' THEN COALESCE($2, suggested_index) 
+               WHEN $1::varchar = 'verified' THEN COALESCE($2, suggested_index) 
                ELSE COALESCE($2, actual_tapped_index) 
            END,
            explanation = CASE
-               WHEN $1 = 'rejected' AND $2 IS NOT NULL AND $2 != suggested_index
+               WHEN $1::varchar = 'rejected' AND $2 IS NOT NULL AND $2 != suggested_index
                  THEN CASE WHEN guidance_lang = 'en' THEN 'Tap here.' ELSE 'Yahan dabayein.' END
                ELSE explanation
            END,
            updated_at = NOW()
-       WHERE id = $3 AND ($4::uuid IS NULL OR elder_id = $4::uuid)
+       WHERE id = $3::uuid AND ($4::uuid IS NULL OR elder_id = $4::uuid)
        RETURNING id, app_package, screen_hash, question, suggested_index, explanation, guidance_lang, ui_elements`,
       [newStatus, sanitizedIndex, interaction_id, elderId]
     );

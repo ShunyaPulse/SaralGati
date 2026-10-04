@@ -511,11 +511,16 @@ def train_lora(dataset_file):
     print(f"[Train] Starting Fast Fine-Tuning: {hp['num_train_epochs']} epochs, "
           f"lr={hp['learning_rate']}, seq={max_seq_length}, "
           f"batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
+    # Calculate warmup_steps dynamically (~5% of total training steps)
+    eff_batch = hp["per_device_train_batch_size"] * hp["gradient_accumulation_steps"]
+    total_train_steps = max(1, int((total_samples / eff_batch) * hp["num_train_epochs"]))
+    warmup_steps = max(5, int(total_train_steps * 0.05))
+
     # Eval runs once, after trainer.train(), through the eval-loss gate below.
     args_dict = dict(
         per_device_train_batch_size=hp["per_device_train_batch_size"],
         gradient_accumulation_steps=hp["gradient_accumulation_steps"],
-        warmup_ratio=0.05,
+        warmup_steps=warmup_steps,
         num_train_epochs=hp["num_train_epochs"],
         learning_rate=hp["learning_rate"],
         weight_decay=0.01,

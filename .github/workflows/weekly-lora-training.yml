@@ -100,6 +100,7 @@ jobs:
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
           if [ -z "$KAGGLE_API_TOKEN" ] || [ -z "$KAGGLE_USERNAME" ]; then
             echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
@@ -107,7 +108,7 @@ jobs:
           fi
           pip install kaggle
 
-          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           DATASET_ID="$USERNAME_LOWER/saralgati-verified-training-set"
 
           # The runner reads the pool from /kaggle/input/, so it must be published
@@ -116,13 +117,19 @@ jobs:
           echo "📦 Packaging verified dataset for Kaggle..."
           python scripts/bundle_dataset.py dataset.jsonl kaggle_dataset "$USERNAME_LOWER"
 
-          # `create` fails once the dataset exists, so fall back to a new version.
-          kaggle datasets create -p kaggle_dataset \
-            || kaggle datasets version -p kaggle_dataset -m "Verified refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # Check if dataset exists on Kaggle to create a new version or initialize
+          if kaggle datasets status "$DATASET_ID" 2>&1 | grep -qi -E "ready|pending"; then
+            echo "Dataset $DATASET_ID already exists. Uploading new version with latest samples..."
+            kaggle datasets version -p kaggle_dataset -m "Verified refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)" -d
+          else
+            echo "Creating new private dataset $DATASET_ID..."
+            kaggle datasets create -p kaggle_dataset
+          fi
 
-          # A kernel can only attach a dataset that has finished processing.
+          # Wait for Kaggle to finish processing the uploaded dataset version
+          sleep 10
           READY="false"
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 18); do
             STATUS=$(kaggle datasets status "$DATASET_ID" 2>&1 || true)
             echo "Attempt $attempt: $STATUS"
             if printf '%s' "$STATUS" | grep -qi ready; then
@@ -143,6 +150,7 @@ jobs:
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           DATASET_ID: ${{ steps.publish_dataset.outputs.dataset_id }}
@@ -164,7 +172,7 @@ jobs:
           cp scripts/train_unsloth_lora.py kaggle_push/
 
           echo "🔄 Updating kernel-metadata.json with the Kaggle username and dataset source..."
-          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           jq --arg username "$USERNAME_LOWER" --arg dataset "$DATASET_ID" \
             '.id = $username + "/saralgati-lora-training" | .dataset_sources = [$dataset]' \
             scripts/kernel-metadata.json > kaggle_push/kernel-metadata.json
@@ -181,8 +189,9 @@ jobs:
         env:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_API_TOKEN }}
         run: |
-          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]')
+          USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           echo "Queued kernel: $USERNAME_LOWER/saralgati-lora-training"
           kaggle kernels status "$USERNAME_LOWER/saralgati-lora-training" || true
 

@@ -1,7 +1,7 @@
 {
-  "version_code": 100,
-  "version_name": "5.12.3",
+  "version_code": 101,
+  "version_name": "5.12.4",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Cloudflare Workers AI fine-tune container model registration: use @cf/meta/llama-guard-3-8b for container creation per Cloudflare API requirements."
+  "changelog": "Fix transformers 5.x warmup_ratio TypeError by using warmup_steps, add KAGGLE_KEY to dataset publishing and kernel trigger steps, and ensure robust Kaggle dataset versioning."
 }

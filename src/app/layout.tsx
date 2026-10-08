@@ -52,7 +52,7 @@ export default async function RootLayout({
           data-api-url="https://edge-agent-widget.shunopsai.workers.dev"
           data-title="SaralGati AI Assistant"
           data-welcome="Namaste! I am your SaralGati companion assistant. How can I help you today?"
-          strategy="lazyOnload"
+          strategy="afterInteractive"
           nonce={nonce}
         />
       </body>

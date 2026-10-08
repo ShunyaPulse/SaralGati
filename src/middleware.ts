@@ -16,11 +16,11 @@ export default withAuth(
 
     const cspHeader = `
       default-src 'self';
-      script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${evalSource}https://challenges.cloudflare.com;
+      script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${evalSource}https://challenges.cloudflare.com https://edge-agent-widget.shunopsai.workers.dev;
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: https: blob:;
       font-src 'self' data:;
-      connect-src 'self' https://challenges.cloudflare.com;
+      connect-src 'self' https://challenges.cloudflare.com https://edge-agent-widget.shunopsai.workers.dev;
       frame-src 'self' https://challenges.cloudflare.com;
       object-src 'none';
       base-uri 'self';

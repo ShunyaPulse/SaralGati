@@ -5,6 +5,7 @@ import AuthProvider from "@/components/providers/session-provider";
 import SmoothScrollProvider from "@/components/providers/smooth-scroll-provider";
 import { Toaster } from "sonner";
 import { headers } from 'next/headers';
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -46,6 +47,14 @@ export default async function RootLayout({
           </AuthProvider>
         </SmoothScrollProvider>
         <Toaster position="top-center" richColors theme="light" />
+        <Script
+          src="https://edge-agent-widget.shunopsai.workers.dev/widget.js"
+          data-api-url="https://edge-agent-widget.shunopsai.workers.dev"
+          data-title="SaralGati AI Assistant"
+          data-welcome="Namaste! I am your SaralGati companion assistant. How can I help you today?"
+          strategy="lazyOnload"
+          nonce={nonce}
+        />
       </body>
     </html>
   );

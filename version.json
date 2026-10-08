@@ -1,7 +1,7 @@
 {
-  "version_code": 105,
-  "version_name": "5.12.8",
+  "version_code": 106,
+  "version_name": "5.12.9",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix gcloud run deploy argument escaping for multi-key GEMINI_API_KEYS using custom delimiter syntax to prevent workflow deploy failures."
+  "changelog": "Resolve CVE-2026-96889 in cloudflare-cron/package-lock.json with sharp ^0.35.5 override, achieving zero open Dependabot vulnerabilities."
 }

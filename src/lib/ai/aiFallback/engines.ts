@@ -74,12 +74,34 @@ export async function fetchCloudflareLoRA(options: GenerateOptions): Promise<AIR
   return null;
 }
 
-export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIResponse | null> {
-  const apiKeys = (process.env.GEMINI_API_KEY || '')
-    .split(',')
-    .map(key => key.trim())
-    .filter(Boolean);
+let cachedKeys: string[] = [];
+let lastRawKeyString = '';
+let roundRobinIndex = 0;
 
+function getApiKeysPool(): string[] {
+  const raw =
+    process.env.GEMINI_KEYS ||
+    process.env.GEMINI_API_KEYS ||
+    process.env.GEMINI_API_KEY ||
+    '';
+  if (raw !== lastRawKeyString) {
+    lastRawKeyString = raw;
+    cachedKeys = raw
+      .split(',')
+      .map((k: string) => k.trim())
+      .filter(Boolean);
+    // Initialize starting index once on startup so different instances don't all start at 0
+    if (cachedKeys.length > 1) {
+      roundRobinIndex = Math.floor(Math.random() * cachedKeys.length);
+    } else {
+      roundRobinIndex = 0;
+    }
+  }
+  return cachedKeys;
+}
+
+export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIResponse | null> {
+  const apiKeys = getApiKeysPool();
   if (apiKeys.length === 0) return null;
 
   let fullPrompt = `${options.systemPrompt}\n\n`;
@@ -104,9 +126,17 @@ export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIR
     }
   };
 
+  // Zero-shuffle round-robin selection: pick next key in O(1) time
+  // No per-request array shuffle or copy, keeping elder response latency minimal.
+  const startKeyIdx = roundRobinIndex;
+  roundRobinIndex = (roundRobinIndex + 1) % apiKeys.length;
+
   for (const model of GEMINI_MODELS_ECO_ORDER) {
-    for (let i = 0; i < apiKeys.length; i++) {
-      const currentKey = apiKeys[i];
+    // Try current round-robin key; if 429 occurs, try at most 1 next key before model fallback
+    const maxKeyAttempts = Math.min(2, apiKeys.length);
+    for (let attempt = 0; attempt < maxKeyAttempts; attempt++) {
+      const keyIdx = (startKeyIdx + attempt) % apiKeys.length;
+      const currentKey = apiKeys[keyIdx];
       try {
         const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${currentKey}`;
         const res = await fetch(geminiUrl, {
@@ -116,7 +146,13 @@ export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIR
           signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS)
         });
 
-        if (!res.ok) continue;
+        if (!res.ok) {
+          // If rate limited (429), advance round-robin index past this key
+          if (res.status === 429) {
+            roundRobinIndex = (keyIdx + 1) % apiKeys.length;
+          }
+          continue;
+        }
 
         const data = await res.json();
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -124,7 +160,7 @@ export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIR
           return {
             text: text.trim(),
             source: 'gemini',
-            modelUsed: `${model} (Key #${i + 1})`
+            modelUsed: `${model} (Key #${keyIdx + 1})`
           };
         }
       } catch (keyErr) {
@@ -135,3 +171,4 @@ export async function fetchGeminiAIStudio(options: GenerateOptions): Promise<AIR
 
   return null;
 }
+

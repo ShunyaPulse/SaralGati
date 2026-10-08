@@ -124,13 +124,17 @@ GUIDANCE_LANG_LABELS = {
 }
 
 
-def pick_guidance_language(focus=None):
+def pick_guidance_language(focus=None, batch_num=None, total_batches=None):
     """Which language this batch's queries are written in.
 
-    Failure-driven, like the app selection: a language whose answers were
-    recently rejected gets the next batch's attention, so neither language can
-    quietly starve. FLYWHEEL_GUIDANCE_LANG=hi|en pins every batch to one
-    language when an operator deliberately wants to top that pool up.
+    Target ratio: approx 25/80 (~31.25%) scenarios in English ('en'),
+    and ~55/80 (~68.75%) in Hindi/Hinglish ('hi').
+
+    Failure-driven weighting: if recent telemetry shows one language has an
+    elevated miss rate, its probability is adjusted accordingly, but steady-state
+    strictly targets 25/80 English.
+    FLYWHEEL_GUIDANCE_LANG=hi|en pins every batch to one language when an
+    operator deliberately wants to top that pool up.
     """
     import random
 
@@ -141,14 +145,35 @@ def pick_guidance_language(focus=None):
     misses = (focus or {}).get("misses_by_lang") or {}
     hi_misses = int(misses.get("hi", 0))
     en_misses = int(misses.get("en", 0))
-    if en_misses > hi_misses:
-        return "en"
-    if hi_misses > en_misses:
-        return "hi"
-    return random.choice(list(GUIDANCE_LANG_LABELS))
+
+    # Base target weights: 25 English out of 80 total (~31.25% vs ~68.75%)
+    weight_en = 25.0
+    weight_hi = 55.0
+
+    if hi_misses + en_misses > 0:
+        hi_rate = hi_misses / 55.0
+        en_rate = en_misses / 25.0
+        if en_rate > hi_rate * 1.2:
+            weight_en *= min(2.0, en_rate / (hi_rate + 1e-4))
+        elif hi_rate > en_rate * 1.2:
+            weight_hi *= min(2.0, hi_rate / (en_rate + 1e-4))
+
+    if batch_num is not None and total_batches is not None:
+        target_en_batches = max(1, round(total_batches * (weight_en / (weight_en + weight_hi))))
+        if total_batches == 4:
+            en_batch_set = {2} if target_en_batches == 1 else {2, 4}
+        elif total_batches == 2:
+            en_batch_set = {2} if target_en_batches >= 1 else set()
+        else:
+            step = max(1, round(total_batches / target_en_batches))
+            en_batch_set = {b for b in range(1, total_batches + 1) if b % step == 0}
+
+        return "en" if batch_num in en_batch_set else "hi"
+
+    return random.choices(["en", "hi"], weights=[weight_en, weight_hi], k=1)[0]
 
 
-def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None, focus=None):
+def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_models=None, focus=None, guidance_lang=None):
     """
     Multi-key pool with MODEL-FIRST exhaustive rotation:
     Exhaust ALL keys on gemini-3.8-flash first, then ALL keys on gemini-3.7-flash, etc.
@@ -238,7 +263,7 @@ def generate_infinite_screens_via_gemini(gemini_keys_pool, count=5, blacklisted_
     random.shuffle(other_apps)
     chosen_apps = (priority_apps + other_apps)[:min(count, len(app_domains))]
 
-    lang = pick_guidance_language(focus)
+    lang = guidance_lang if guidance_lang in GUIDANCE_LANG_LABELS else pick_guidance_language(focus)
     lang_label = GUIDANCE_LANG_LABELS[lang]
     speech = random.choice(speech_styles_by_lang[lang])
     mutation = random.choice(evol_mutations)
@@ -627,9 +652,40 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
     if gemini_keys_pool:
         num_batches = 4 if num_keys >= 10 else 2
         blacklisted_models = set()  # Shared across all batches in this run
-        for batch_num in range(1, num_batches + 1):
-            print(f"[Generator] Requesting batch {batch_num}/{num_batches} of dynamic app screens...")
-            dynamic_screens = generate_infinite_screens_via_gemini(gemini_keys_pool, count=8, blacklisted_models=blacklisted_models, focus=focus)
+
+        # Batch plan targeting approx 25/80 (~31.25%) scenarios in English:
+        # 4 batches: 3 Hindi (8+7+7=22 screens), 1 English (10 screens) -> 10/32 screens (~25/80 scenarios)
+        # 2 batches: 1 Hindi (11 screens), 1 English (5 screens) -> 5/16 screens (~25/80 scenarios)
+        if num_batches == 4:
+            batch_plan = [
+                {"lang": "hi", "count": 8},
+                {"lang": "en", "count": 10},
+                {"lang": "hi", "count": 7},
+                {"lang": "hi", "count": 7},
+            ]
+        else:
+            batch_plan = [
+                {"lang": "hi", "count": 11},
+                {"lang": "en", "count": 5},
+            ]
+
+        forced_lang = (os.environ.get("FLYWHEEL_GUIDANCE_LANG") or "").strip().lower()
+        if forced_lang in GUIDANCE_LANG_LABELS:
+            for bp in batch_plan:
+                bp["lang"] = forced_lang
+                bp["count"] = 8
+
+        for batch_num, plan in enumerate(batch_plan, start=1):
+            batch_lang = plan["lang"]
+            batch_count = plan["count"]
+            print(f"[Generator] Requesting batch {batch_num}/{num_batches} ({batch_lang.upper()}, {batch_count} screens) of dynamic app screens...")
+            dynamic_screens = generate_infinite_screens_via_gemini(
+                gemini_keys_pool,
+                count=batch_count,
+                blacklisted_models=blacklisted_models,
+                focus=focus,
+                guidance_lang=batch_lang
+            )
             if dynamic_screens:
                 active_screens.extend(dynamic_screens)
             if batch_num < num_batches:
@@ -888,9 +944,14 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="Max scenarios to run")
     args = parser.parse_args()
 
-    # Build keys pool: --gemini-keys arg > GEMINI_API_KEYS env > GEMINI_API_KEY env (single key fallback)
-    raw_keys_str = args.gemini_keys or os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
+    # Build keys pool: --gemini-keys arg > GEMINI_API_KEYS env > GEMINI_KEYS env > GEMINI_API_KEY env (single key fallback)
+    raw_keys_str = args.gemini_keys or os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
     keys_pool = [k.strip() for k in raw_keys_str.split(",") if k.strip()]
+    if keys_pool:
+        import random
+        # Start at a randomized offset on batch launch so repeated runs don't hit key 0 exclusively
+        offset = random.randint(0, len(keys_pool) - 1)
+        keys_pool = keys_pool[offset:] + keys_pool[:offset]
     print(f"[Keys] Loaded {len(keys_pool)} Gemini API key(s) for model-first rotation.")
 
     run_cloud_self_learning(api_url=args.url, auth_token=args.token, gemini_keys_pool=keys_pool, max_cases=args.limit)

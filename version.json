@@ -1,7 +1,7 @@
 {
-  "version_code": 102,
-  "version_name": "5.12.5",
+  "version_code": 103,
+  "version_name": "5.12.6",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Decouple LoRA training trigger from adapter deployment to eliminate 5-hour workflow timeouts, schedule automated sweeper on training days, and deploy verified 11.4k sample adapter to Cloudflare Workers AI."
+  "changelog": "Balance flywheel self-learning synthesis to generate approx 25 out of 80 scenarios in English (~31.25%) with 55 in Hindi/Hinglish, preventing language starvation and adapter drift."
 }

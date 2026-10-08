@@ -1,7 +1,7 @@
 {
-  "version_code": 103,
-  "version_name": "5.12.6",
+  "version_code": 104,
+  "version_name": "5.12.7",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Balance flywheel self-learning synthesis to generate approx 25 out of 80 scenarios in English (~31.25%) with 55 in Hindi/Hinglish, preventing language starvation and adapter drift."
+  "changelog": "Resolve CVE-2026-93687 (GHSA-vfj7-8cjw-p6xm) braces DoS vulnerability by pruning unused eslint nested dependencies, achieving 0 vulnerabilities across all packages."
 }

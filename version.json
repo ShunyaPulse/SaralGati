@@ -1,7 +1,7 @@
 {
-  "version_code": 104,
-  "version_name": "5.12.7",
+  "version_code": 105,
+  "version_name": "5.12.8",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Resolve CVE-2026-93687 (GHSA-vfj7-8cjw-p6xm) braces DoS vulnerability by pruning unused eslint nested dependencies, achieving 0 vulnerabilities across all packages."
+  "changelog": "Fix gcloud run deploy argument escaping for multi-key GEMINI_API_KEYS using custom delimiter syntax to prevent workflow deploy failures."
 }

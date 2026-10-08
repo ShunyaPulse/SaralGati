@@ -87,17 +87,17 @@ jobs:
           GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS || secrets.GEMINI_KEYS || secrets.GEMINI_API_KEY }}
         run: |
           IMAGE=$(echo "ghcr.io/$REPO_IMAGE_NAME:$COMMIT_SHA" | tr '[:upper:]' '[:lower:]')
-          ENV_FLAGS=""
+          DEPLOY_ARGS=(
+            "--image=$IMAGE"
+            "--region=asia-south1"
+            "--allow-unauthenticated"
+            "--max-instances=2"
+            "--min-instances=0"
+          )
           if [ -n "$GEMINI_API_KEYS" ]; then
-            ENV_FLAGS="--update-env-vars=GEMINI_API_KEYS=$GEMINI_API_KEYS"
+            DEPLOY_ARGS+=("--update-env-vars=^:::^GEMINI_API_KEYS=${GEMINI_API_KEYS}")
           fi
-          gcloud run deploy saralgati \
-            --image=$IMAGE \
-            --region=asia-south1 \
-            --allow-unauthenticated \
-            --max-instances=2 \
-            --min-instances=0 \
-            $ENV_FLAGS
+          gcloud run deploy saralgati "${DEPLOY_ARGS[@]}"
           gcloud run services update-traffic saralgati \
             --region=asia-south1 \
             --to-latest

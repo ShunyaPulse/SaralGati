@@ -91,5 +91,7 @@ jobs:
             --region=asia-south1 \
             --allow-unauthenticated \
             --max-instances=2 \
-            --min-instances=0 \
+            --min-instances=0
+          gcloud run services update-traffic saralgati \
+            --region=asia-south1 \
             --to-latest

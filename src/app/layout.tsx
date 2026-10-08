@@ -50,8 +50,9 @@ export default async function RootLayout({
         <Script
           src="https://edge-agent-widget.shunopsai.workers.dev/widget.js"
           data-api-url="https://edge-agent-widget.shunopsai.workers.dev"
-          data-title="SaralGati AI Assistant"
-          data-welcome="Namaste! I am your SaralGati companion assistant. How can I help you today?"
+          data-title="SaralGati Care AI"
+          data-welcome="Namaste! Main SaralGati Elder & Caregiver AI Assistant hoon. Main emergency alert check karne, smartphone screen guidance dene, dawai schedule ya online call scam verify karne me aapki madad kar sakta hoon. Kaise madad karoon?"
+          data-chips='[{"label":"🚨 SOS & Health Check","prompt":"Check active elder emergency alerts and health vitals status"},{"label":"📱 Phone Guide (सरल)","prompt":"Mujhe smartphone screen aur buttons chalana simple Hindi me samjhao"},{"label":"💊 Dawai Reminder","prompt":"Elder daily medicine reminder aur care routine schedule dikhao"},{"label":"🛡️ Scam & Fraud Shield","prompt":"Check if a suspicious phone call, SMS, or banking alert is a fraud or scam"}]'
           strategy="afterInteractive"
           nonce={nonce}
         />

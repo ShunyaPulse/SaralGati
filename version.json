@@ -1,7 +1,7 @@
 {
-  "version_code": 101,
-  "version_name": "5.12.4",
+  "version_code": 102,
+  "version_name": "5.12.5",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix transformers 5.x warmup_ratio TypeError by using warmup_steps, add KAGGLE_KEY to dataset publishing and kernel trigger steps, and ensure robust Kaggle dataset versioning."
+  "changelog": "Decouple LoRA training trigger from adapter deployment to eliminate 5-hour workflow timeouts, schedule automated sweeper on training days, and deploy verified 11.4k sample adapter to Cloudflare Workers AI."
 }

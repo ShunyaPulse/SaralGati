@@ -1,6 +1,6 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { z } from 'zod';
-import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet } from '@/lib/data/redis';
+import { rateLimiter, cacheSet, cacheGet, cacheDelete, getSubnet, getClientIp } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 import { createMailer } from '@/lib/notify/mailer';
 import { queryOne } from '@/lib/data/db';
@@ -17,7 +17,7 @@ const sendOtpSchema = z.object({
 /** POST /api/auth/send-otp - mail a one-time code for sign-up or sign-in. */
 export async function sendOtp(req: Request): Promise<ServiceResult> {
   try {
-    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(req);
     const subnet = getSubnet(ip);
     const cookieStore = await cookies();
     const devId = cookieStore.get('__sg_dev_id')?.value;
@@ -85,7 +85,8 @@ export async function sendOtp(req: Request): Promise<ServiceResult> {
         [cleanEmail]
       );
       if (!existingUser) {
-        return fail(404, { error: 'No account found with this email address.' });
+        // Return uniform success to prevent account enumeration
+        return ok({ message: 'If an account exists with this email, a verification code has been sent.' });
       }
     }
 

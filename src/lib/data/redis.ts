@@ -61,6 +61,22 @@ export async function invalidatePattern(pattern: string): Promise<void> {
   }
 }
 
+export function getClientIp(req: Request): string {
+  const cfIp = req.headers.get('cf-connecting-ip');
+  if (cfIp && cfIp.trim()) return cfIp.trim();
+
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded && forwarded.trim()) {
+    const parts = forwarded.split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) return parts[parts.length - 1];
+  }
+
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp && realIp.trim()) return realIp.trim();
+
+  return 'anonymous';
+}
+
 export function getSubnet(ip: string): string {
   if (!ip || ip === 'anonymous' || ip === '::1' || ip === '127.0.0.1') return 'local';
   if (ip.includes(':')) {

@@ -25,8 +25,11 @@ import sys
 import json
 import time
 import argparse
-import re
+import random
 from urllib.parse import urljoin
+
+# Global rotating key cursor across all synthetic screen and fraud scenario generation passes
+_FLYWHEEL_KEY_CURSOR = random.randint(0, 33)
 
 if sys.stdout and hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -346,14 +349,19 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     if blacklisted_models is None:
         blacklisted_models = set()
 
+    global _FLYWHEEL_KEY_CURSOR
+    start_key_idx = _FLYWHEEL_KEY_CURSOR
+    _FLYWHEEL_KEY_CURSOR = (_FLYWHEEL_KEY_CURSOR + 1) % len(gemini_keys_pool)
+
     for model_name in CANDIDATE_MODELS:
         if model_name in blacklisted_models:
             continue  # Skip models that gave 503 in a previous batch
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
         model_exhausted = True
 
-        for key_idx, api_key in enumerate(gemini_keys_pool):
-            api_key = api_key.strip()
+        for attempt in range(len(gemini_keys_pool)):
+            key_idx = (start_key_idx + attempt) % len(gemini_keys_pool)
+            api_key = gemini_keys_pool[key_idx].strip()
             if not api_key:
                 continue
             headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
@@ -368,7 +376,8 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
                     model_exhausted = False
                     break
                 if res.status_code == 429:
-                    # This key is rate-limited on this model; try next key
+                    # Advance cursor past rate-limited key
+                    _FLYWHEEL_KEY_CURSOR = (key_idx + 1) % len(gemini_keys_pool)
                     print(f"  ⏭ Key [{key_idx+1}/{len(gemini_keys_pool)}] rate-limited on {model_name}, trying next key...")
                     continue
                 res.raise_for_status()
@@ -548,12 +557,17 @@ Respond ONLY with valid JSON array (no markdown fences, no extra text):
     if blacklisted_models is None:
         blacklisted_models = set()
 
+    global _FLYWHEEL_KEY_CURSOR
+    start_key_idx = _FLYWHEEL_KEY_CURSOR
+    _FLYWHEEL_KEY_CURSOR = (_FLYWHEEL_KEY_CURSOR + 1) % len(gemini_keys_pool)
+
     for model_name in CANDIDATE_MODELS:
         if model_name in blacklisted_models:
             continue
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-        for key_idx, api_key in enumerate(gemini_keys_pool):
-            api_key = api_key.strip()
+        for attempt in range(len(gemini_keys_pool)):
+            key_idx = (start_key_idx + attempt) % len(gemini_keys_pool)
+            api_key = gemini_keys_pool[key_idx].strip()
             if not api_key:
                 continue
             headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
@@ -565,6 +579,7 @@ Respond ONLY with valid JSON array (no markdown fences, no extra text):
                     print(f"  ⚡ [fraud] {model_name} high demand ({res.status_code}). Fast-switching model...")
                     break
                 if res.status_code == 429:
+                    _FLYWHEEL_KEY_CURSOR = (key_idx + 1) % len(gemini_keys_pool)
                     continue
                 res.raise_for_status()
                 raw_text = res.json()["candidates"][0]["content"]["parts"][0]["text"].strip()

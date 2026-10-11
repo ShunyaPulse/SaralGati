@@ -28,7 +28,9 @@ export type { GenerateOptions, AnswerGrounding, AIResponse } from './types';
  */
 export async function generateAIResponse(options: GenerateOptions): Promise<AIResponse> {
   const hasLoRA = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN && process.env.CLOUDFLARE_LORA_NAME);
-  const hasGemini = Boolean(process.env.GEMINI_API_KEY?.trim());
+  const hasGemini = Boolean(
+    (process.env.GEMINI_KEYS || process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY)?.trim()
+  );
 
   if (!hasLoRA && !hasGemini) {
     throw new Error('Neither Cloudflare LoRA nor GEMINI_API_KEY is configured.');

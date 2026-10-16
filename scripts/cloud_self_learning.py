@@ -418,7 +418,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
                     screens = [
                         {
                             "app_package": str(s.get("app_package", "")),
-                            "elements": [re.sub(r"^(?:\\[\\d+\\]:?|\\d+:)\\s*", "", str(el)).strip() for el in s.get("elements", [])],
+                            "elements": [re.sub(r"^(?:\[\d+\]:?|\d+:)\s*", "", str(el)).strip() for el in s.get("elements", [])],
                             "guidance_lang": lang,
                             "scenarios": [
                                 {

@@ -1,7 +1,7 @@
 {
-  "version_code": 119,
-  "version_name": "6.1.0",
+  "version_code": 120,
+  "version_name": "6.1.1",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "SaralGati 6.1.0 (Zero-Escape Fraud Scan & Threat-Biased Prioritization): Removed premature JNI traversal cutoff from traverseNode so 100% of visible screen nodes are scanned by OfflineFraudSentinel with zero chance of missing scams in long/bloated views, and added Threat-Biased Prioritization (ranking OTP, PIN, UPI, KYC, APK, remote access keywords first) when capping elements for the backend API."
+  "changelog": "Fix CodeQL warning (alert 144): resolve duplicate backslash in regex character class in scripts/cloud_self_learning.py."
 }

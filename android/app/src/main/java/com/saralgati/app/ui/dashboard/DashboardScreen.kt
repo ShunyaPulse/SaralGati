@@ -4,9 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,16 +18,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.content.Context
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.AppStrings
 import com.saralgati.app.data.local.LocalPrefs
-import com.saralgati.app.data.model.AssistanceLog
 import com.saralgati.app.utils.AutoStartHelper
-import kotlinx.coroutines.launch
 
 @Composable
 fun DashboardScreen(
@@ -35,12 +32,8 @@ fun DashboardScreen(
     onUnpair: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val localPrefs = remember { LocalPrefs(context) }
     val elderId = localPrefs.getElderId() ?: "Unknown"
-
-    var alertStatusMessage by remember { mutableStateOf<String?>(null) }
-    var isSendingAlert by remember { mutableStateOf(false) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     var isAccessibilityEnabled by remember { mutableStateOf(isAccessibilityServiceEnabled(context)) }
@@ -83,6 +76,7 @@ fun DashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
@@ -283,19 +277,9 @@ fun DashboardScreen(
                     }
                 }
             }
-
-            if (alertStatusMessage != null) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    text = alertStatusMessage!!,
-                    color = if (alertStatusMessage!!.startsWith("Success")) Color(0xFF16A34A) else MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
-                )
-            }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // On-Screen Helper Controls
         Surface(

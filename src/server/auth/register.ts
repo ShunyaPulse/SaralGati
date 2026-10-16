@@ -2,7 +2,7 @@ import { fail, type ServiceResult } from '@/server/http';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { queryOne } from '@/lib/data/db';
-import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet } from '@/lib/data/redis';
+import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet, getClientIp } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
 
@@ -23,7 +23,7 @@ const registerSchema = z.object({
  */
 export async function registerCaregiver(req: Request): Promise<ServiceResult> {
   try {
-    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(req);
     const subnet = getSubnet(ip);
     const cookieStore = await cookies();
     const devId = cookieStore.get('__sg_dev_id')?.value;

@@ -1,14 +1,7 @@
 """
 SaralGati - Kaggle Dataset Packager
-Packages the downloaded dataset.jsonl as a private Kaggle Dataset so the GPU
-runner can read it from /kaggle/input/.
-
-Why a dataset instead of a file hosted beside the script: `kaggle kernels push`
-uploads only the code file named in kernel-metadata.json, so a sibling
-dataset.jsonl never reaches the container. Embedding the pool inside the script
-does not work either - a Kaggle notebook source is capped at 1 MB and a 17 MB
-pool compresses to ~1.7 MB, which the SaveKernel API rejects with 400 Bad Request.
-An attached dataset has no such limit and is the supported Kaggle mechanism.
+Packages the downloaded dataset.jsonl (and optional dpo_dataset.jsonl) as a
+private Kaggle Dataset so the GPU runner can read them from /kaggle/input/.
 """
 
 import json
@@ -19,7 +12,7 @@ DATASET_TITLE = "SaralGati Verified Training Set"
 DATASET_SLUG = "saralgati-verified-training-set"
 
 
-def package(dataset_file, dest_dir, owner):
+def package(dataset_file, dest_dir, owner, dpo_file="dpo_dataset.jsonl"):
     if not os.path.exists(dataset_file) or os.path.getsize(dataset_file) == 0:
         print(f"⚠️ Dataset file '{dataset_file}' not found or empty; nothing to package.")
         raise SystemExit(1)
@@ -33,6 +26,15 @@ def package(dataset_file, dest_dir, owner):
     dest_data = os.path.join(dest_dir, "dataset.jsonl")
     with open(dest_data, "wb") as f:
         f.write(raw_bytes)
+
+    if dpo_file and os.path.exists(dpo_file) and os.path.getsize(dpo_file) > 0:
+        with open(dpo_file, "rb") as df:
+            dpo_bytes = df.read()
+        dpo_count = len([line for line in dpo_bytes.split(b"\n") if line.strip()])
+        dest_dpo = os.path.join(dest_dir, "dpo_dataset.jsonl")
+        with open(dest_dpo, "wb") as df:
+            df.write(dpo_bytes)
+        print(f"✅ Packaged {dpo_count} contrastive DPO pairs ({len(dpo_bytes)} bytes) into {dest_dpo}")
 
     # Kaggle needs a deterministic id: the workflow publishes with it and the
     # kernel attaches the very same string through dataset_sources.
@@ -55,7 +57,8 @@ if __name__ == "__main__":
     dataset_file = sys.argv[1] if len(sys.argv) > 1 else "dataset.jsonl"
     dest_dir = sys.argv[2] if len(sys.argv) > 2 else "kaggle_dataset"
     owner = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("KAGGLE_USERNAME", "")
+    dpo_file = sys.argv[4] if len(sys.argv) > 4 else "dpo_dataset.jsonl"
     if not owner:
         print("⚠️ Dataset owner missing; pass the Kaggle username as the third argument.")
         raise SystemExit(1)
-    package(dataset_file, dest_dir, owner.lower())
+    package(dataset_file, dest_dir, owner.lower(), dpo_file)

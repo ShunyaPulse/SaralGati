@@ -10,9 +10,11 @@ class LocalPrefs(context: Context) {
         private const val KEY_ELDER_ID = "elder_id"
         private const val KEY_CAREGIVER_ID = "caregiver_id"
         private const val KEY_DEVICE_TOKEN = "device_token"
+        private const val KEY_API_URL = "api_url"
         private const val KEY_IS_PAIRED = "is_paired"
         private const val KEY_PREF_LANG = "pref_lang"
         private const val KEY_GUIDANCE_LANG = "guidance_lang"
+        private const val KEY_EMERGENCY_CONTACT = "emergency_contact"
     }
 
     /**
@@ -39,13 +41,21 @@ class LocalPrefs(context: Context) {
 
     fun hasSelectedLanguage(): Boolean = prefs.contains(KEY_PREF_LANG)
 
-    fun savePairingInfo(elderId: String, caregiverId: String, deviceToken: String? = null) {
+    fun savePairingInfo(
+        elderId: String,
+        caregiverId: String,
+        deviceToken: String? = null,
+        apiUrl: String? = null
+    ) {
         val editor = prefs.edit()
             .putString(KEY_ELDER_ID, elderId)
             .putString(KEY_CAREGIVER_ID, caregiverId)
             .putBoolean(KEY_IS_PAIRED, true)
         if (deviceToken != null) {
             editor.putString(KEY_DEVICE_TOKEN, deviceToken)
+        }
+        if (!apiUrl.isNullOrBlank()) {
+            editor.putString(KEY_API_URL, apiUrl.trim())
         }
         editor.apply()
     }
@@ -56,9 +66,21 @@ class LocalPrefs(context: Context) {
 
     fun getDeviceToken(): String? = prefs.getString(KEY_DEVICE_TOKEN, null)
 
+    fun getApiUrl(): String? = prefs.getString(KEY_API_URL, null)
+
     fun getAuthToken(): String? = getDeviceToken() ?: getElderId()
 
     fun getElderId(): String? = prefs.getString(KEY_ELDER_ID, null)
+
+    fun saveEmergencyContact(contact: String?) {
+        if (contact.isNullOrBlank()) {
+            prefs.edit().remove(KEY_EMERGENCY_CONTACT).apply()
+        } else {
+            prefs.edit().putString(KEY_EMERGENCY_CONTACT, contact.trim()).apply()
+        }
+    }
+
+    fun getEmergencyContact(): String? = prefs.getString(KEY_EMERGENCY_CONTACT, null)
 
     fun isPaired(): Boolean = prefs.getBoolean(KEY_IS_PAIRED, false)
 

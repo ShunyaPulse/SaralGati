@@ -1,5 +1,6 @@
 package com.saralgati.app.data.api
 
+import com.saralgati.app.data.model.AgentConfigData
 import com.saralgati.app.data.model.ApiResponse
 import com.saralgati.app.data.model.AskContextRequest
 import com.saralgati.app.data.model.FeedbackRequest
@@ -10,10 +11,14 @@ import com.saralgati.app.data.model.ScreenExplanationResponse
 import com.saralgati.app.data.model.SyncHabitsRequest
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 
 /** The guidance agent endpoints the companion calls while the elder is on screen. */
 interface AgentApi {
+    @GET("api/v1/agent/config")
+    suspend fun getConfig(): Response<ApiResponse<AgentConfigData>>
+
     @POST("api/v1/agent/explain")
     suspend fun explainScreen(@Body request: ScreenContextRequest): Response<ApiResponse<ScreenExplanationResponse>>
 

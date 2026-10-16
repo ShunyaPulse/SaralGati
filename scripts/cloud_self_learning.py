@@ -23,6 +23,7 @@ No local device, emulator, or laptop required.
 import os
 import sys
 import json
+import re
 import time
 import argparse
 import random
@@ -365,7 +366,35 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
             if not api_key:
                 continue
             headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "app_package": {"type": "STRING"},
+                                "elements": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                "scenarios": {
+                                    "type": "ARRAY",
+                                    "items": {
+                                        "type": "OBJECT",
+                                        "properties": {
+                                            "query": {"type": "STRING"},
+                                            "expected": {"type": "INTEGER"},
+                                            "intent": {"type": "STRING"}
+                                        },
+                                        "required": ["query", "expected", "intent"]
+                                    }
+                                }
+                            },
+                            "required": ["app_package", "elements", "scenarios"]
+                        }
+                    }
+                }
+            }
 
             try:
                 res = requests.post(url, json=payload, headers=headers, timeout=25)
@@ -389,7 +418,7 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
                     screens = [
                         {
                             "app_package": str(s.get("app_package", "")),
-                            "elements": [str(el) for el in s.get("elements", [])],
+                            "elements": [re.sub(r"^(?:\\[\\d+\\]:?|\\d+:)\\s*", "", str(el)).strip() for el in s.get("elements", [])],
                             "guidance_lang": lang,
                             "scenarios": [
                                 {
@@ -571,7 +600,49 @@ Respond ONLY with valid JSON array (no markdown fences, no extra text):
             if not api_key:
                 continue
             headers = {"Content-Type": "application/json", "x-goog-api-key": api_key}
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "ARRAY",
+                        "items": {
+                            "type": "OBJECT",
+                            "properties": {
+                                "app_package": {"type": "STRING"},
+                                "messages": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                "urls": {"type": "ARRAY", "items": {"type": "STRING"}},
+                                "screen_text": {"type": "STRING"},
+                                "expected_threat_level": {
+                                    "type": "STRING",
+                                    "enum": ["SAFE", "SUSPICIOUS", "DANGEROUS", "CRITICAL"]
+                                },
+                                "expected_threat_category": {
+                                    "type": "STRING",
+                                    "enum": [
+                                        "OTP_THEFT",
+                                        "PAYMENT_FRAUD",
+                                        "REMOTE_ACCESS",
+                                        "PHISHING_IMPERSONATION",
+                                        "MALVERTISING",
+                                        "MALICIOUS_APK",
+                                        "PRIVACY_RISK",
+                                        "NONE"
+                                    ]
+                                }
+                            },
+                            "required": [
+                                "app_package",
+                                "messages",
+                                "urls",
+                                "screen_text",
+                                "expected_threat_level",
+                                "expected_threat_category"
+                            ]
+                        }
+                    }
+                }
+            }
             try:
                 res = requests.post(url, json=payload, headers=headers, timeout=25)
                 if res.status_code in (500, 502, 503, 504):
@@ -664,9 +735,9 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
 
     # Generate screens in 4 batches when keys available (more data per run)
     active_screens = []
+    blacklisted_models = set()  # Shared across all batches in this run
     if gemini_keys_pool:
         num_batches = 4 if num_keys >= 10 else 2
-        blacklisted_models = set()  # Shared across all batches in this run
 
         # Batch plan targeting approx 25/80 (~31.25%) scenarios in English:
         # 4 batches: 3 Hindi (8+7+7=22 screens), 1 English (10 screens) -> 10/32 screens (~25/80 scenarios)
@@ -866,6 +937,10 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
                     headers=headers,
                     timeout=20,
                 )
+                if not f_res.ok:
+                    print(f"    ❌ Fraud API HTTP {f_res.status_code}: {f_res.text[:120]}")
+                    stats["api_errors"] += 1
+                    continue
                 verdict = f_res.json()
             except Exception as e:
                 print(f"    ❌ Network error: {e}")

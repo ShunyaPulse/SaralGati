@@ -235,6 +235,7 @@ export async function recordHeartbeat(
     );
 
     // 2. If battery is critically low (< 15%), we can log a battery_low alert (optional silent alert)
+    let batteryAlertCreated = false;
     if (batteryLevel !== null && batteryLevel < 15) {
       // Check if we recently alerted for this to avoid spamming
       const recentAlert = await queryOne(
@@ -251,6 +252,7 @@ export async function recordHeartbeat(
           ) VALUES ($1, $2, $3, $4, $5, $6)`,
           [elderId, 'battery_low', 'System', 'android', 0, JSON.stringify({ battery: batteryLevel, severity: 'medium' })]
         );
+        batteryAlertCreated = true;
       }
     }
 
@@ -277,9 +279,9 @@ export async function recordHeartbeat(
       }
     }
 
-    // 4. Invalidate Redis cache so caregiver dashboard shows "Online" immediately
+    // 4. Invalidate Redis cache so caregiver dashboard shows "Online" and new alerts immediately
     await invalidatePattern(`elders:${previous.caregiver_id}*`);
-    if (breach) {
+    if (breach || batteryAlertCreated) {
       await invalidatePattern(`alerts:${previous.caregiver_id}*`);
     }
 

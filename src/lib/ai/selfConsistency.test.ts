@@ -4,8 +4,9 @@ import { voteOnAnswers } from './selfConsistency';
 
 /**
  * One sample from a stochastic decoder is a guess; several samples that agree
- * are evidence. The vote is over the *validated target*, because that is the
- * decision the spotlight and the elder's finger depend on.
+ * are evidence. The vote is over the *validated target*, weighted by grounded
+ * confidence, because that is the decision the spotlight and the elder's finger
+ * depend on.
  */
 
 const SCREEN = ['[BUTTON] Electricity Bill', '[BUTTON] Mobile Recharge'];
@@ -13,6 +14,7 @@ const QUESTION = 'dono mein kya farak hai';
 
 const BILL = 'Electricity Bill par tap karein. TARGET:0';
 const RECHARGE = 'Mobile Recharge par tap karein. TARGET:1';
+const CONTRADICTORY_BILL = 'Mobile Recharge par tap karein. TARGET:0';
 const UNGROUNDABLE = 'Aap yahan kuch bhi dabayein. TARGET:7';
 
 function vote(samples: string[]) {
@@ -41,6 +43,15 @@ describe('self-consistency voting', () => {
     // An even split falls back to the best-grounded sentence, and on an exact
     // tie to the first sample drawn, which keeps the vote deterministic.
     assert.equal(result.targetIndex, 0);
+  });
+
+  test('confidence-weighted tie-breaking prefers a coherent sample over a contradictory one', () => {
+    const result = vote([CONTRADICTORY_BILL, RECHARGE]);
+
+    assert.ok(result);
+    assert.equal(result.isConsensus, false);
+    assert.equal(result.targetIndex, 1);
+    assert.equal(result.sampleIndex, 1);
   });
 
   test('a sample nobody can ground is not a vote for nowhere', () => {

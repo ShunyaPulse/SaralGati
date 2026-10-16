@@ -15,6 +15,31 @@ redis.on('error', (err) => {
   console.error('Redis Client Error:', err);
 });
 
+/**
+ * Atomic sliding-window rate limiter Lua script:
+ * 1. Evicts expired timestamps outside the current window.
+ * 2. Counts active timestamps in the window.
+ * 3. Only inserts the new request and refreshes TTL when count < limit, so
+ *    rejected (429) burst traffic cannot self-extend its own lockout window.
+ */
+const SLIDING_WINDOW_LUA = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local windowStart = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local windowSeconds = tonumber(ARGV[4])
+local member = ARGV[5]
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', windowStart)
+local current = redis.call('ZCARD', key)
+if current >= limit then
+  return {0, 0}
+end
+redis.call('ZADD', key, now, member)
+redis.call('EXPIRE', key, windowSeconds)
+return {1, limit - (current + 1)}
+`;
+
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
     const data = await redis.get(key);
@@ -98,34 +123,26 @@ export async function rateLimiter(identifier: string, limit: number, windowSecon
     const key = `ratelimit:${identifier}`;
     const now = Date.now();
     const windowStart = now - windowSeconds * 1000;
-
-    const pipeline = redis.pipeline();
-    pipeline.zremrangebyscore(key, '-inf', windowStart);
     const member = `${now}-${Math.random().toString(36).substring(2)}`;
-    pipeline.zadd(key, now, member);
-    pipeline.zcard(key);
-    pipeline.expire(key, windowSeconds);
 
-    const results = await pipeline.exec();
+    const evalRes = await redis.eval(
+      SLIDING_WINDOW_LUA,
+      1,
+      key,
+      String(now),
+      String(windowStart),
+      String(limit),
+      String(windowSeconds),
+      member,
+    );
 
-    // exec() resolves to [error, result] pairs rather than throwing, so an
-    // unreachable Redis hands back errors here instead of hitting the catch.
-    // Trusting those entries denied every request (429) during an outage
-    // instead of degrading gracefully, so validate the shape explicitly.
-    const zcardEntry = results?.[2];
-    if (!zcardEntry || zcardEntry[0]) {
-      return { allowed: true, remaining: 1 };
+    if (Array.isArray(evalRes) && evalRes.length >= 2) {
+      const allowed = Number(evalRes[0]) === 1;
+      const remaining = Math.max(0, Number(evalRes[1]) || 0);
+      return { allowed, remaining };
     }
 
-    const requestCount = Number(zcardEntry[1]);
-    if (!Number.isFinite(requestCount)) {
-      return { allowed: true, remaining: 1 };
-    }
-
-    return {
-      allowed: requestCount <= limit,
-      remaining: Math.max(0, limit - requestCount)
-    };
+    return { allowed: true, remaining: 1 };
   } catch (error) {
     console.error('Redis rateLimiter Error:', error);
     // Graceful degradation: allow request if Redis fails
@@ -133,15 +150,15 @@ export async function rateLimiter(identifier: string, limit: number, windowSecon
   }
 }
 
+/**
+ * Single-roundtrip atomic alert deduplication via `SET key 1 EX windowSeconds NX`.
+ * Eliminates the two-step EXISTS + SETEX race condition under burst companion traffic.
+ */
 export async function deduplicateAlert(elderId: string, eventType: string, windowSeconds: number = 300): Promise<boolean> {
   try {
     const key = `alert_dedup:${elderId}:${eventType}`;
-    const exists = await redis.exists(key);
-    if (exists) {
-      return true; // Is duplicate
-    }
-    await redis.setex(key, windowSeconds, '1');
-    return false; // Not duplicate
+    const acquired = await redis.set(key, '1', 'EX', windowSeconds, 'NX');
+    return acquired !== 'OK'; // true if key already existed (duplicate)
   } catch (error) {
     console.error(`Redis deduplicateAlert Error:`, error);
     return false; // Process alert if Redis fails

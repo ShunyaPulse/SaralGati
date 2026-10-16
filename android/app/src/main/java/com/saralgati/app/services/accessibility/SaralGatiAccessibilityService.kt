@@ -148,6 +148,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             localPrefs = LocalPrefs(applicationContext)
         }
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
+        NetworkModule.baseUrlProvider = { localPrefs.getApiUrl() }
 
         val filter = IntentFilter().apply {
             addAction(ACTION_EXTRACT_SCREEN)
@@ -684,13 +685,23 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
                     // IMMEDIATE RESTORE: Scroll back to the top so user's screen is 100% untouched!
                     val restoreScrollNode = findScrollableNode(freshRoot, needBackward = true)
-                    restoreScrollNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                    try {
+                        restoreScrollNode?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+                    } finally {
+                        if (restoreScrollNode != null && restoreScrollNode !== freshRoot) {
+                            restoreScrollNode.recycle()
+                        }
+                    }
                     kotlinx.coroutines.delay(200)
                     freshRoot.recycle()
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Safe scroll peek error: ${e.message}")
+        } finally {
+            if (scrollableNode !== rootNode) {
+                scrollableNode.recycle()
+            }
         }
     }
 
@@ -722,12 +733,31 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val response = NetworkModule.agentApi.explainScreen(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
-                    val explanation = data?.explanation
-                        ?: if (isEn) "I cannot understand this screen right now." else "मुझे समझ नहीं आया कि यह स्क्रीन क्या है।"
-                    broadcastExplanation(explanation)
-                    val highlightIndex = data?.highlightIndex
-                    if (highlightIndex != null && highlightIndex in elementBounds.indices) {
-                        broadcastVisualCue(elementBounds[highlightIndex])
+                    val safety = data?.safety
+                    if (safety != null && safety.isDangerous) {
+                        val safeBounds = safety.actionDecision.safeActionIndex?.let { elementBounds.getOrNull(it) }
+                        val alertTitle = if (isEn) safety.userAlert.titleEn ?: "Warning: Potential Scam" else safety.userAlert.title
+                        val alertMsg = if (isEn) safety.userAlert.messageEn else safety.userAlert.messageHi
+                        val alertAdvice = if (isEn) safety.actionDecision.safeAdvice else (safety.actionDecision.safeAdviceHi ?: safety.actionDecision.safeAdvice)
+                        warnElderAboutFraud(alertTitle, alertMsg, alertAdvice, safeBounds)
+                    } else {
+                        val explanation = data?.explanation
+                            ?: if (isEn) "I cannot understand this screen right now." else "मुझे समझ नहीं आया कि यह स्क्रीन क्या है।"
+                        broadcastExplanation(explanation)
+                        val highlightIndex = data?.highlightIndex
+                        if (highlightIndex != null && highlightIndex in elementBounds.indices) {
+                            if (belowFoldFlags.getOrNull(highlightIndex) == true) {
+                                findScrollableNode(rootNode, needBackward = false)?.let { sNode ->
+                                    try {
+                                        sNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                                    } finally {
+                                        if (sNode !== rootNode) sNode.recycle()
+                                    }
+                                }
+                                kotlinx.coroutines.delay(200)
+                            }
+                            broadcastVisualCue(elementBounds[highlightIndex])
+                        }
                     }
                 } else {
                     broadcastExplanation(if (isEn) "Could not connect to the server." else "सर्वर से संपर्क नहीं हो पाया।")
@@ -782,6 +812,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val response = NetworkModule.agentApi.askQuestion(request)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
+                    val safety = data?.safety
                     val explanation = data?.explanation
                         ?: if (isEn) "I could not find an answer for this question." else "मुझे इस सवाल का जवाब नहीं मिला।"
                     conversationHistory.add(com.saralgati.app.data.model.ChatMessage("user", question))
@@ -791,7 +822,15 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         conversationHistory.removeAt(0)
                         conversationHistory.removeAt(0)
                     }
-                    broadcastExplanation(explanation)
+                    if (safety != null && safety.isDangerous) {
+                        val safeBounds = safety.actionDecision.safeActionIndex?.let { elementBounds.getOrNull(it) }
+                        val alertTitle = if (isEn) safety.userAlert.titleEn ?: "Warning: Potential Scam" else safety.userAlert.title
+                        val alertMsg = if (isEn) safety.userAlert.messageEn else safety.userAlert.messageHi
+                        val alertAdvice = if (isEn) safety.actionDecision.safeAdvice else (safety.actionDecision.safeAdviceHi ?: safety.actionDecision.safeAdvice)
+                        warnElderAboutFraud(alertTitle, alertMsg, alertAdvice, safeBounds)
+                    } else {
+                        broadcastExplanation(explanation)
+                    }
                     val highlightIndex = data?.highlightIndex
                     if (highlightIndex != null && highlightIndex in elementBounds.indices) {
                         activeInteractionId = data?.interactionId
@@ -803,7 +842,16 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                         activeElementBounds = elementBounds.toList()
                         activeFlowGoal = if (data?.flow != null) question else null
 
-                        // Keep screen rock-solid stable: do not force scroll down on elder's live screen
+                        if (belowFoldFlags.getOrNull(highlightIndex) == true) {
+                            findScrollableNode(rootNode, needBackward = false)?.let { sNode ->
+                                try {
+                                    sNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                                } finally {
+                                    if (sNode !== rootNode) sNode.recycle()
+                                }
+                            }
+                            kotlinx.coroutines.delay(200)
+                        }
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
                         activeInteractionId = null

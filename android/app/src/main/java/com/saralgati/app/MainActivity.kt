@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
         localPrefs = LocalPrefs(this)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
+        NetworkModule.baseUrlProvider = { localPrefs.getApiUrl() }
 
         // COARSE and FINE are requested together: from Android 12 neither one
         // alone gives a usable fix for the caregiver's location view.

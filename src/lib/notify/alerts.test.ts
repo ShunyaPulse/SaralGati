@@ -7,6 +7,8 @@ import {
   alertMapUrl,
   alertPoint,
   alertTitle,
+  FRAUD_INTERCEPT_KIND,
+  isFraudInterceptAlert,
   isGeofenceExitAlert,
   safeZoneExitEmail,
   shouldEmailSafeZoneExit,
@@ -33,6 +35,26 @@ test('a safe-zone exit is named after the zone, not the emergency enum', () => {
   assert.equal(alertDescription(GEOFENCE_ALERT), '620 m from the centre of the zone.');
   assert.deepEqual(alertPoint(GEOFENCE_ALERT), { latitude: 28.5355, longitude: 77.391 });
   assert.equal(alertMapUrl(GEOFENCE_ALERT), 'https://www.google.com/maps?q=28.535500,77.391000');
+});
+
+test('an intercepted scam alert is titled with the threat category and keeps its description', () => {
+  const fraudAlert = {
+    event_type: 'emergency',
+    screen_name: 'Danger: Never Share Your OTP',
+    metadata: {
+      kind: FRAUD_INTERCEPT_KIND,
+      threat_level: 'CRITICAL',
+      threat_category: 'OTP_THEFT',
+      severity: 'critical',
+      description: 'Danger: Never Share Your OTP (CRITICAL) intercepted on com.whatsapp',
+    },
+  };
+  assert.equal(isFraudInterceptAlert(fraudAlert), true);
+  assert.equal(alertTitle(fraudAlert), 'Scam blocked: OTP theft');
+  assert.equal(
+    alertDescription(fraudAlert),
+    'Danger: Never Share Your OTP (CRITICAL) intercepted on com.whatsapp',
+  );
 });
 
 test('older safe-zone alerts without fence_label fall back to screen_name', () => {
@@ -81,8 +103,6 @@ test('a battery alert explains itself from the recorded level', () => {
 test('only an explicit mute stops the safe-zone email', () => {
   assert.equal(shouldEmailSafeZoneExit(true), true, 'the default is on');
   assert.equal(shouldEmailSafeZoneExit(false), false, 'the caregiver muted it');
-  // An un-read or not-yet-migrated preference must fail safe: a missing column
-  // cannot be allowed to silence a wander alert.
   assert.equal(shouldEmailSafeZoneExit(undefined), true);
   assert.equal(shouldEmailSafeZoneExit(null), true);
 });
@@ -100,14 +120,11 @@ test('the safe-zone exit email names the elder, the zone and where it happened',
   assert.match(text, /Suresh Kumar is outside the safe zone "Ghar"/);
   assert.match(text, /about 742 m \(zone radius 500 m\)/);
   assert.match(text, /https:\/\/www\.google\.com\/maps\?q=28\.535500,77\.391000/);
-  // Rendered on the family's clock, not the server's.
   assert.match(text, /IST/);
   assert.ok(!text.includes('2026-09-25T14:05:00.000Z'), 'no raw ISO timestamp in the body');
 });
 
 test('a muted elder still raises the fence alert, only without the email', () => {
-  // The three decisions the heartbeat makes on a fence exit, in the order it
-  // makes them. Executable spec for "muting stops the mail, never the alert".
   const fence = { latitude: 28.6139, longitude: 77.209, radius_m: 1000, label: 'Ghar' };
   const previous = { latitude: 28.6145, longitude: 77.2095 };
   const point = { latitude: 28.5355, longitude: 77.391 };
@@ -125,13 +142,13 @@ test('a muted elder still raises the fence alert, only without the email', () =>
     'nothing is even composed for a muted elder'
   );
 
-  // Un-muted (or a preference the server could not read) keeps mailing.
   assert.equal(shouldEmailSafeZoneExit(true), true);
 });
 
 test('malformed metadata never throws', () => {
   const junk = { event_type: 'emergency', metadata: 'not an object' as any };
   assert.equal(isGeofenceExitAlert(junk), false);
+  assert.equal(isFraudInterceptAlert(junk), false);
   assert.equal(alertTitle(junk), 'Emergency');
   assert.equal(alertDescription(junk), null);
 });

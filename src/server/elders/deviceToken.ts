@@ -1,7 +1,7 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { getAuthSession } from '@/lib/auth/auth';
 import { queryOne } from '@/lib/data/db';
-import { cacheDelete, setDeviceSession } from '@/lib/data/redis';
+import { cacheDelete, invalidatePattern, setDeviceSession } from '@/lib/data/redis';
 import { randomBytes } from 'crypto';
 
 /**
@@ -54,13 +54,14 @@ export async function issueDeviceToken(request: Request): Promise<ServiceResult>
       throw new Error('Failed to save device token');
     }
 
-    // Cache in Redis device session for 30 days
+    // Cache in Redis device session for 30 days & invalidate caregiver elders list cache
     try {
       const staleToken = previous?.device_token;
       if (staleToken && staleToken !== plainToken) {
         await cacheDelete(`device_session:${staleToken}`);
       }
       await setDeviceSession(plainToken, { elderId: elder.id, caregiverId: userId }, 30 * 86400);
+      await invalidatePattern(`elders:${userId}*`);
     } catch (redisErr) {
       console.error('Failed to cache device session in Redis:', redisErr);
     }

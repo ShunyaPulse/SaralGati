@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type { GuidanceLang } from "./guidanceLanguage";
+import { elementLabel } from "./uiElement";
 
 /**
  * The Redis key for one screen's answer.
@@ -28,14 +29,13 @@ export function normalizeScreenQuestion(question: string): string {
 }
 
 /**
- * List index, folding marker and role tag are control data, never spoken. The
- * index is stripped first: the companion's own format is `3:[BUTTON] Calls`, so
- * a leading `3:` would otherwise stop every other anchor from matching.
+ * List index, folding marker and role tag are control data, never spoken.
+ * Delegates prefix and role-tag stripping to `elementLabel` so all element
+ * formats (`[BUTTON] X`, `3:[BUTTON] X`, `[3] [BELOW-FOLD] [BUTTON] X`)
+ * produce the clean spoken label.
  */
-function cleanElementLabel(elementLabel: string): string {
-  return elementLabel
-    .replace(/^\d+:\s*/, "")
-    .replace(/^\[BELOW-FOLD\]\s*/i, "")
+function cleanElementLabel(rawElement: string): string {
+  return elementLabel(rawElement)
     .replace(/^\[[^\]]*\]\s*/g, "")
     .replace(/\s+/g, " ")
     .trim()

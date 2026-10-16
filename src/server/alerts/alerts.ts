@@ -28,8 +28,9 @@ export async function listAlerts(request: Request): Promise<ServiceResult<ApiRes
     const offset = (page - 1) * limit;
     const userId = session.user.id;
 
-    // Build cache key based on params
-    const cacheKey = `alerts:${userId}:${elderId || 'all'}:${status || 'active'}:${eventTypes.join('|')}:${fromDate || ''}:${toDate || ''}:${page}:${limit}`;
+    // Build cache key based on params (omitted status returns all alerts, so key it as 'all')
+    const normalizedStatus = status === 'active' || status === 'resolved' ? status : 'all';
+    const cacheKey = `alerts:${userId}:${elderId || 'all'}:${normalizedStatus}:${eventTypes.join('|')}:${fromDate || ''}:${toDate || ''}:${page}:${limit}`;
 
     const cached = await cacheGet<AssistanceLog[]>(cacheKey);
     if (cached) {

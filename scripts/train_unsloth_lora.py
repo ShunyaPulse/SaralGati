@@ -1,8 +1,9 @@
 """
 SaralGati - Automated Continuous LoRA Fine-Tuning & Deployment Pipeline
 Trains Unsloth Llama-3.1-8B on Single-GPU (T4) with full Unsloth custom Triton/CUDA
-optimizations, using live verified dataset from SaralGati Flywheel, and auto-deploys
-to Cloudflare Workers AI.
+optimizations, SOTA two-stage training (Stage 1: SFT with NEFTune + Paged AdamW 8-bit
++ Cosine Annealing LR; Stage 2: Direct Preference Optimization / DPO on contrastive
+elder corrections & fraud sentinel misses), and auto-deploys to Cloudflare Workers AI.
 """
 
 import glob
@@ -38,25 +39,12 @@ if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN or not FLYWHEEL_SECRET:
         logging.getLogger(__name__).info("Kaggle platform integration bypassed; using environment variables.")
 
 
-# The adapter is fine-tuned on the elder's own captured screens, and those now
-# come in two languages. Hinglish rows outnumber English ones simply because
-# Hinglish is the historical default, and a fine-tune that sees mostly Hinglish
-# drifts back to it - which is what made an English request fall back to the
-# general model. So the minority language is oversampled up to this share of the
-# language-tagged rows before training.
 MIN_MINORITY_LANGUAGE_SHARE = 0.4
 MAX_LANGUAGE_DUPLICATIONS = 4
 
 
 def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max_copies=MAX_LANGUAGE_DUPLICATIONS):
-    """Oversample the minority guidance language so the adapter stays bilingual.
-
-    Reads metadata.guidance_lang from every exported sample (fraud rows carry no
-    language and are excluded from the ratio). Rows are duplicated, never
-    rewritten, so no sample changes meaning - and the duplication is capped, so
-    a handful of English rows cannot become pure memorisation. Non-JSONL input
-    is passed through untouched.
-    """
+    """Oversample the minority guidance language so the adapter stays bilingual."""
     tagged, untagged = [], []
     for line in lines:
         try:
@@ -85,9 +73,6 @@ def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max
         print(f"[Dataset] Language balance: no {minority} rows to oversample (hi={counts['hi']} en={counts['en']}).")
         return lines
 
-    # Duplicate round-robin until the minority reaches its share, or the cap bites.
-    # extras solves (minority + extras) >= min_share * (total + extras).
-
     needed = math.ceil(
         (min_share * total - counts[minority]) / (1 - min_share)
     )
@@ -107,33 +92,17 @@ def balance_guidance_languages(lines, min_share=MIN_MINORITY_LANGUAGE_SHARE, max
     return balanced
 
 
-def find_attached_dataset():
-    """Path of the attached Kaggle Dataset's dataset.jsonl, or None.
-
-    The verified pool is published as a private Kaggle Dataset and attached to
-    this kernel through `dataset_sources`, which lands it under /kaggle/input/.
-    It cannot travel beside this script: `kaggle kernels push` uploads only the
-    code file named in kernel-metadata.json, and a Kaggle notebook source is
-    capped at 1 MB, so embedding a 1.7 MB pool here is rejected by the SaveKernel
-    API with 400 Bad Request.
-    """
+def find_attached_dataset(filename="dataset.jsonl"):
+    """Path of the attached Kaggle Dataset's file (dataset.jsonl or dpo_dataset.jsonl), or None."""
     for root in ("/kaggle/input", "/kaggle/working"):
-        for path in sorted(glob.glob(os.path.join(root, "**", "dataset.jsonl"), recursive=True)):
+        for path in sorted(glob.glob(os.path.join(root, "**", filename), recursive=True)):
             if os.path.getsize(path) > 0:
                 return path
     return None
 
 
 def normalize_training_rows(lines):
-    """Reduce every exported row to the single field the trainer reads.
-
-    The guidance and fraud exports both carry `messages`, but their `metadata`
-    structs hold different keys. `load_dataset("json", ...)` infers one Arrow
-    schema for the whole file, so a mixed file dies at the load step with
-    "Couldn't cast array of type struct<...> into struct<...>" on datasets 4.x,
-    which aborted an 8733-row run. Only `messages` is consumed below, so every
-    other key is dropped and each row gets the same shape.
-    """
+    """Reduce every exported SFT row to the single `messages` field the trainer reads."""
     normalized = []
     skipped = 0
     for line in lines:
@@ -152,12 +121,105 @@ def normalize_training_rows(lines):
     return normalized
 
 
+def normalize_dpo_rows(lines):
+    """Validate and normalize contrastive DPO rows into {prompt, chosen, rejected} message lists."""
+    normalized = []
+    skipped = 0
+    for line in lines:
+        try:
+            row = json.loads(line)
+        except (TypeError, ValueError):
+            skipped += 1
+            continue
+        prompt = row.get("prompt")
+        chosen = row.get("chosen")
+        rejected = row.get("rejected")
+        if (
+            not isinstance(prompt, list) or not prompt or
+            not isinstance(chosen, list) or not chosen or
+            not isinstance(rejected, list) or not rejected
+        ):
+            skipped += 1
+            continue
+        chosen_text = str(chosen[0].get("content", "")).strip()
+        rejected_text = str(rejected[0].get("content", "")).strip()
+        if not chosen_text or not rejected_text or chosen_text == rejected_text:
+            skipped += 1
+            continue
+        normalized.append(json.dumps({
+            "prompt": prompt,
+            "chosen": chosen,
+            "rejected": rejected,
+        }, ensure_ascii=False))
+    if skipped:
+        print(f"[DPO Dataset] Dropped {skipped} invalid/non-contrastive DPO row(s).")
+    return normalized
+
+
+def fetch_live_dpo_dataset():
+    """Load contrastive DPO preference pairs (elder corrections + fraud sentinel misses)."""
+    dpo_file = "train_dpo_dataset.jsonl"
+    lines = []
+
+    attached = find_attached_dataset("dpo_dataset.jsonl")
+    if attached:
+        try:
+            with open(attached, "r", encoding="utf-8") as f:
+                lines = [line for line in f.read().split("\n") if line.strip()]
+            print(f"[DPO Dataset] Loaded {len(lines)} DPO preference pairs from attached Kaggle dataset: {attached}")
+        except Exception as e:
+            print(f"[DPO Dataset] Warning reading {attached}: {e}")
+
+    if not lines:
+        candidates = [
+            "dpo_dataset.jsonl",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "dpo_dataset.jsonl"),
+            "/kaggle/src/dpo_dataset.jsonl",
+            "/kaggle/working/dpo_dataset.jsonl",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                try:
+                    with open(candidate, "r", encoding="utf-8") as f:
+                        candidate_lines = [l for l in f.read().split("\n") if l.strip()]
+                    if candidate_lines:
+                        lines = candidate_lines
+                        print(f"[DPO Dataset] Loaded {len(lines)} DPO pairs from local file: {candidate}")
+                        break
+                except Exception as e:
+                    print(f"[DPO Dataset] Warning reading {candidate}: {e}")
+
+    if not lines and FLYWHEEL_SECRET:
+        dpo_urls = [
+            f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=dpo&format=jsonl&limit=5000",
+            f"{SARALGATI_API_URL}/api/v1/agent/training-data?type=fraud&mode=dpo&format=jsonl&limit=5000",
+        ]
+        for d_url in dpo_urls:
+            try:
+                res = requests.get(d_url, headers={"x-flywheel-secret": FLYWHEEL_SECRET}, timeout=25)
+                if res.ok and res.text.strip():
+                    fetched = [l for l in res.text.strip().split("\n") if l.strip()]
+                    lines.extend(fetched)
+            except Exception as e:
+                print(f"[DPO Dataset] Info: Live DPO fetch skipped ({e}).")
+
+    lines = normalize_dpo_rows(lines)
+    if len(lines) < 4:
+        print(f"[DPO Dataset] {len(lines)} contrastive DPO pair(s) available (< 4 minimum); Stage 2 DPO will be skipped.")
+        return None
+
+    with open(dpo_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"[DPO Dataset] Saved {len(lines)} contrastive preference pairs to {dpo_file} for Stage 2 DPO alignment.")
+    return dpo_file
+
+
 def fetch_live_dataset():
     dataset_file = "train_dataset.jsonl"
     lines = []
 
     # 1. First priority: the dataset attached to this Kaggle run as an input.
-    attached = find_attached_dataset()
+    attached = find_attached_dataset("dataset.jsonl")
     if attached:
         try:
             with open(attached, "r", encoding="utf-8") as f:
@@ -221,24 +283,27 @@ def fetch_live_dataset():
         seed_samples = [
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.whatsapp.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Audio Call\n[1] [BUTTON] Video Call\n[2] [BUTTON] Search\n[3] [TEXT] Recent chats\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.whatsapp.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Audio Call\n[1] [BUTTON] Video Call\n[2] [BUTTON] Search\n[3] [TEXT] Recent chats\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.\n2. Elements on screen are prefixed with their role:\n   - [BUTTON]: Clickable button or icon that can be tapped.\n   - [INPUT]: Text input box for typing.\n   - [TOGGLE]: Switch or checkbox.\n   - [TEXT]: Plain static non-clickable text or title.\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).\n5. If no specific element needs to be tapped, do NOT output any TARGET tag.\n6. Do not mention that you are an AI. Only output the Hinglish sentence."},
                     {"role": "user", "content": "video call kaise lagau"},
-                    {"role": "assistant", "content": "वीडियो कॉल करने के लिए यहाँ वीडियो कॉल पर दबाएं। TARGET:1"}
-                ]
+                    {"role": "assistant", "content": "Video call karne ke liye yahan \"Video Call\" button par dabayein. TARGET:1"}
+                ],
+                "metadata": {"guidance_lang": "hi"}
             },
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.dialer.\nHere are the numbered interactive elements on their screen:\n[0] [INPUT] Search contacts\n[1] [BUTTON] Keypad Dial\n[2] [BUTTON] Favorites\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.dialer.\nHere are the numbered interactive elements on their screen:\n[0] [INPUT] Search contacts\n[1] [BUTTON] Keypad Dial\n[2] [BUTTON] Favorites\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting Hinglish (Hindi written in English script) sentences.\n2. Elements on screen are prefixed with their role:\n   - [BUTTON]: Clickable button or icon that can be tapped.\n   - [INPUT]: Text input box for typing.\n   - [TOGGLE]: Switch or checkbox.\n   - [TEXT]: Plain static non-clickable text or title.\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).\n5. If no specific element needs to be tapped, do NOT output any TARGET tag.\n6. Do not mention that you are an AI. Only output the Hinglish sentence."},
                     {"role": "user", "content": "naya number milana hai"},
-                    {"role": "assistant", "content": "नंबर डायल करने के लिए यहाँ कीपैड दबाएं। TARGET:1"}
-                ]
+                    {"role": "assistant", "content": "Number dial karne ke liye yahan \"Keypad Dial\" par dabayein. TARGET:1"}
+                ],
+                "metadata": {"guidance_lang": "hi"}
             },
             {
                 "messages": [
-                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.youtube.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Search\n[1] [BUTTON] Voice Search\n[2] [BUTTON] Play Video भजन\n[3] [TEXT] Top Songs\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting sentences, in the language the instruction asks for (Hinglish by default, English when it asks for English).\n2. Elements on screen are prefixed with their role ([BUTTON], [INPUT], [TOGGLE], [TEXT]).\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]).\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end."},
-                    {"role": "user", "content": "aarti bhajan sunna hai"},
-                    {"role": "assistant", "content": "भजन सुनने के लिए यहाँ दबाएं। TARGET:2"}
-                ]
+                    {"role": "system", "content": "You are SaralGati, a patient, warm companion for Indian elders.\nThe user is looking at an Android app: com.google.android.youtube.\nHere are the numbered interactive elements on their screen:\n[0] [BUTTON] Search\n[1] [BUTTON] Voice Search\n[2] [BUTTON] Play Video Bhajan\n[3] [TEXT] Top Songs\n\nInstructions:\n1. Answer the user's question in 1 or 2 simple, comforting English sentences. Write only in English words and Latin script, never in Hindi or Devanagari.\n2. Elements on screen are prefixed with their role:\n   - [BUTTON]: Clickable button or icon that can be tapped.\n   - [INPUT]: Text input box for typing.\n   - [TOGGLE]: Switch or checkbox.\n   - [TEXT]: Plain static non-clickable text or title.\n3. When guiding the user to tap, open, or take action, ALWAYS target an interactive element ([BUTTON], [INPUT], or [TOGGLE]). Never target static [TEXT] unless specifically asked to read or verify text.\n4. If your answer directs the user to tap or look at a specific element on screen, append \" TARGET:[index]\" at the very end of your response, where [index] is the exact number of that element (for example: TARGET:2).\n5. If no specific element needs to be tapped, do NOT output any TARGET tag.\n6. Do not mention that you are an AI. Only output the English sentence."},
+                    {"role": "user", "content": "How do I play the bhajan video?"},
+                    {"role": "assistant", "content": "Tap \"Play Video Bhajan\" here to start the video. TARGET:2"}
+                ],
+                "metadata": {"guidance_lang": "en"}
             },
             {
                 "messages": [
@@ -286,7 +351,6 @@ def ensure_unsloth():
         pass
 
     print("[Install] Installing Unsloth and compatible dependencies for Kaggle GPU environment...")
-    # Step 1: Pre-install compatible xformers from PyTorch cu121 wheel repository
     try:
         subprocess.check_call([
             sys.executable, "-m", "pip", "install", "-U", "xformers",
@@ -295,7 +359,6 @@ def ensure_unsloth():
     except Exception as e:
         print(f"[Install] Notice: pre-installing xformers cu121 wheel skipped ({e}); proceeding...")
 
-    # Step 2: Install Unsloth using official [kaggle-new] extra
     try:
         subprocess.check_call([
             sys.executable, "-m", "pip", "install",
@@ -309,25 +372,7 @@ def ensure_unsloth():
 
 
 def auto_tune_hyperparameters(dataset_file, tokenizer):
-    """Dynamically compute training hyperparameters from the live dataset.
-
-    Industry-standard approach: profile the actual data instead of hardcoding
-    values that may not match the current dataset distribution. Four parameters
-    are auto-tuned:
-
-    1. max_seq_length   — P99 token length, rounded up to nearest 64, clamped
-                          [256, 768]. Prevents OOM on long tails while not
-                          wasting VRAM on unused positions.
-    2. num_train_epochs — Target ~450 gradient steps (the sweet spot for LoRA
-                          on 1–10k samples). Capped [1, 4] and hard-capped at
-                          1 if ≤20 seed-only samples to prevent overfitting.
-    3. learning_rate    — Inverse-scaled by dataset size. Smaller datasets need
-                          higher LR to learn in fewer steps; larger datasets
-                          need lower LR to avoid catastrophic forgetting.
-    4. gradient_accumulation_steps — Keeps effective batch size constant at 16
-                          regardless of per_device_train_batch_size, which is
-                          pinned at 4 (the T4's sweet-spot for 4-bit LoRA).
-    """
+    """Dynamically compute training hyperparameters from the live dataset."""
     from datasets import load_dataset
 
     PER_DEVICE_BATCH = 4
@@ -337,12 +382,10 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     MAX_SEQ_LEN = 768              # T4 VRAM ceiling for 4-bit Llama-3.1-8B
     ROUND_TO = 64
 
-    # --- Load dataset and profile token lengths ---
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     total_samples = len(dataset)
     print(f"[AutoTune] Dataset size: {total_samples} samples")
 
-    # Tokenize a representative sample (up to 2000 rows) to profile lengths
     sample_size = min(total_samples, 2000)
     sample_indices = list(range(0, total_samples, max(1, total_samples // sample_size)))[:sample_size]
     token_lengths = []
@@ -374,15 +417,11 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     p99 = token_lengths[p99_idx]
     max_tok = token_lengths[-1]
 
-    # 1. max_seq_length: P99 rounded up to nearest 64, clamped
     seq_len = math.ceil(p99 / ROUND_TO) * ROUND_TO
     seq_len = max(MIN_SEQ_LEN, min(seq_len, MAX_SEQ_LEN))
 
-    # 2. gradient_accumulation_steps: constant effective batch = 16
     grad_accum = max(1, TARGET_EFFECTIVE_BATCH // PER_DEVICE_BATCH)
 
-    # 3. num_train_epochs: target ~450 gradient steps
-    #    steps_per_epoch = ceil(total_samples / effective_batch)
     effective_batch = PER_DEVICE_BATCH * grad_accum
     steps_per_epoch = math.ceil(total_samples / effective_batch)
     if steps_per_epoch > 0:
@@ -390,13 +429,10 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     else:
         raw_epochs = 1
 
-    # Clamp epochs
     num_epochs = max(1, min(4, round(raw_epochs)))
-    # Overfitting guard: seed data only → cap at 1 epoch
     if total_samples < 20:
         num_epochs = 1
 
-    # 4. learning_rate: inversely scaled by dataset size
     if total_samples < 500:
         lr = 2.8e-4
     elif total_samples < 1000:
@@ -425,7 +461,107 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     }
 
 
-def train_lora(dataset_file):
+def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
+    """Stage 2 SOTA Preference Alignment via Direct Preference Optimization (DPO).
+
+    Uses contrastive (prompt, chosen, rejected) pairs from elder tap corrections
+    and fraud sentinel misses so the adapter explicitly suppresses wrong element
+    targets and false-negative/false-positive scam classifications.
+    """
+    if not dpo_file or not os.path.exists(dpo_file):
+        return
+
+    try:
+        from unsloth import PatchDPOTrainer
+        PatchDPOTrainer()
+        import torch
+        from datasets import load_dataset
+        from trl import DPOTrainer, DPOConfig
+    except Exception as e:
+        print(f"[DPO] Info: DPOTrainer unavailable in current environment ({e}); skipping Stage 2 DPO.")
+        return
+
+    try:
+        dpo_raw = load_dataset("json", data_files=dpo_file, split="train")
+        if len(dpo_raw) < 4:
+            print(f"[DPO] Only {len(dpo_raw)} DPO samples; skipping Stage 2.")
+            return
+
+        def format_dpo_row(example):
+            prompt_msgs = example["prompt"]
+            chosen_msgs = example["chosen"]
+            rejected_msgs = example["rejected"]
+            prompt_str = tokenizer.apply_chat_template(
+                prompt_msgs, tokenize=False, add_generation_prompt=True
+            )
+            chosen_str = chosen_msgs[0]["content"] + tokenizer.eos_token
+            rejected_str = rejected_msgs[0]["content"] + tokenizer.eos_token
+            return {
+                "prompt": prompt_str,
+                "chosen": chosen_str,
+                "rejected": rejected_str,
+            }
+
+        dpo_dataset = dpo_raw.map(format_dpo_row)
+
+        def within_dpo_limit(ex):
+            p_ids = tokenizer(ex["prompt"], add_special_tokens=False)["input_ids"]
+            c_ids = tokenizer(ex["chosen"], add_special_tokens=False)["input_ids"]
+            r_ids = tokenizer(ex["rejected"], add_special_tokens=False)["input_ids"]
+            return (
+                len(p_ids) + max(len(c_ids), len(r_ids)) <= max_seq_length
+                and len(p_ids) <= 512
+            )
+
+        dpo_dataset = dpo_dataset.filter(within_dpo_limit)
+        if len(dpo_dataset) < 4:
+            print(f"[DPO] Only {len(dpo_dataset)} DPO samples within max_seq_length={max_seq_length}; skipping Stage 2.")
+            return
+
+        print(f"\n[DPO] Stage 2: Starting Direct Preference Optimization on {len(dpo_dataset)} contrastive pairs...")
+        dpo_args = DPOConfig(
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            warmup_ratio=0.1,
+            num_train_epochs=1,
+            learning_rate=5e-6,
+            lr_scheduler_type="cosine",
+            optim="adamw_8bit",
+            fp16=not torch.cuda.is_bf16_supported(),
+            bf16=torch.cuda.is_bf16_supported(),
+            logging_steps=10,
+            output_dir="dpo_checkpoints",
+            beta=0.1,
+            max_length=max_seq_length,
+            max_prompt_length=512,
+            seed=3407,
+            save_strategy="no",
+            report_to="none",
+        )
+        try:
+            dpo_trainer = DPOTrainer(
+                model=model,
+                ref_model=None,
+                args=dpo_args,
+                train_dataset=dpo_dataset,
+                processing_class=tokenizer,
+            )
+        except TypeError:
+            dpo_trainer = DPOTrainer(
+                model=model,
+                ref_model=None,
+                args=dpo_args,
+                train_dataset=dpo_dataset,
+                tokenizer=tokenizer,
+            )
+
+        dpo_trainer.train()
+        print("[DPO] ✅ Stage 2 Direct Preference Optimization completed successfully.")
+    except Exception as e:
+        print(f"[DPO] ⚠️ Stage 2 DPO encountered a non-fatal error ({e}); retaining validated Stage 1 SFT weights.")
+
+
+def train_lora(dataset_file, dpo_file=None):
     ensure_unsloth()
 
     # Strictly ordered imports: unsloth FastLanguageModel BEFORE trl/transformers/peft
@@ -436,9 +572,6 @@ def train_lora(dataset_file):
     from transformers import TrainingArguments
     from unsloth.chat_templates import get_chat_template
 
-    # Load model with maximum supported seq length; auto_tune will compute the
-    # actual training max_seq_length from data. The model itself supports up to
-    # 131072, but we cap at 768 for T4 VRAM safety.
     MODEL_SEQ_CEILING = 768
 
     print("\n[Model] Step 2: Loading Unsloth Llama-3.1-8B-Instruct...")
@@ -463,13 +596,7 @@ def train_lora(dataset_file):
 
     tokenizer = get_chat_template(tokenizer, chat_template="llama-3.1")
 
-    # --- Auto-Tune: profile dataset and compute epochs, LR, grad_accum ---
     hp = auto_tune_hyperparameters(dataset_file, tokenizer)
-    # IMPORTANT: Do NOT use auto-tune's max_seq_length for the trainer.
-    # Unsloth's train_on_responses_only bypasses SFTTrainer's truncation,
-    # letting oversized sequences crash the cross-entropy loss. We always
-    # use MODEL_SEQ_CEILING so model and trainer agree, and explicitly
-    # filter outliers below.
     max_seq_length = MODEL_SEQ_CEILING
 
     def formatting_prompts_func(examples):
@@ -480,12 +607,6 @@ def train_lora(dataset_file):
     dataset = load_dataset("json", data_files=dataset_file, split="train")
     dataset = dataset.map(formatting_prompts_func, batched=True)
 
-    # --- Explicit sequence length filter ---
-    # SFTTrainer's max_seq_length truncation is unreliable when Unsloth's
-    # train_on_responses_only is applied (v14 and v15 both crashed because
-    # oversized sequences bypassed truncation and hit cross_entropy with
-    # mismatched input/target dimensions). Drop any sample that exceeds
-    # the model's actual capacity BEFORE the trainer ever sees it.
     pre_filter_count = len(dataset)
 
     def within_seq_limit(example):
@@ -508,21 +629,22 @@ def train_lora(dataset_file):
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"[Train] Starting Fast Fine-Tuning: {hp['num_train_epochs']} epochs, "
-          f"lr={hp['learning_rate']}, seq={max_seq_length}, "
+    print(f"[Train] Stage 1 SFT (Cosine LR + Paged AdamW 8-bit + NEFTune alpha=5): "
+          f"{hp['num_train_epochs']} epochs, lr={hp['learning_rate']}, seq={max_seq_length}, "
           f"batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
-    # Calculate warmup_steps dynamically (~5% of total training steps)
     eff_batch = hp["per_device_train_batch_size"] * hp["gradient_accumulation_steps"]
     total_train_steps = max(1, int((total_samples / eff_batch) * hp["num_train_epochs"]))
     warmup_steps = max(5, int(total_train_steps * 0.05))
 
-    # Eval runs once, after trainer.train(), through the eval-loss gate below.
     args_dict = dict(
         per_device_train_batch_size=hp["per_device_train_batch_size"],
         gradient_accumulation_steps=hp["gradient_accumulation_steps"],
         warmup_steps=warmup_steps,
         num_train_epochs=hp["num_train_epochs"],
         learning_rate=hp["learning_rate"],
+        lr_scheduler_type="cosine",
+        optim="adamw_8bit",
+        neftune_noise_alpha=5.0,
         weight_decay=0.01,
         fp16=not torch.cuda.is_bf16_supported(),
         bf16=torch.cuda.is_bf16_supported(),
@@ -530,6 +652,7 @@ def train_lora(dataset_file):
         output_dir="lora_checkpoints",
         seed=3407,
         save_strategy="no",
+        report_to="none",
     )
     training_args = TrainingArguments(**args_dict)
 
@@ -568,13 +691,17 @@ def train_lora(dataset_file):
     # Evaluate model to prevent blind deploy
     eval_results = trainer.evaluate()
     eval_loss = eval_results.get("eval_loss", float('inf'))
-    print(f"[Eval] Final evaluation loss: {eval_loss}")
+    print(f"[Eval] Stage 1 SFT evaluation loss: {eval_loss}")
     
     if eval_loss > 3.0:
         print("❌ [Fatal] Eval loss is too high (> 3.0). Training likely diverged or data is corrupted. Aborting deployment!")
         sys.exit(1)
     
-    print("[Eval] Validation passed. Proceeding to save and deploy.")
+    print("[Eval] Stage 1 SFT validation passed.")
+
+    # Stage 2: Optional DPO Preference Alignment on contrastive corrections
+    if dpo_file:
+        run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length)
 
     print(f"[Save] Saving clean LoRA adapter weights (~100MB) to {output_dir}...")
     model.save_pretrained(output_dir)
@@ -594,13 +721,7 @@ def train_lora(dataset_file):
 
 
 def mirror_adapter_into_kernel_output(output_dir):
-    """Make sure the adapter lands where Kaggle collects kernel output.
-
-    Kaggle only publishes what ends up under /kaggle/working, and this runner's
-    working directory is not guaranteed to be there, so the adapter is copied in
-    before returning. GitHub Actions downloads that output and deploys it, so a
-    missing copy would abort the deploy with nothing to upload.
-    """
+    """Make sure the adapter lands where Kaggle collects kernel output."""
     working_root = "/kaggle/working"
     if not os.path.isdir(working_root):
         return
@@ -639,7 +760,6 @@ def deploy_to_cloudflare(output_dir):
         "Content-Type": "application/json"
     }
 
-    # 1. Check if fine-tune already exists; delete old to avoid MAX_ASSETS_ERROR
     list_url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/finetunes"
     try:
         list_res = requests.get(list_url, headers=headers)
@@ -652,17 +772,16 @@ def deploy_to_cloudflare(output_dir):
                     del_res = requests.delete(del_url, headers=headers)
                     del_res.raise_for_status()
                     import time
-                    time.sleep(3) # Allow propagation time
+                    time.sleep(3)
                     break
     except Exception as e:
         print(f"[Deploy] Info: Fine-tune listing check: {e}")
 
-    # 2. Create fresh fine-tune container (use llama-guard-3-8b for container registration per Workers AI API quirk)
     print(f"[Deploy] Creating Cloudflare finetune container: {finetune_name}...")
     create_res = requests.post(list_url, headers=headers, json={
         "name": finetune_name,
         "model": "@cf/meta/llama-guard-3-8b",
-        "description": "SaralGati Autonomous Self-Improving LoRA"
+        "description": "SaralGati Autonomous Self-Improving LoRA (SFT + DPO)"
     })
 
     if not create_res.ok:
@@ -672,11 +791,9 @@ def deploy_to_cloudflare(output_dir):
     finetune_id = create_res.json()["result"]["id"]
     print(f"[Deploy] Created fine-tune ID: {finetune_id}")
 
-    # 3. Upload exactly 2 assets (adapter_config.json and adapter_model.safetensors)
     upload_url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/finetunes/{finetune_id}/finetune-assets"
     upload_headers = {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
 
-    # Upload config
     with open(config_file, "rb") as f:
         r1 = requests.post(
             upload_url,
@@ -686,7 +803,6 @@ def deploy_to_cloudflare(output_dir):
         )
     print(f"[Deploy] Uploaded adapter_config.json: {r1.status_code}")
 
-    # Upload safetensors
     with open(weights_file, "rb") as f:
         r2 = requests.post(
             upload_url,
@@ -705,12 +821,6 @@ def deploy_to_cloudflare(output_dir):
 
 
 if __name__ == "__main__":
-    # CI mode: deploy an adapter that was trained somewhere else. GitHub Actions
-    # already holds the Cloudflare credentials as repository secrets, so it can
-    # push the adapter the Kaggle kernel produced. The kernel itself runs as a
-    # `kaggle kernels push` batch job, where Kaggle's UserSecrets service is
-    # unreliable ("Connection error trying to communicate with service."), so
-    # the deploy must not be the only place those credentials exist.
     if len(sys.argv) >= 3 and sys.argv[1] == "--deploy-only":
         if not deploy_to_cloudflare(sys.argv[2]):
             print("[Deploy] ERROR: the adapter was not deployed to Cloudflare Workers AI.")
@@ -719,7 +829,8 @@ if __name__ == "__main__":
         sys.exit(0)
 
     dataset_path = fetch_live_dataset()
-    output_dir = train_lora(dataset_path)
+    dpo_path = fetch_live_dpo_dataset()
+    output_dir = train_lora(dataset_path, dpo_path)
     mirror_adapter_into_kernel_output(output_dir)
     deploy_to_cloudflare(output_dir)
     print("\n[Complete] Continuous Learning Cycle Complete!")

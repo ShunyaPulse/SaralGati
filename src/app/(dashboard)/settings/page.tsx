@@ -33,9 +33,11 @@ export default function SettingsPage() {
       });
       
       const data = await res.json();
-      if (data.success && data.token) {
-        setDeviceToken(data.token);
+      const generatedToken = data?.data?.token ?? data?.token;
+      if (data.success && generatedToken) {
+        setDeviceToken(generatedToken);
         setCopied(false);
+        await fetchElders();
         toast.success('Device token generated successfully');
       } else {
         toast.error(data.error || 'Failed to generate token');
@@ -98,7 +100,7 @@ export default function SettingsPage() {
           </div>
           <div className="p-6">
             <p className="text-sm text-slate-600 mb-6">
-              Generate a secure token to link the SaralGati Android Companion App to an elder's profile.
+              Generate a secure token to link the SaralGati Android Companion App to an elder&apos;s profile.
               Tokens are only shown once. Keep them secure.
             </p>
 
@@ -163,7 +165,7 @@ export default function SettingsPage() {
                   </div>
                   <p className="mt-2 text-xs text-amber-600 flex items-center">
                     <ShieldAlert className="h-3 w-3 mr-1" />
-                    Please copy this token now. You won't be able to see it again.
+                    Please copy this token now. You won&apos;t be able to see it again.
                   </p>
                 </div>
               )}

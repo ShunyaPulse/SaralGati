@@ -20,13 +20,16 @@ data class FlowState(
     @Json(name = "step_label") val stepLabel: String
 )
 
-/** What the agent answers with: the spoken explanation plus the element to spotlight. */
+/** What the agent answers with: the spoken explanation, spotlight index, and optional fraud safety verdict. */
 @JsonClass(generateAdapter = true)
 data class ScreenExplanationResponse(
     val explanation: String,
     @Json(name = "highlight_index") val highlightIndex: Int? = null,
     @Json(name = "interaction_id") val interactionId: String? = null,
-    val flow: FlowState? = null
+    val source: String? = null,
+    @Json(name = "model_used") val modelUsed: String? = null,
+    val flow: FlowState? = null,
+    val safety: FraudVerdict? = null
 )
 
 /** The elder's correction after a guidance answer, used by the learning flywheel. */
@@ -51,4 +54,14 @@ data class AskContextRequest(
 data class ChatMessage(
     val role: String,
     val content: String
+)
+
+/** Response payload of `GET /api/v1/agent/config` for syncing caregiver preferences to the companion. */
+@JsonClass(generateAdapter = true)
+data class AgentConfigData(
+    @Json(name = "preferred_lang") val preferredLang: String? = null,
+    @Json(name = "emergency_contact") val emergencyContact: String? = null,
+    @Json(name = "guidance_strings") val guidanceStrings: Map<String, String>? = null,
+    @Json(name = "habit_shortcuts") val habitShortcuts: List<HabitRule>? = null,
+    @Json(name = "updated_at") val updatedAt: String? = null
 )

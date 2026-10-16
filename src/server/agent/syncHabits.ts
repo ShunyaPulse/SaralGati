@@ -78,12 +78,12 @@ export async function syncHabits(request: Request): Promise<ServiceResult> {
       }
     });
 
-    // Update elder profile with battery and heartbeat
+    // Update elder profile with battery and heartbeat (preserve 0% battery with ?? null and COALESCE)
     await queryOne(`
       UPDATE elder_profiles 
-      SET battery_status = $1, last_heartbeat = NOW()
+      SET battery_status = COALESCE($1, battery_status), last_heartbeat = NOW()
       WHERE id = $2
-    `, [validatedData.battery_level || null, elderId]);
+    `, [validatedData.battery_level ?? null, elderId]);
 
     // Invalidate caches
     await cacheDelete(`agent-config:${elderId}`);

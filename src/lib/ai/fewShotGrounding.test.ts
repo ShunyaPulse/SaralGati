@@ -6,8 +6,8 @@ import { formatRelevantFewShots } from './fewShotGrounding';
  * The examples are what tell the model "on a screen like this, the elder means
  * that element". Picking the wrong ones is a silent accuracy loss: the model is
  * shown a WhatsApp answer while the elder is looking at IRCTC. The selector is
- * BM25 now, and these pins are the reason to believe it is better than the
- * word-count it replaced.
+ * Hybrid BM25+ with Hinglish phonetic normalization and character-trigram
+ * subword fallback, and these tests pin its accuracy.
  */
 
 /** The example headers of the selected blocks, in order. */
@@ -21,7 +21,7 @@ describe('few-shot retrieval', () => {
   test('a rare, distinctive word carries the match', () => {
     // Not one keyword of this question appears in the IRCTC example's *answer*,
     // and "check" is shared with a Paytm example - only "PNR"/"Enquiry" make it
-    // the right one, and BM25's inverse document frequency is what weighs them.
+    // the right one, and BM25+'s inverse document frequency is what weighs them.
     const [first] = selectedPackages('com.unknown.pkg', 'PNR status check karo');
     assert.equal(first, 'Example 1 (cris.org.in.prs.ima):');
   });
@@ -44,6 +44,14 @@ describe('few-shot retrieval', () => {
       formatRelevantFewShots('net.one97.paytm', 'khate mein kitne paise hain', 1, 'hi'),
       /Check Balance/,
     );
+  });
+
+  test('phonetic Hinglish spelling variations and subword typos still retrieve the right example', () => {
+    const [phonetic] = selectedPackages('com.unknown.pkg', 'khaata mein kitne paisa hain balence dekho');
+    assert.equal(phonetic, 'Example 1 (net.one97.paytm):');
+
+    const [typo] = selectedPackages('com.unknown.pkg', 'electrcity bijlee bill bharna hai');
+    assert.equal(typo, 'Example 1 (com.phonepe.app):');
   });
 
   test('selection is deterministic and respects the language', () => {

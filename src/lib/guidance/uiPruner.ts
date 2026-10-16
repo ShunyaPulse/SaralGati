@@ -11,6 +11,12 @@
 
 import { elementLabel, elementLabelLower, isActionableElement } from './uiElement';
 
+const LEADING_INDEX_PATTERN = /^(?:\[\d+\]:?|\d+:)\s*/;
+
+export function stripLeadingElementIndex(text: string): string {
+  return text.trim().replace(LEADING_INDEX_PATTERN, '').trim();
+}
+
 export function isNoiseUIElement(text: string): boolean {
   // The label, not the raw line: an index prefix or a role tag in front of a
   // timestamp used to stop these patterns from matching at all.
@@ -45,38 +51,38 @@ export function pruneUITree(
   const kept: string[] = [];
 
   uiElements.forEach((el, idx) => {
-    const trimmed = el.trim();
-    if (!trimmed) return;
+    const normalized = stripLeadingElementIndex(el);
+    if (!normalized) return;
 
-    const isActionable = isActionableElement(trimmed);
+    const isActionable = isActionableElement(normalized);
 
-    const lower = elementLabelLower(trimmed);
+    const lower = elementLabelLower(normalized);
 
     // 1. Actionable buttons, inputs, toggles: ALWAYS keep (never prune buttons like OK, Yes, No)
     if (isActionable) {
-      kept.push(`[${idx}] ${trimmed}`);
+      kept.push(`[${idx}] ${normalized}`);
       return;
     }
 
     // 2. Static text filtering. An element the client called tappable is never
     //    furniture, so a real "Video call" button survives the preview patterns.
-    if (!isActionable && isNoiseUIElement(trimmed)) return;
+    if (!isActionable && isNoiseUIElement(normalized)) return;
 
     // Retain if relevant to elder's query
     const matchesKeyword = questionKeywords.some((kw) => lower.includes(kw));
 
     // Retain top headers / title elements (usually first 3-4 text elements)
-    const isTopHeader = idx < 4 && trimmed.length < 60;
+    const isTopHeader = idx < 4 && normalized.length < 60;
 
     if (matchesKeyword || isTopHeader) {
-      kept.push(`[${idx}] ${trimmed}`);
+      kept.push(`[${idx}] ${normalized}`);
     }
   });
 
   // Fallback safeguard: if aggressive pruning removed too much, fallback to all elements
   const resultElements = kept.length > 0
     ? kept
-    : uiElements.map((el, idx) => `[${idx}] ${el}`);
+    : uiElements.map((el, idx) => `[${idx}] ${stripLeadingElementIndex(el)}`);
 
   return {
     formattedString: resultElements.join('\n'),

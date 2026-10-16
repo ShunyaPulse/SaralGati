@@ -14,25 +14,66 @@ import java.net.URL
 
 object ApkInstaller {
     private const val TAG = "ApkInstaller"
+    private const val MAX_REDIRECTS = 5
 
     suspend fun downloadAndInstall(context: Context, apkUrl: String) {
         withContext(Dispatchers.IO) {
+            var connection: HttpURLConnection? = null
             try {
-                Log.d(TAG, "Starting APK download from: \$apkUrl")
-                val url = URL(apkUrl)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connect()
+                Log.d(TAG, "Starting APK download from: $apkUrl")
+                var currentUrl = apkUrl
+                var redirects = 0
 
-                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    Log.e(TAG, "Failed to download APK, HTTP code: \${connection.responseCode}")
+                while (redirects <= MAX_REDIRECTS) {
+                    val url = URL(currentUrl)
+                    val conn = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 15_000
+                        readTimeout = 60_000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "SaralGati-Android-Updater")
+                    }
+                    conn.connect()
+                    val code = conn.responseCode
+                    if (code in listOf(
+                            HttpURLConnection.HTTP_MOVED_PERM,
+                            HttpURLConnection.HTTP_MOVED_TEMP,
+                            HttpURLConnection.HTTP_SEE_OTHER,
+                            307,
+                            308
+                        )
+                    ) {
+                        val location = conn.getHeaderField("Location")
+                        conn.disconnect()
+                        if (location.isNullOrBlank()) {
+                            Log.e(TAG, "Redirect response $code missing Location header")
+                            return@withContext
+                        }
+                        currentUrl = URL(url, location).toString()
+                        redirects++
+                        continue
+                    }
+                    connection = conn
+                    break
+                }
+
+                val finalConn = connection ?: run {
+                    Log.e(TAG, "Too many redirects while downloading APK")
                     return@withContext
                 }
 
-                val inputStream = connection.inputStream
-                installApkSession(context, inputStream)
+                if (finalConn.responseCode != HttpURLConnection.HTTP_OK) {
+                    Log.e(TAG, "Failed to download APK, HTTP code: ${finalConn.responseCode}")
+                    return@withContext
+                }
+
+                finalConn.inputStream.use { inputStream ->
+                    installApkSession(context, inputStream)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error downloading or installing APK", e)
+            } finally {
+                connection?.disconnect()
             }
         }
     }
@@ -51,14 +92,14 @@ object ApkInstaller {
             sessionId = packageInstaller.createSession(params)
             val session = packageInstaller.openSession(sessionId)
 
-            val out = session.openWrite("SaralGatiUpdate", 0, -1)
-            val buffer = ByteArray(65536)
-            var bytesRead: Int
-            while (apkStream.read(buffer).also { bytesRead = it } != -1) {
-                out.write(buffer, 0, bytesRead)
+            session.openWrite("SaralGatiUpdate", 0, -1).use { out ->
+                val buffer = ByteArray(65536)
+                var bytesRead: Int
+                while (apkStream.read(buffer).also { bytesRead = it } != -1) {
+                    out.write(buffer, 0, bytesRead)
+                }
+                session.fsync(out)
             }
-            session.fsync(out)
-            out.close()
 
             // Commit the session
             val intent = Intent(context, InstallReceiver::class.java)

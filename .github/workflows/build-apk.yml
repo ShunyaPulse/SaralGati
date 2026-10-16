@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "android/**"
+      - "version.json"
       - ".github/workflows/build-apk.yml"
   workflow_dispatch:
     inputs:
@@ -55,7 +56,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-          FALLBACK_PASSWORD: "YOUR_FALLBACK_PASSWORD"
+          FALLBACK_PASSWORD: "saralgati_fallback"
 
       - name: Determine Version
         id: version
@@ -64,15 +65,26 @@ jobs:
           INPUT_NAME: ${{ inputs.version_name }}
           RUN_NUM: ${{ github.run_number }}
         run: |
-          BASE_VERSION=$(jq -r '.version_name' version.json 2>/dev/null || echo "5.0.0")
+          BASE_VERSION=$(jq -r '.version_name' version.json 2>/dev/null || echo "6.0.0")
           BASE_CODE=$(jq -r '.version_code' version.json 2>/dev/null || echo "$RUN_NUM")
+          DOWNLOAD_URL=$(jq -r '.download_url // "https://saralgati-685823552970.asia-south1.run.app/api/download"' version.json 2>/dev/null)
+          FORCE_UPDATE=$(jq -r '.force_update // false' version.json 2>/dev/null)
+          CHANGELOG=$(jq -r '.changelog // ""' version.json 2>/dev/null)
           CODE="${INPUT_CODE:-$BASE_CODE}"
           if [ "$CODE" -lt "$RUN_NUM" ]; then
             CODE="$RUN_NUM"
           fi
           NAME="${INPUT_NAME:-$BASE_VERSION}"
+          RELEASE_BODY=$(jq -cn \
+            --argjson code "$CODE" \
+            --arg name "$NAME" \
+            --arg url "$DOWNLOAD_URL" \
+            --argjson force "$FORCE_UPDATE" \
+            --arg log "$CHANGELOG" \
+            '{version_code: $code, version_name: $name, download_url: $url, force_update: $force, changelog: $log}')
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "release_body=$RELEASE_BODY" >> "$GITHUB_OUTPUT"
 
       - name: Build Hardened Release APK
         run: ./gradlew assembleRelease --no-daemon
@@ -99,8 +111,7 @@ jobs:
         with:
           tag_name: android-latest
           name: "SaralGati Android App (v${{ steps.version.outputs.name }})"
-          body: |
-            {"version_code": ${{ steps.version.outputs.code }}, "version_name": "${{ steps.version.outputs.name }}", "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download", "force_update": false, "changelog": ""}
+          body: ${{ steps.version.outputs.release_body }}
           draft: false
           prerelease: false
           files: android/app/build/outputs/apk/release/SaralGati.apk

@@ -6,6 +6,7 @@ import { TRAVEL_TRANSIT_PLAYBOOKS } from './travel_transit';
 import { ECOMMERCE_FOOD_PLAYBOOKS } from './ecommerce_food';
 import { SYSTEM_ACCESSIBILITY_PLAYBOOKS } from './system_accessibility';
 import { GOVERNMENT_DEVOTION_PLAYBOOKS } from './government_devotion';
+import { canonicalizeToken } from '@/lib/ai/fewShotGrounding/bm25';
 
 export * from './types';
 
@@ -37,15 +38,17 @@ const GENERIC_VERBS = new Set([
 ]);
 
 function stemHindi(word: string): string {
-  if (word.length <= 3) return word;
-  return word.replace(/(wana|wao|ao|na|ne|ni|ye|yo|o|e|i|a)$/, '');
+  const canonical = canonicalizeToken(word);
+  if (canonical.length <= 3) return canonical;
+  return canonical.replace(/(wana|wao|ao|na|ne|ni|ye|yo|o|e|i|a)$/, '');
 }
 
 function extractKeyTokens(text: string): string[] {
   return text
     .toLowerCase()
     .split(/[\s,._\-?!/\\()]+/)
-    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t))
+    .map(canonicalizeToken);
 }
 
 function tokenMatches(t1: string, t2: string): boolean {
@@ -87,7 +90,8 @@ export function getPlaybookById(id: string): MultiStepFlowDefinition | undefined
 
 /**
  * Find the most relevant playbook for a given user question.
- * Uses exact substring matching, inverted token indexing, and Hindi/Hinglish morphological stemming.
+ * Uses exact substring matching, inverted token indexing, Hinglish phonetic canonicalization,
+ * and Hindi/Hinglish morphological stemming.
  */
 export function findMatchingPlaybook(question: string): MultiStepFlowDefinition | null {
   if (!question) return null;
@@ -137,14 +141,12 @@ export function findMatchingPlaybook(question: string): MultiStepFlowDefinition 
       }
 
       if (matchedCount >= 2 && nonGenericMatches >= 1) {
-        // Multi-token match with at least one substantive noun/subject
         const score = matchedCount * 10 + (matchedCount / pTokens.length) * 5;
         if (score > maxScore) {
           maxScore = score;
           bestMatch = pb;
         }
       } else if (pTokens.length === 1 && matchedCount === 1 && !GENERIC_VERBS.has(pTokens[0])) {
-        // Distinctive single keyword
         const score = 8;
         if (score > maxScore) {
           maxScore = score;

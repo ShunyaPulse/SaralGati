@@ -69,8 +69,11 @@ export async function getAgentConfig(request: Request): Promise<ServiceResult> {
       [elderId]
     );
 
+    const preferredLang = elder.preferred_lang || 'hi';
+
     const config = {
-      guidance_strings: getGuidanceStrings(elder.preferred_lang || 'en'),
+      preferred_lang: preferredLang,
+      guidance_strings: getGuidanceStrings(preferredLang),
       emergency_contact: elder.emergency_contact,
       habit_shortcuts: habits,
       updated_at: new Date().toISOString()

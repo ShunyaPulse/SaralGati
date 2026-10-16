@@ -55,17 +55,17 @@ export const heartbeatSchema = z
   });
 
 export const syncHabitsSchema = z.object({
-  device_token: z.string(),
+  device_token: z.string().optional(),
   habits: z.array(z.object({
     type: z.string(),
     payload: z.record(z.string(), z.any()),
   })),
-  battery_level: z.number().min(0).max(100),
-  timestamp: z.string().datetime(),
+  battery_level: z.number().min(0).max(100).nullish(),
+  timestamp: z.string().datetime().optional(),
 });
 
 export const reportStuckSchema = z.object({
-  device_token: z.string(),
+  device_token: z.string().optional(),
   screen_name: z.string(),
   app_package: z.string(),
   duration_ms: z.number(),

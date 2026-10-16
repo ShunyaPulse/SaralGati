@@ -11,7 +11,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -23,6 +22,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 @OptIn(ExperimentalGetImage::class)
 @Composable
@@ -32,6 +32,31 @@ fun QrCodeScanner(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
+    val analyzerExecutor = remember { Executors.newSingleThreadExecutor() }
+    val barcodeScanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+        )
+    }
+    val hasDeliveredScan = remember { AtomicBoolean(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                if (cameraProviderFuture.isDone) {
+                    cameraProviderFuture.get().unbindAll()
+                }
+            } catch (_: Exception) {
+            }
+            try {
+                barcodeScanner.close()
+            } catch (_: Exception) {
+            }
+            analyzerExecutor.shutdown()
+        }
+    }
 
     AndroidView(
         factory = { ctx ->
@@ -45,28 +70,26 @@ fun QrCodeScanner(
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }
                 
-                val barcodeScanner = BarcodeScanning.getClient(
-                    BarcodeScannerOptions.Builder()
-                        .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                        .build()
-                )
-                
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setTargetResolution(Size(1280, 720))
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    
-                val analyzerExecutor = Executors.newSingleThreadExecutor()
                 
                 imageAnalysis.setAnalyzer(analyzerExecutor) { imageProxy ->
+                    if (hasDeliveredScan.get()) {
+                        imageProxy.close()
+                        return@setAnalyzer
+                    }
                     val mediaImage = imageProxy.image
                     if (mediaImage != null) {
                         val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
                         barcodeScanner.process(image)
                             .addOnSuccessListener { barcodes ->
                                 for (barcode in barcodes) {
-                                    barcode.rawValue?.let { value ->
-                                        onQrScanned(value)
+                                    val rawValue = barcode.rawValue
+                                    if (!rawValue.isNullOrBlank() && hasDeliveredScan.compareAndSet(false, true)) {
+                                        onQrScanned(rawValue)
+                                        break
                                     }
                                 }
                             }

@@ -1,5 +1,6 @@
 'use client';
 import React, { useEffect } from 'react';
+import { Trash2 } from 'lucide-react';
 import { useHabitStore } from '@/stores/habit-store';
 import { parseGeofence } from '@/lib/geo/geo';
 import { HabitRule } from '@/types';
@@ -16,8 +17,27 @@ const ruleTypeLabel = (ruleType: HabitRule['rule_type'] | string) =>
   RULE_TYPE_LABEL[ruleType] ||
   String(ruleType).replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
+function summarizeRulePayload(rule: HabitRule): string | null {
+  const payload = rule.rule_payload;
+  if (!payload || typeof payload !== 'object') return null;
+
+  const entries = Object.entries(payload).filter(
+    ([, val]) => val !== null && val !== undefined && String(val).trim() !== ''
+  );
+  if (entries.length === 0) return null;
+
+  return entries
+    .slice(0, 3)
+    .map(([key, val]) => {
+      const cleanKey = key.replace(/_/g, ' ');
+      const cleanVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      return `${cleanKey}: ${cleanVal}`;
+    })
+    .join(' · ');
+}
+
 export function HabitRulesList({ elderId }: { elderId: string }) {
-  const { rules, loading, fetchRules, toggleRule } = useHabitStore();
+  const { rules, loading, fetchRules, toggleRule, deleteRule } = useHabitStore();
 
   useEffect(() => {
     fetchRules(elderId);
@@ -32,27 +52,45 @@ export function HabitRulesList({ elderId }: { elderId: string }) {
         // A safe zone is also a habit rule, but "Location trigger / Confidence
         // 100%" tells the caregiver nothing about the zone they are relying on.
         const zone = rule.rule_type === 'location_trigger' ? parseGeofence(rule.rule_payload) : null;
+        const payloadSummary = !zone ? summarizeRulePayload(rule) : null;
 
         return (
-          <div key={rule.id} className="flex justify-between items-center p-3 border rounded-lg bg-gray-50">
-            <div>
-              <p className="text-sm font-medium text-gray-900">
+          <div key={rule.id} className="flex justify-between items-center gap-3 p-3 border rounded-lg bg-gray-50">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900 truncate">
                 {zone ? `Safe zone: ${zone.label}` : ruleTypeLabel(rule.rule_type)}
               </p>
-              <p className="text-xs text-gray-500">
+              {payloadSummary && (
+                <p className="text-xs text-gray-700 mt-0.5 truncate">{payloadSummary}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-0.5">
                 {zone ? `${zone.radius_m} m radius` : `Confidence: ${Math.round(rule.confidence * 100)}%`}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => toggleRule(rule.id)}
-              // Conveys the on/off state to assistive tech; the colour and the word
-              // alone do not tell a screen reader this is a toggle.
-              aria-pressed={rule.is_active}
-              className={`px-3 py-1 text-xs rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}
-            >
-              {rule.is_active ? 'Active' : 'Inactive'}
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => toggleRule(rule.id)}
+                // Conveys the on/off state to assistive tech; the colour and the word
+                // alone do not tell a screen reader this is a toggle.
+                aria-pressed={rule.is_active}
+                className={`px-3 py-1 text-xs rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] ${rule.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}
+              >
+                {rule.is_active ? 'Active' : 'Inactive'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm('Delete this habit rule?')) {
+                    deleteRule(rule.id);
+                  }
+                }}
+                aria-label="Delete habit rule"
+                className="p-1.5 text-gray-400 hover:text-red-600 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8]"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
           </div>
         );
       })}

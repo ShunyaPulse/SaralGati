@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [website, setWebsite] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailExists, setEmailExists] = useState(false);
@@ -117,7 +118,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: cleanEmail, type: 'register', turnstileToken }),
+        body: JSON.stringify({ email: cleanEmail, type: 'register', turnstileToken, website: website || undefined }),
       });
 
       const data = await res.json();
@@ -151,7 +152,13 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: cleanEmail, password, otp: otp.trim() }),
+        body: JSON.stringify({
+          name: name.trim(),
+          email: cleanEmail,
+          password,
+          otp: otp.trim(),
+          website: website || undefined,
+        }),
       });
 
       const data = await res.json();
@@ -206,7 +213,14 @@ export default function RegisterPage() {
           <form className="space-y-6" onSubmit={otpSent ? handleRegister : handleSendOtp}>
             {/* Honeypot trap — invisible to humans, auto-filled by bots */}
             <div className="absolute" style={{ left: '-9999px', position: 'absolute' }} aria-hidden="true">
-              <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
             </div>
 
             {error && (
@@ -362,7 +376,20 @@ export default function RegisterPage() {
                   />
                 </div>
                 <p className="mt-2 text-sm text-gray-500 text-center">
-                  We sent a 6-digit code to {email}
+                  We sent a 6-digit code to {email}.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtp('');
+                      setError('');
+                      setTurnstileToken('');
+                      setTurnstileKey(prev => prev + 1);
+                    }}
+                    className="font-medium text-[#0074c8] hover:text-blue-800 underline"
+                  >
+                    Edit details or resend
+                  </button>
                 </p>
               </div>
             )}

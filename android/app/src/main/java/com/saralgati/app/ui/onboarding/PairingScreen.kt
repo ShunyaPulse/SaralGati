@@ -54,9 +54,16 @@ fun PairingScreen(
                 onQrScanned = { qrData ->
                     try {
                         val json = JSONObject(qrData)
-                        val elderId = json.getString("elder_id")
-                        val deviceToken = json.optString("device_token", "caregiver_live")
-                        localPrefs.savePairingInfo(elderId, "caregiver_live", deviceToken)
+                        val elderId = json.getString("elder_id").trim()
+                        if (elderId.isEmpty()) {
+                            throw IllegalArgumentException("Missing elder_id")
+                        }
+                        val deviceToken = json.optString("device_token", "").trim().takeIf { it.isNotEmpty() }
+                        val apiUrl = json.optString("api_url", "").trim()
+                            .takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                        localPrefs.savePairingInfo(elderId, "caregiver_live", deviceToken, apiUrl)
+                        NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
+                        NetworkModule.baseUrlProvider = { localPrefs.getApiUrl() }
 
                         // Auto-detect and push device model & OS version
                         val phoneModel = getDevicePhoneModel()
@@ -185,15 +192,22 @@ fun PairingScreen(
                     errorMessage = null
                     try {
                         val response = NetworkModule.eldersApi.getElderStatus(cleanId)
-                        if (response.isSuccessful && response.body()?.success == true) {
-                            localPrefs.savePairingInfo(cleanId, "caregiver_live")
+                        val profile = response.body()?.data
+                        if (response.isSuccessful && response.body()?.success == true && profile != null) {
+                            val resolvedElderId = profile.id.takeIf { it.isNotBlank() } ?: cleanId
+                            val resolvedCaregiverId = profile.caregiverId?.takeIf { it.isNotBlank() } ?: "caregiver_live"
+                            val manualDeviceToken = cleanId.takeIf { it.startsWith("sg_") || it != resolvedElderId }
+
+                            localPrefs.savePairingInfo(resolvedElderId, resolvedCaregiverId, manualDeviceToken)
+                            NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
+                            NetworkModule.baseUrlProvider = { localPrefs.getApiUrl() }
 
                             // Auto-detect and push device model & OS version
                             val phoneModel = getDevicePhoneModel()
                             val osVersion = getDeviceOsVersion()
                             try {
                                 NetworkModule.eldersApi.updateHeartbeat(
-                                    cleanId,
+                                    resolvedElderId,
                                     mapOf(
                                         "phone_model" to phoneModel,
                                         "os_version" to osVersion
@@ -242,4 +256,3 @@ private fun getDevicePhoneModel(): String {
 private fun getDeviceOsVersion(): String {
     return "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})"
 }
-

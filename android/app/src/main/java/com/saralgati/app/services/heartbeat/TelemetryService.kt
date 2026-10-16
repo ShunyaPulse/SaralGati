@@ -20,6 +20,10 @@ import android.os.BatteryManager
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import kotlinx.coroutines.*
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class TelemetryService : Service() {
 
@@ -42,6 +46,7 @@ class TelemetryService : Service() {
         super.onCreate()
         localPrefs = LocalPrefs(applicationContext)
         NetworkModule.tokenProvider = { localPrefs.getAuthToken() }
+        NetworkModule.baseUrlProvider = { localPrefs.getApiUrl() }
         createNotificationChannel()
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -99,6 +104,23 @@ class TelemetryService : Service() {
                             Log.w(TAG, "Heartbeat failed: ${response.code()}")
                         }
 
+                        // Sync Caregiver Agent Config (preferred_lang, emergency_contact, active habits)
+                        try {
+                            val cfgRes = NetworkModule.agentApi.getConfig()
+                            if (cfgRes.isSuccessful && cfgRes.body()?.success == true) {
+                                val cfg = cfgRes.body()?.data
+                                if (cfg != null) {
+                                    localPrefs.saveEmergencyContact(cfg.emergencyContact)
+                                    if (!localPrefs.hasSelectedLanguage() && !cfg.preferredLang.isNullOrBlank()) {
+                                        val normLang = if (cfg.preferredLang == "en") "en" else "hi"
+                                        localPrefs.setLanguagePrefs(normLang, normLang)
+                                    }
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Agent config sync skipped: ${e.message}")
+                        }
+
                         // On-Device Habit Aggregator Sync
                         try {
                             val habits = listOf(
@@ -107,10 +129,15 @@ class TelemetryService : Service() {
                                     payload = mapOf("font_scale" to resources.configuration.fontScale)
                                 )
                             )
+                            val isoTimestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                                timeZone = TimeZone.getTimeZone("UTC")
+                            }.format(Date())
                             val syncRes = NetworkModule.agentApi.syncHabits(
                                 com.saralgati.app.data.model.SyncHabitsRequest(
+                                    deviceToken = localPrefs.getAuthToken(),
                                     batteryLevel = batteryPct,
-                                    habits = habits
+                                    habits = habits,
+                                    timestamp = isoTimestamp
                                 )
                             )
                             if (syncRes.isSuccessful) {
@@ -128,14 +155,6 @@ class TelemetryService : Service() {
         }
     }
 
-    /**
-     * Freshest cached fix from any provider.
-     *
-     * Tracking is deliberately passive: one read per heartbeat instead of a
-     * long-lived location listener, so the companion never holds a wake lock on
-     * an elder's phone. Returns null when the permission is denied (the app then
-     * simply reports no location) or when every provider's cache is too old.
-     */
     private fun lastKnownFix(): Location? {
         val fineGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION

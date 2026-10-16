@@ -1,12 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Filter, X } from 'lucide-react';
 
 export function AlertFilters({ elders, filters, onFilterChange }: any) {
   const [localFilters, setLocalFilters] = useState(filters);
   const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
 
   const eventTypes = [
     'screen_confusion', 
@@ -23,7 +27,13 @@ export function AlertFilters({ elders, filters, onFilterChange }: any) {
   };
 
   const handleReset = () => {
-    const emptyFilters = { elder_id: undefined, event_types: [], from_date: undefined, to_date: undefined };
+    const emptyFilters = {
+      elder_id: undefined,
+      status: 'active' as const,
+      event_types: [],
+      from_date: undefined,
+      to_date: undefined,
+    };
     setLocalFilters(emptyFilters);
     onFilterChange(emptyFilters);
   };
@@ -56,18 +66,36 @@ export function AlertFilters({ elders, filters, onFilterChange }: any) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Elder</label>
           <select 
             value={localFilters.elder_id || ''} 
-            onChange={(e) => setLocalFilters({ ...localFilters, elder_id: e.target.value })}
+            onChange={(e) => setLocalFilters({ ...localFilters, elder_id: e.target.value || undefined })}
             className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
           >
             <option value="">All Elders</option>
             {elders?.map((elder: any) => (
               <option key={elder.id} value={elder.id}>{elder.elder_name}</option>
             ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+          <select
+            value={localFilters.status || 'active'}
+            onChange={(e) =>
+              setLocalFilters({
+                ...localFilters,
+                status: e.target.value as 'active' | 'resolved' | 'all',
+              })
+            }
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
+          >
+            <option value="active">Active (Unresolved)</option>
+            <option value="resolved">Resolved</option>
+            <option value="all">All Alerts</option>
           </select>
         </div>
 
@@ -94,13 +122,13 @@ export function AlertFilters({ elders, filters, onFilterChange }: any) {
             <input 
               type="date" 
               value={localFilters.from_date || ''}
-              onChange={(e) => setLocalFilters({ ...localFilters, from_date: e.target.value })}
+              onChange={(e) => setLocalFilters({ ...localFilters, from_date: e.target.value || undefined })}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
             />
             <input 
               type="date" 
               value={localFilters.to_date || ''}
-              onChange={(e) => setLocalFilters({ ...localFilters, to_date: e.target.value })}
+              onChange={(e) => setLocalFilters({ ...localFilters, to_date: e.target.value || undefined })}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-600"
             />
           </div>

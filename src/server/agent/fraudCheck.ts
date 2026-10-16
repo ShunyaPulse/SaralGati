@@ -8,8 +8,76 @@ import {
   analyzeForFraudWithAdvisor,
   DEVICE_ADVISOR_TIMEOUT_MS,
 } from "@/lib/fraud/fraudAdvisor";
-import { query } from "@/lib/data/db";
-import { rateLimiter } from "@/lib/data/redis";
+import type { FraudSentinelVerdict } from "@/lib/fraud/fraudSentinel";
+import { FRAUD_INTERCEPT_KIND } from "@/lib/notify/alerts";
+import { query, queryOne } from "@/lib/data/db";
+import { deduplicateAlert, getClientIp, invalidatePattern, rateLimiter } from "@/lib/data/redis";
+
+/**
+ * Record a caregiver-visible alert in `assistance_logs` when the anti-fraud
+ * sentinel intercepts a DANGEROUS or CRITICAL scam screen on a paired elder's
+ * phone. Deduplicated per (elderId, appPackage, threatCategory) so repeated
+ * screen polls do not flood the caregiver feed.
+ */
+export async function recordFraudInterceptAlert(params: {
+  elderId: string;
+  caregiverId?: string;
+  appPackage?: string | null;
+  verdict: FraudSentinelVerdict;
+}): Promise<void> {
+  const { elderId, appPackage, verdict } = params;
+  if (
+    verdict.threat_level !== "DANGEROUS" &&
+    verdict.threat_level !== "CRITICAL"
+  ) {
+    return;
+  }
+
+  try {
+    const dedupeKey = `fraud:${appPackage || "unknown"}:${verdict.threat_category}`;
+    const isDuplicate = await deduplicateAlert(elderId, dedupeKey);
+    if (isDuplicate) return;
+
+    let caregiverId = params.caregiverId;
+    if (!caregiverId) {
+      const elder = await queryOne<{ caregiver_id: string }>(
+        `SELECT caregiver_id FROM elder_profiles WHERE id = $1`,
+        [elderId],
+      );
+      caregiverId = elder?.caregiver_id;
+    }
+
+    const titleEn =
+      verdict.user_alert.title_en || verdict.user_alert.title || "Scam Alert";
+    const severity =
+      verdict.threat_level === "CRITICAL" ? "critical" : "high";
+    const metadata = {
+      kind: FRAUD_INTERCEPT_KIND,
+      threat_level: verdict.threat_level,
+      threat_category: verdict.threat_category,
+      severity,
+      description: `${titleEn} (${verdict.threat_level}) intercepted on ${appPackage || "companion"}`,
+    };
+
+    await queryOne(
+      `INSERT INTO assistance_logs (
+        elder_id, event_type, screen_name, app_package, duration_ms, metadata
+      ) VALUES ($1, 'emergency', $2, $3, 0, $4) RETURNING id`,
+      [
+        elderId,
+        titleEn.slice(0, 255),
+        (appPackage || "com.saralgati.app").slice(0, 255),
+        JSON.stringify(metadata),
+      ],
+    );
+
+    if (caregiverId) {
+      await invalidatePattern(`alerts:${caregiverId}*`);
+    }
+  } catch (err) {
+    console.error("Failed to record caregiver fraud intercept alert:", err);
+  }
+}
 
 /**
  * Request for the Autonomous Anti-Fraud Sentinel.
@@ -26,9 +94,6 @@ const fraudCheckRequestSchema = z
     urls: z.array(z.string().max(2000)).max(50).optional(),
     question: z.string().max(2000).optional(),
     app_package: z.string().max(200).optional(),
-    // Ground truth supplied only by the training flywheel. Live companions never
-    // send these, and the values are never trusted for the live verdict - they
-    // are stored purely as an SFT label for the LoRA flywheel.
     expected_threat_level: z
       .enum(["SAFE", "SUSPICIOUS", "DANGEROUS", "CRITICAL"])
       .optional(),
@@ -49,57 +114,36 @@ const fraudCheckRequestSchema = z
 
 /**
  * POST /api/v1/agent/fraud-check
- *
- * Real-time scam verdict for one screen / message batch. Returns the sentinel
- * JSON as the *whole* body (no {success, data} envelope) because the companion
- * parses it directly and the spec requires the response to be only the verdict.
- * Errors keep a normal error envelope - an authentication failure must never be
- * mistaken for a SAFE verdict.
  */
 export async function checkFraud(req: NextRequest): Promise<ServiceResult> {
   try {
-    // 1. Same gate as the rest of the agent API: signed companion request with a
-    // paired device token, or the internal flywheel secret for training runs.
     const isFlywheel = isFlywheelRequest(req);
     const auth = isFlywheel
-      ? { isAuthenticated: true, elderId: undefined }
+      ? { isAuthenticated: true, elderId: undefined, caregiverId: undefined }
       : await validateDeviceToken(req);
 
     if (!auth.isAuthenticated) {
       return fail(401, { success: false, error: "Unauthorized" });
     }
 
-    // 2. Rate limit: screen changes are frequent, so the ceiling is higher than
-    // /ask but still capped per device.
     const rateLimitId = isFlywheel
       ? "fraud:flywheel"
-      : `fraud:device:${auth.elderId ?? req.headers.get("x-forwarded-for") ?? "anon"}`;
-    // Screen changes are frequent and the companion now screens a fresh app
-    // immediately, so the device ceiling is generous enough to avoid a 429 on
-    // the very screen that needs a verdict. The signature check on-device keeps
-    // unchanged screens from spending the budget.
+      : `fraud:device:${auth.elderId ?? getClientIp(req)}`;
     const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 240 : 120, 60);
     if (!rateLimit.allowed) {
       return fail(429, { success: false, error: "Too many requests. Please wait a moment." });
     }
 
-    // 3. Validate payload with Zod before any text reaches the rules.
     const rawBody = await req.json().catch(() => null);
     const parseResult = fraudCheckRequestSchema.safeParse(rawBody);
     if (!parseResult.success) {
       return fail(400, { success: false, error: "Invalid payload" });
     }
 
-    // Deterministic rules decide; the LoRA second opinion may only raise the
-    // verdict. This is the production consumer of the fraud training data.
     const verdict = await analyzeForFraudWithAdvisor(parseResult.data, {
       timeoutMs: DEVICE_ADVISOR_TIMEOUT_MS,
     });
 
-    // Flywheel-only training capture: when Gemini supplies a ground-truth label,
-    // store the verdict against it so the LoRA export (type=fraud) can learn the
-    // same scam signals the deterministic rules already catch. Never blocks or
-    // changes the live verdict, and a persistence failure cannot fail the check.
     if (isFlywheel && parseResult.data.expected_threat_level) {
       try {
         const { ui_elements, urls, messages, question, screen_text } =
@@ -145,15 +189,25 @@ export async function checkFraud(req: NextRequest): Promise<ServiceResult> {
       }
     }
 
-    // Live-device training capture: when the sentinel flags DANGEROUS/CRITICAL
-    // on a real elder screen, anonymise and store the verdict so the fraud
-    // training-data export can learn from production signals. No raw text is
-    // persisted – only derived signals + screen_hash.
     if (
       !isFlywheel &&
       (verdict.threat_level === "DANGEROUS" ||
         verdict.threat_level === "CRITICAL")
     ) {
+      const effectiveAppPackage =
+        parseResult.data.app_package ??
+        parseResult.data.app_package_hint ??
+        null;
+
+      if (auth.elderId) {
+        await recordFraudInterceptAlert({
+          elderId: auth.elderId,
+          caregiverId: auth.caregiverId,
+          appPackage: effectiveAppPackage,
+          verdict,
+        });
+      }
+
       try {
         const { ui_elements, urls, messages, question, screen_text } =
           parseResult.data;
@@ -180,9 +234,7 @@ export async function checkFraud(req: NextRequest): Promise<ServiceResult> {
            )`,
           [
             auth.elderId ?? null,
-            parseResult.data.app_package ??
-              parseResult.data.app_package_hint ??
-              null,
+            effectiveAppPackage,
             screenHash,
             JSON.stringify(signals),
             JSON.stringify(verdict),
@@ -195,7 +247,6 @@ export async function checkFraud(req: NextRequest): Promise<ServiceResult> {
       }
     }
 
-    // Log only the verdict and reasoning, never the elder's raw screen text.
     if (
       verdict.threat_level === "DANGEROUS" ||
       verdict.threat_level === "CRITICAL"

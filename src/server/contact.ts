@@ -1,6 +1,6 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { z } from 'zod';
-import { rateLimiter, getSubnet } from '@/lib/data/redis';
+import { rateLimiter, getSubnet, getClientIp } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 import { createMailer } from '@/lib/notify/mailer';
 
@@ -15,7 +15,7 @@ const contactSchema = z.object({
 /** POST /api/contact - the public contact form, delivered by email. */
 export async function sendContactMessage(req: Request): Promise<ServiceResult> {
   try {
-    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(req);
     const subnet = getSubnet(ip);
     const cookieStore = await cookies();
     const devId = cookieStore.get('__sg_dev_id')?.value;

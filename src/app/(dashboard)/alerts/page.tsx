@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AlertFilters } from '@/components/alerts/alert-filters';
 import { AlertItem } from '@/components/alerts/alert-item';
@@ -9,12 +9,18 @@ import { useElderStore } from '@/stores/elder-store';
 import { Bell, RefreshCw } from 'lucide-react';
 import { AssistanceLog } from '@/types';
 
-export default function AlertsPage() {
+function AlertsPageContent() {
   const searchParams = useSearchParams();
   const { alerts, loading: isLoading, fetchAlerts, resolveAlert } = useAlertStore();
   const { elders, fetchElders } = useElderStore();
   
-  const [filters, setFilters] = useState<{ elder_id?: string; status: 'active' | 'resolved' | 'all' }>(() => {
+  const [filters, setFilters] = useState<{
+    elder_id?: string;
+    status: 'active' | 'resolved' | 'all';
+    event_types?: string[];
+    from_date?: string;
+    to_date?: string;
+  }>(() => {
     const statusParam = searchParams.get('status');
     return {
       elder_id: searchParams.get('elder_id') || undefined,
@@ -46,7 +52,7 @@ export default function AlertsPage() {
     setPage(1); // Reset page on filter change
   };
 
-  const handleResolve = async (id: string, resolution_notes?: string) => {
+  const handleResolve = async (id: string, _resolution_notes?: string) => {
     await resolveAlert(id);
   };
 
@@ -54,11 +60,11 @@ export default function AlertsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Alerts & Logs</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Alerts &amp; Logs</h1>
           <p className="text-slate-500 mt-1">Monitor assistance requests and system events.</p>
         </div>
         <button 
-          onClick={() => fetchAlerts({ ...filters, limit })}
+          onClick={() => fetchAlerts({ ...filters, page, limit })}
           className="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -92,7 +98,7 @@ export default function AlertsPage() {
               </div>
               <h3 className="text-sm font-medium text-slate-900">No alerts found</h3>
               <p className="mt-1 text-sm text-slate-500">
-                You're all caught up! No recent logs match your filters.
+                You&apos;re all caught up! No recent logs match your filters.
               </p>
             </div>
           )}
@@ -119,5 +125,19 @@ export default function AlertsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function AlertsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 flex justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-teal-600 border-t-transparent" />
+        </div>
+      }
+    >
+      <AlertsPageContent />
+    </Suspense>
   );
 }

@@ -43,55 +43,62 @@ jobs:
           BODY=$(curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" "$API_URL")
           COUNT=$(printf '%s' "$BODY" | python -c "import json,sys; print(json.load(sys.stdin).get('count', 0))" 2>/dev/null || echo "0")
           echo "Found $COUNT verified elder interactions in database."
-          # The pool is bilingual now: show the split, so a Hindi-only pool is
-          # visible here instead of only showing up as a Hinglish adapter later.
           printf '%s' "$BODY" | python -c "import json,sys; pool=json.load(sys.stdin); c=pool.get('counts') or {}; print(f\"Language split: hi={c.get('hi',0)} en={c.get('en',0)} | dropped (wrong script): {pool.get('skipped_wrong_script',0)}\")" 2>/dev/null || true
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
 
           FORCE="$INPUT_FORCE_TRAIN"
           if [ "$COUNT" -ge 50 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
-            echo "✅ Threshold met ($COUNT samples). Ready for daily training."
+            echo "✅ Threshold met ($COUNT samples). Ready for bi-weekly SFT + DPO training."
           else
             echo "should_train=false" >> $GITHUB_OUTPUT
             echo "ℹ️ Less than 50 verified samples ($COUNT). Skipping to save GPU quota."
           fi
 
-      - name: Download Training Dataset
+      - name: Download Training Dataset (SFT + Contrastive DPO)
         if: steps.check_data.outputs.should_train == 'true'
         env:
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
         run: |
-          # -f so an auth failure aborts instead of saving the error body as a
-          # dataset that then gets uploaded as a training artifact.
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
             "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&format=jsonl&limit=10000" \
             -o dataset.jsonl
           echo "Downloaded $(wc -l < dataset.jsonl) SFT rows to dataset.jsonl"
 
-      - name: Download Fraud Training Dataset
-        if: steps.check_data.outputs.should_train == 'true'
-        env:
-          FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
-        run: |
           curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
             "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=sft&format=jsonl&limit=10000" \
             -o fraud_dataset.jsonl 2>/dev/null || true
           if [ -s fraud_dataset.jsonl ]; then
             FRAUD_LINES=$(wc -l < fraud_dataset.jsonl)
-            echo "Downloaded $FRAUD_LINES fraud training rows"
+            echo "Downloaded $FRAUD_LINES fraud SFT training rows"
             cat fraud_dataset.jsonl >> dataset.jsonl
-          else
-            echo "No fraud training data available yet, skipping."
           fi
-          echo "Total dataset: $(wc -l < dataset.jsonl) rows"
+          echo "Total SFT dataset: $(wc -l < dataset.jsonl) rows"
+
+          # Download contrastive DPO preference pairs (elder corrections + fraud misses)
+          : > dpo_dataset.jsonl
+          curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=dpo&format=jsonl&limit=5000" \
+            -o guidance_dpo.jsonl 2>/dev/null || true
+          if [ -s guidance_dpo.jsonl ]; then
+            cat guidance_dpo.jsonl >> dpo_dataset.jsonl
+          fi
+          curl -fsS -H "x-flywheel-secret: $FLYWHEEL_SECRET" \
+            "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?type=fraud&mode=dpo&format=jsonl&limit=5000" \
+            -o fraud_dpo.jsonl 2>/dev/null || true
+          if [ -s fraud_dpo.jsonl ]; then
+            cat fraud_dpo.jsonl >> dpo_dataset.jsonl
+          fi
+          echo "Total contrastive DPO dataset: $(wc -l < dpo_dataset.jsonl) rows"
 
       - name: Upload Dataset Artifact
         if: steps.check_data.outputs.should_train == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: saralgati-verified-dataset
-          path: dataset.jsonl
+          path: |
+            dataset.jsonl
+            dpo_dataset.jsonl
           retention-days: 14
 
       - name: Publish Verified Dataset to Kaggle
@@ -111,22 +118,17 @@ jobs:
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           DATASET_ID="$USERNAME_LOWER/saralgati-verified-training-set"
 
-          # The runner reads the pool from /kaggle/input/, so it must be published
-          # as a dataset first. A sibling file is never uploaded by kernels push,
-          # and embedding it in the script exceeds Kaggle's 1 MB source limit.
-          echo "📦 Packaging verified dataset for Kaggle..."
-          python scripts/bundle_dataset.py dataset.jsonl kaggle_dataset "$USERNAME_LOWER"
+          echo "📦 Packaging verified SFT + DPO dataset for Kaggle..."
+          python scripts/bundle_dataset.py dataset.jsonl kaggle_dataset "$USERNAME_LOWER" dpo_dataset.jsonl
 
-          # Check if dataset exists on Kaggle to create a new version or initialize
           if kaggle datasets status "$DATASET_ID" 2>&1 | grep -qi -E "ready|pending"; then
             echo "Dataset $DATASET_ID already exists. Uploading new version with latest samples..."
-            kaggle datasets version -p kaggle_dataset -m "Verified refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)" -d
+            kaggle datasets version -p kaggle_dataset -m "Verified SFT+DPO refresh $(date -u +%Y-%m-%dT%H:%M:%SZ)" -d
           else
             echo "Creating new private dataset $DATASET_ID..."
             kaggle datasets create -p kaggle_dataset
           fi
 
-          # Wait for Kaggle to finish processing the uploaded dataset version
           sleep 10
           READY="false"
           for attempt in $(seq 1 18); do
@@ -159,8 +161,6 @@ jobs:
             echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
             exit 0
           fi
-          # Refuse to run without the dataset: that is exactly how a run silently
-          # trained on the six seed samples and still reported success.
           if [ -z "$DATASET_ID" ]; then
             echo "::error::No dataset was published. Refusing to launch a run that would train on seed data."
             exit 1
@@ -194,5 +194,3 @@ jobs:
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           echo "Queued kernel: $USERNAME_LOWER/saralgati-lora-training"
           kaggle kernels status "$USERNAME_LOWER/saralgati-lora-training" || true
-
-

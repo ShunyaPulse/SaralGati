@@ -3,6 +3,19 @@ import { mapsUrl, toGeoPoint, type GeoPoint, type Geofence } from '@/lib/geo/geo
 /** `metadata.kind` the heartbeat route writes for a "left the safe zone" alert. */
 export const GEOFENCE_EXIT_KIND = 'geofence_exit';
 
+/** `metadata.kind` the fraud sentinel routes write when a DANGEROUS/CRITICAL scam is intercepted on a paired device. */
+export const FRAUD_INTERCEPT_KIND = 'fraud_intercept';
+
+const FRAUD_CATEGORY_LABELS: Record<string, string> = {
+  OTP_THEFT: 'OTP theft',
+  PAYMENT_FRAUD: 'Payment fraud',
+  REMOTE_ACCESS: 'Remote access',
+  PHISHING_IMPERSONATION: 'Phishing',
+  MALVERTISING: 'Scam ad',
+  MALICIOUS_APK: 'Malicious APK',
+  PRIVACY_RISK: 'Privacy risk',
+};
+
 /**
  * The shape every alert renderer needs. `AssistanceLog` satisfies it, and keeping
  * it structural lets the feed, the timeline and the dashboard share one set of
@@ -23,6 +36,10 @@ export function isGeofenceExitAlert(alert: AlertLike): boolean {
   return metadata(alert).kind === GEOFENCE_EXIT_KIND;
 }
 
+export function isFraudInterceptAlert(alert: AlertLike): boolean {
+  return metadata(alert).kind === FRAUD_INTERCEPT_KIND;
+}
+
 /** "stuck_loop" -> "Stuck loop"; the stored enum value is not for caregivers to read. */
 function humanizeEventType(eventType: string): string {
   const words = String(eventType || '').replace(/_/g, ' ').trim();
@@ -33,17 +50,19 @@ function humanizeEventType(eventType: string): string {
 /**
  * Headline for one alert.
  *
- * A safe-zone exit has to be stored as `event_type = 'emergency'` - it is the
- * only row type the CHECK constraint in migrations/004 accepts for it - so
- * rendering the raw enum told the caregiver "Emergency" with no hint that it was
- * a wander, or which zone was left. `screen_name` carries the fence label on
- * those rows, which is why it is the fallback for older alerts written before
- * `fence_label` existed.
+ * A safe-zone exit or fraud interception has to be stored as `event_type = 'emergency'` -
+ * it is the only row type the CHECK constraint in migrations/004 accepts for high-severity
+ * safety events - so `metadata.kind` distinguishes them for the caregiver feed.
  */
 export function alertTitle(alert: AlertLike): string {
   if (isGeofenceExitAlert(alert)) {
     const label = metadata(alert).fence_label || alert.screen_name;
     return label ? `Left safe zone "${label}"` : 'Left the safe zone';
+  }
+  if (isFraudInterceptAlert(alert)) {
+    const rawCat = String(metadata(alert).threat_category || '').trim().toUpperCase();
+    const catLabel = FRAUD_CATEGORY_LABELS[rawCat] || (rawCat ? humanizeEventType(rawCat.toLowerCase()) : '');
+    return catLabel ? `Scam blocked: ${catLabel}` : 'Scam blocked';
   }
   if (alert.event_type === 'battery_low') return 'Battery low';
   return humanizeEventType(alert.event_type);

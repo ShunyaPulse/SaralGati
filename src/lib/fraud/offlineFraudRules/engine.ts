@@ -111,10 +111,37 @@ const SAFE_WARNING_STRIPS: readonly RegExp[] = [
 
 const SAFE_ESCAPE_RE = RE_SAFE_ESCAPE;
 
+const INVISIBLE_FORMAT_CHARS = /[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
+
+const HOMOGRAPH_MAP: Record<string, string> = {
+  '\u0430': 'a',
+  '\u0435': 'e',
+  '\u0456': 'i',
+  '\u0458': 'j',
+  '\u043e': 'o',
+  '\u0440': 'p',
+  '\u0441': 'c',
+  '\u0443': 'y',
+  '\u0445': 'x',
+  '\u0455': 's',
+  '\u0432': 'b',
+  '\u044c': 'b',
+  '\u0442': 't',
+  '\u03b1': 'a',
+  '\u03b5': 'e',
+  '\u03bf': 'o',
+  '\u03c1': 'p',
+  '\u03ba': 'k',
+  '\u03bd': 'v',
+  '\u03c4': 't',
+};
+
+const HOMOGRAPH_CHARS = /[\u0430\u0435\u0456\u0458\u043e\u0440\u0441\u0443\u0445\u0455\u0432\u044c\u0442\u03b1\u03b5\u03bf\u03c1\u03ba\u03bd\u03c4]/g;
+
 /**
- * Normalise the elements the companion already extracted into lower-cased,
- * whitespace-collapsed lines, exactly like the server does, so a rule sees one
- * line at a time.
+ * Normalise the elements the companion already extracted into NFKC, zero-width
+ * stripped, homograph-defanged, lower-cased, whitespace-collapsed lines,
+ * mirroring the server sentinel.
  */
 export function normalizeOfflineFragments(elements: Iterable<string>): string[] {
   const fragments: string[] = [];
@@ -122,10 +149,13 @@ export function normalizeOfflineFragments(elements: Iterable<string>): string[] 
     if (typeof element !== 'string') continue;
     for (const line of element.split(/\r?\n/)) {
       const text = line
+        .normalize('NFKC')
+        .replace(INVISIBLE_FORMAT_CHARS, '')
         .replace(/\u00a0/g, ' ')
+        .toLowerCase()
+        .replace(HOMOGRAPH_CHARS, (ch) => HOMOGRAPH_MAP[ch] ?? ch)
         .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
+        .trim();
       if (text) fragments.push(text);
     }
   }

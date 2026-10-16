@@ -6,6 +6,7 @@ interface UIState {
   theme: 'light' | 'dark';
   notificationsEnabled: boolean;
   toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
   setTheme: (theme: 'light' | 'dark') => void;
   toggleNotifications: () => void;
 }
@@ -18,6 +19,7 @@ export const useUIStore = create<UIState>()(
       notificationsEnabled: true,
       
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       setTheme: (theme) => set({ theme }),
       toggleNotifications: () => set((state) => ({ notificationsEnabled: !state.notificationsEnabled })),
     }),

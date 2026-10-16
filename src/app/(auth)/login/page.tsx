@@ -14,6 +14,7 @@ export default function LoginPage() {
   const { status: sessionStatus } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [website, setWebsite] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [redirectTo, setRedirectTo] = useState('/dashboard');
@@ -71,7 +72,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/send-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, type: 'login', turnstileToken }),
+        body: JSON.stringify({ email, type: 'login', turnstileToken, website: website || undefined }),
       });
 
       const data = await res.json();
@@ -142,7 +143,14 @@ export default function LoginPage() {
           <form className="space-y-6" onSubmit={isOtpMode && !otpSent ? handleSendOtp : handleSubmit}>
             {/* Honeypot trap — invisible to humans, auto-filled by bots */}
             <div className="absolute" style={{ left: '-9999px', position: 'absolute' }} aria-hidden="true">
-              <input type="text" name="website" tabIndex={-1} autoComplete="off" />
+              <input
+                type="text"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
             </div>
 
             {error && (
@@ -218,7 +226,20 @@ export default function LoginPage() {
                   />
                 </div>
                 <p className="mt-2 text-sm text-gray-500 text-center">
-                  We sent a 6-digit code to {email}
+                  We sent a 6-digit code to {email}.{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOtpSent(false);
+                      setOtp('');
+                      setError('');
+                      setTurnstileToken('');
+                      setTurnstileKey(prev => prev + 1);
+                    }}
+                    className="font-medium text-[#0074c8] hover:text-blue-800 underline"
+                  >
+                    Change email or resend
+                  </button>
                 </p>
               </div>
             )}

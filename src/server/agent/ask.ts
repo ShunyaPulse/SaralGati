@@ -4,9 +4,9 @@ import { fail, ok, type ServiceResult } from '@/server/http';
 import crypto from "crypto";
 import { z } from "zod";
 import { generateAIResponse } from "@/lib/ai/aiFallback";
-import { cacheGet, cacheSet } from "@/lib/data/redis";
+import { cacheGet, cacheSet, getClientIp, rateLimiter } from "@/lib/data/redis";
 import { matchFastPathRule } from "@/lib/guidance/agentFastPath";
-import { pruneUITree } from "@/lib/guidance/uiPruner";
+import { pruneUITree, stripLeadingElementIndex } from "@/lib/guidance/uiPruner";
 import { evaluateMultiStepFlow } from "@/lib/data/flowEngine";
 import { formatRelevantFewShots } from "@/lib/ai/fewShotGrounding";
 import { validateSemanticTarget } from "@/lib/guidance/semanticValidator";
@@ -17,11 +17,11 @@ import { hasDevanagari, type GuidanceLang } from "@/lib/guidance/guidanceLanguag
 import { buildAskSystemPrompt } from "@/lib/guidance/guidancePrompt";
 import { normalizeScreenQuestion, screenCacheKey } from "@/lib/guidance/screenCache";
 import { sentinelExplanation, shouldInterceptFraud } from "@/lib/fraud/fraudSentinel";
+import { recordFraudInterceptAlert } from "./fraudCheck";
 import {
   analyzeForFraudWithAdvisor,
   INTERACTIVE_ADVISOR_TIMEOUT_MS,
 } from "@/lib/fraud/fraudAdvisor";
-import { rateLimiter } from "@/lib/data/redis";
 
 const askRequestSchema = z.object({
   app_package: z
@@ -127,7 +127,7 @@ export async function askForGuidance(req: NextRequest): Promise<ServiceResult> {
     const isFlywheel = isFlywheelRequest(req);
 
     const auth = isFlywheel
-      ? { isAuthenticated: true, elderId: undefined }
+      ? { isAuthenticated: true, elderId: undefined, caregiverId: undefined }
       : await validateDeviceToken(req);
 
     if (!auth.isAuthenticated) {
@@ -155,15 +155,20 @@ export async function askForGuidance(req: NextRequest): Promise<ServiceResult> {
     const {
       app_package: safeAppPackage,
       question: safeQuestion,
-      ui_elements: safeUIElements,
+      ui_elements: rawUIElements,
       conversation_history: safeConversationHistory,
       guidance_lang: guidanceLang,
     } = parseResult.data;
 
+    // Normalize elements by stripping any leading index prefix ("[0] " or "0:")
+    // so the Android Companion and the Cloud Flywheel produce identical stored
+    // ui_elements and identical screenHash values for the Golden Cache.
+    const safeUIElements = rawUIElements.map((el) => stripLeadingElementIndex(el));
+
     // 3. Apply strict AI processing rate limit (30 req/min per device/IP, 120 for flywheel)
     const rateLimitId = isFlywheel
       ? `ask:flywheel`
-      : `ask:device:${auth.elderId ?? req.headers.get("x-forwarded-for") ?? "anon"}`;
+      : `ask:device:${auth.elderId ?? getClientIp(req)}`;
     const rateLimit = await rateLimiter(rateLimitId, isFlywheel ? 120 : 30, 60);
     if (!rateLimit.allowed) {
       return fail(429, { success: false, error: "Too many queries. Please wait a moment." });
@@ -233,6 +238,14 @@ export async function askForGuidance(req: NextRequest): Promise<ServiceResult> {
       { timeoutMs: INTERACTIVE_ADVISOR_TIMEOUT_MS },
     );
     if (shouldInterceptFraud(fraudVerdict)) {
+      if (!isFlywheel && effectiveElderId) {
+        await recordFraudInterceptAlert({
+          elderId: effectiveElderId,
+          caregiverId: auth.caregiverId,
+          appPackage: safeAppPackage,
+          verdict: fraudVerdict,
+        });
+      }
       finalResult = {
         explanation: sentinelExplanation(fraudVerdict, guidanceLang),
         // Point the spotlight at the visible way out, not at the trap.

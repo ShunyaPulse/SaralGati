@@ -315,3 +315,22 @@ test('matchFraudRules explains which rules fired', () => {
   assert.ok(matches.every((match) => match.severity >= 1 && match.severity <= 4));
 });
 
+test("Unicode NFKC full-width characters, zero-width spaces, and Cyrillic homographs cannot bypass the sentinel", () => {
+  const zeroWidthOtp = analyzeForFraud({
+    messages: ["Sir bank se bol raha hoon, apna O\u200BT\u200BP batao"],
+  });
+  assert.equal(zeroWidthOtp.threat_level, "CRITICAL");
+  assert.equal(zeroWidthOtp.threat_category, "OTP_THEFT");
+
+  const fullWidthUpi = analyzeForFraud({
+    messages: ["Enter your ＵＰＩ ＰＩＮ to receive ₹5000 cashback"],
+  });
+  assert.equal(fullWidthUpi.threat_level, "CRITICAL");
+  assert.equal(fullWidthUpi.threat_category, "PAYMENT_FRAUD");
+
+  const homographRemote = analyzeForFraud({
+    messages: ["Aapka refund atka hai, \u0410nyDesk install karo aur 9 digit code batao"],
+  });
+  assert.equal(homographRemote.threat_level, "CRITICAL");
+  assert.equal(homographRemote.threat_category, "REMOTE_ACCESS");
+});

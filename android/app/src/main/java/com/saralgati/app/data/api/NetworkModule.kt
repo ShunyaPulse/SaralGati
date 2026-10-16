@@ -2,11 +2,12 @@ package com.saralgati.app.data.api
 
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
-import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import android.util.Base64
@@ -15,41 +16,64 @@ object NetworkModule {
     private const val BASE_URL = "https://saralgati-685823552970.asia-south1.run.app/"
 
     var tokenProvider: (() -> String?)? = null
+    var baseUrlProvider: (() -> String?)? = null
 
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
 
+    // Gate HTTP body logging on DEBUG builds and redact sensitive auth headers so
+    // release APKs never leak elder screen text or credentials to system logcat.
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = if (com.saralgati.app.BuildConfig.DEBUG) {
+            HttpLoggingInterceptor.Level.BODY
+        } else {
+            HttpLoggingInterceptor.Level.NONE
+        }
+        redactHeader("Authorization")
+        redactHeader("X-App-Signature")
     }
 
-    // In a real app this should be obfuscated or fetched from native C++,
-    // but for the purpose of the prototype we use a hardcoded fallback or BuildConfig variable.
     private val API_SECRET: String = com.saralgati.app.BuildConfig.API_SECRET
 
     private val authInterceptor = okhttp3.Interceptor { chain ->
         val original = chain.request()
         val token = tokenProvider?.invoke()
 
+        // Honour dynamic api_url from QR pairing when present so self-hosted or
+        // staging deployments talk to the exact server that minted the token.
+        val configuredBase = baseUrlProvider?.invoke()?.trim()?.takeIf { it.isNotEmpty() }
+            ?.toHttpUrlOrNull()
+        val effectiveUrl = if (configuredBase != null) {
+            original.url.newBuilder()
+                .scheme(configuredBase.scheme)
+                .host(configuredBase.host)
+                .port(configuredBase.port)
+                .build()
+        } else {
+            original.url
+        }
+
         val timestamp = System.currentTimeMillis().toString()
-        val path = original.url.encodedPath
+        val path = effectiveUrl.encodedPath
         val method = original.method
         val message = "$method$path$timestamp"
 
         val requestBuilder = original.newBuilder()
+            .url(effectiveUrl)
             .header("X-App-Timestamp", timestamp)
 
-        try {
-            val secret = if (API_SECRET.isNotBlank()) API_SECRET else "YOUR_API_SECRET"
-            val mac = Mac.getInstance("HmacSHA256")
-            val secretKey = SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256")
-            mac.init(secretKey)
-            val signatureBytes = mac.doFinal(message.toByteArray(Charsets.UTF_8))
-            val signature = Base64.encodeToString(signatureBytes, Base64.NO_WRAP)
-            requestBuilder.header("X-App-Signature", signature)
-        } catch (e: Exception) {
-            android.util.Log.e("NetworkModule", "HMAC signing error: ${e.message}")
+        if (API_SECRET.isNotBlank()) {
+            try {
+                val mac = Mac.getInstance("HmacSHA256")
+                val secretKey = SecretKeySpec(API_SECRET.toByteArray(Charsets.UTF_8), "HmacSHA256")
+                mac.init(secretKey)
+                val signatureBytes = mac.doFinal(message.toByteArray(Charsets.UTF_8))
+                val signature = Base64.encodeToString(signatureBytes, Base64.NO_WRAP)
+                requestBuilder.header("X-App-Signature", signature)
+            } catch (e: Exception) {
+                android.util.Log.e("NetworkModule", "HMAC signing error: ${e.message}")
+            }
         }
 
         if (!token.isNullOrBlank() && original.header("Authorization") == null) {
@@ -60,6 +84,10 @@ object NetworkModule {
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .addInterceptor(authInterceptor)
         .addInterceptor(loggingInterceptor)
         .build()

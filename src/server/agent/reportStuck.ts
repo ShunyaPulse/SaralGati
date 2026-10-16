@@ -24,12 +24,13 @@ export async function reportStuck(request: Request): Promise<ServiceResult> {
     const duration_ms = validatedData.duration_ms || 0;
     const isHighPriority = duration_ms > 120000; // 2 minutes
 
-    // Determine severity
-    const severity = isHighPriority ? 'HIGH' : 'MEDIUM';
+    // Lowercase severity to match normalizeSeverity and androidAlertSchema
+    const severity = isHighPriority ? 'high' : 'medium';
     
     const metadata = {
       loop_count: validatedData.loop_count,
-      severity
+      severity,
+      description: `Elder appears stuck in a loop on ${validatedData.screen_name || 'screen'} (${validatedData.app_package})`,
     };
 
     // Insert into assistance logs
@@ -55,8 +56,6 @@ export async function reportStuck(request: Request): Promise<ServiceResult> {
 
     // Invalidate alerts cache for the caregiver
     await invalidatePattern(`alerts:${caregiverId}*`);
-
-    // In a real system, trigger a push notification to caregiver if isHighPriority
 
     return ok({
       success: true,

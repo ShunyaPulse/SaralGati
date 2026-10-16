@@ -23,6 +23,11 @@ export const REJECTED_GUIDANCE_COPY: Record<GuidanceLang, string> = {
   hi: "Ispe click karein.",
 };
 
+const FALLBACK_REJECTED_COPY: Record<GuidanceLang, string> = {
+  en: "Select this option.",
+  hi: "Yeh vikalp chunein.",
+};
+
 export interface ExportInteraction {
   id: string;
   lang: GuidanceLang;
@@ -111,9 +116,18 @@ export function buildSftSample(row: ExportInteraction) {
   };
 }
 
-/** One DPO row: the language-correct answer beats the wrong pick. */
+/**
+ * One DPO row: the language-correct answer beats the wrong pick.
+ * Guarantees contrastive phrasing between `chosen` and `rejected` so pairs
+ * never contain identical explanation text differing only by `TARGET:[idx]`.
+ */
 export function buildDpoSample(row: ExportInteraction) {
-  const languageCopy = REJECTED_GUIDANCE_COPY[row.lang];
+  const chosenExplanation = (row.explanation ?? "").trim();
+  const primaryRejected = REJECTED_GUIDANCE_COPY[row.lang];
+  const languageCopy =
+    chosenExplanation.toLowerCase() === primaryRejected.toLowerCase()
+      ? FALLBACK_REJECTED_COPY[row.lang]
+      : primaryRejected;
 
   return {
     prompt: [

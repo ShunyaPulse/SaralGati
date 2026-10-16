@@ -1,6 +1,6 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { queryOne } from '@/lib/data/db';
-import { rateLimiter, getSubnet } from '@/lib/data/redis';
+import { rateLimiter, getSubnet, getClientIp } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 
 /** GET /api/auth/check-email - sign-up availability probe, rate limited three ways. */
@@ -22,7 +22,7 @@ export async function checkEmail(req: Request): Promise<ServiceResult> {
     }
 
     // Rate limit check requests per IP: 60 checks per minute
-    const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+    const ip = getClientIp(req);
     const subnet = getSubnet(ip);
     const cookieStore = await cookies();
     const devId = cookieStore.get('__sg_dev_id')?.value;

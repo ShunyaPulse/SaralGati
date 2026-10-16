@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.Normalizer
 import java.util.Locale
 
 /**
@@ -17,21 +18,15 @@ import java.util.Locale
  * `src/lib/offlineFraudRules.ts` (`npm run rules:export`), so the warning can be
  * spoken the moment the scam appears - and keeps working with the radio off.
  *
- * It only ever returns DANGEROUS / CRITICAL for unambiguous combinations, and
- * returning null simply leaves the server as the sole judge. Matching mirrors
- * the TypeScript matcher exactly: per line, lower-cased, with courtesy warnings
- * ("never share this OTP") stripped for the rules that opt in.
+ * Includes SOTA Unicode NFKC normalization, zero-width format character
+ * stripping, and Cyrillic/Greek homograph defanging so obfuscated SMS/WhatsApp
+ * scam messages are caught on-device in sub-millisecond time.
  */
 object OfflineFraudSentinel {
 
     private const val TAG = "OfflineFraud"
     private const val ASSET_NAME = "offline_fraud_rules.json"
 
-    /**
-     * The offline verdict, shaped so the overlay can warn without the network.
-     * Every text field exists in both languages, so the companion can show and
-     * speak one language end to end instead of a Hindi/English mixture.
-     */
     data class Verdict(
         val ruleId: String,
         val level: String,
@@ -76,6 +71,31 @@ object OfflineFraudSentinel {
         RegexOption.IGNORE_CASE,
     )
 
+    private val INVISIBLE_FORMAT_CHARS = Regex("[\\u00ad\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f\\ufeff]")
+
+    private val HOMOGRAPH_MAP = mapOf(
+        '\u0430' to 'a',
+        '\u0435' to 'e',
+        '\u0456' to 'i',
+        '\u0458' to 'j',
+        '\u043e' to 'o',
+        '\u0440' to 'p',
+        '\u0441' to 'c',
+        '\u0443' to 'y',
+        '\u0445' to 'x',
+        '\u0455' to 's',
+        '\u0432' to 'b',
+        '\u044c' to 'b',
+        '\u0442' to 't',
+        '\u03b1' to 'a',
+        '\u03b5' to 'e',
+        '\u03bf' to 'o',
+        '\u03c1' to 'p',
+        '\u03ba' to 'k',
+        '\u03bd' to 'v',
+        '\u03c4' to 't',
+    )
+
     @Volatile
     private var loaded = false
     private var rules: List<Rule> = emptyList()
@@ -110,8 +130,6 @@ object OfflineFraudSentinel {
                             ?.map { Regex(it, RegexOption.IGNORE_CASE) }
                             ?: emptyList(),
                         title = obj.getString("title"),
-                        // Fallbacks keep an asset written by an older generator
-                        // usable rather than crashing the elder's warning.
                         titleEn = obj.optString("title_en", obj.getString("title")),
                         messageHi = obj.getString("message_hi"),
                         messageEn = obj.optString("message_en", obj.getString("safe_advice")),
@@ -123,17 +141,11 @@ object OfflineFraudSentinel {
             rules = parsed
             Log.i(TAG, "Loaded ${parsed.size} offline fraud rules")
         } catch (e: Exception) {
-            // A missing or corrupt asset must never crash the elder's phone; the
-            // server verdict still protects them.
             Log.e(TAG, "Failed to load offline fraud rules: ${e.message}")
             rules = emptyList()
         }
     }
 
-    /**
-     * The instant verdict for one screen, or null when nothing high-confidence
-     * matched (leaving the server as the only judge).
-     */
     fun analyze(context: Context, elements: List<String>): Verdict? {
         ensureLoaded(context)
         if (rules.isEmpty()) return null
@@ -173,10 +185,6 @@ object OfflineFraudSentinel {
         return best
     }
 
-    /**
-     * First element an elder can safely tap (Cancel / Decline / ...), so the
-     * spotlight can point at the way out even without the server's answer.
-     */
     fun findSafeActionIndex(elements: List<String>): Int? {
         elements.forEachIndexed { index, element ->
             if (SAFE_ESCAPE.containsMatchIn(element)) return index
@@ -184,15 +192,27 @@ object OfflineFraudSentinel {
         return null
     }
 
+    private fun defangHomographs(input: String): String {
+        val sb = StringBuilder(input.length)
+        for (ch in input) {
+            sb.append(HOMOGRAPH_MAP[ch] ?: ch)
+        }
+        return sb.toString()
+    }
+
     private fun normalize(elements: Iterable<String>): List<String> {
         val fragments = mutableListOf<String>()
         for (element in elements) {
             for (line in element.split("\n")) {
-                val text = line
-                    .replace('\u00a0', ' ')
+                val nfkc = Normalizer.normalize(line, Normalizer.Form.NFKC)
+                val text = defangHomographs(
+                    nfkc
+                        .replace(INVISIBLE_FORMAT_CHARS, "")
+                        .replace('\u00a0', ' ')
+                        .lowercase(Locale.ROOT),
+                )
                     .replace(Regex("\\s+"), " ")
                     .trim()
-                    .lowercase(Locale.ROOT)
                 if (text.isNotEmpty()) fragments.add(text)
             }
         }

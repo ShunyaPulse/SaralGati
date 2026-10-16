@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PlusCircle, Search, Users } from 'lucide-react';
 import { ElderCard } from '@/components/elders/elder-card';
@@ -8,7 +8,7 @@ import { ElderForm } from '@/components/elders/elder-form';
 import { useElderStore } from '@/stores/elder-store';
 import { Modal } from '@/components/ui/modal';
 
-export default function EldersPage() {
+function EldersPageContent() {
   const searchParams = useSearchParams();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -104,5 +104,21 @@ export default function EldersPage() {
         />
       </Modal>
     </div>
+  );
+}
+
+export default function EldersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="animate-pulse bg-white h-64 rounded-xl border border-slate-200" />
+          ))}
+        </div>
+      }
+    >
+      <EldersPageContent />
+    </Suspense>
   );
 }

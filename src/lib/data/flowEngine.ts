@@ -1,5 +1,7 @@
 import { cacheGet, cacheSet, cacheDelete } from './redis';
 import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
+import { elementLabelLower, isActionableElement } from '@/lib/guidance/uiElement';
+import { isNoiseElement } from '@/lib/guidance/noiseElement';
 
 import {
   FlowStep,
@@ -33,14 +35,6 @@ export const MULTI_STEP_FLOWS: MultiStepFlowDefinition[] = ALL_PLAYBOOKS;
 
 const FLOW_TTL_SECONDS = 900; // 15 minutes session TTL
 
-/**
- * The spoken line for one step, in the elder's language.
- *
- * Hindi uses the hand-written Hinglish sentence the playbook carries. English
- * names the same element through the step label, which is already English and
- * matches what the spotlight is drawing attention to, so an English elder is
- * never read the Hindi instruction instead.
- */
 export function flowStepInstruction(
   step: FlowStep,
   totalSteps: number,
@@ -52,12 +46,11 @@ export function flowStepInstruction(
   return step.hindiInstruction;
 }
 
-function findMatchingElement(uiElements: string[], keywords: string[]): number {
+export function findMatchingElement(uiElements: string[], keywords: string[]): number {
   return uiElements.findIndex((el) => {
-    const clean = el.replace(/^\[BELOW-FOLD\]\s*/i, '');
-    const isActionable = clean.startsWith('[BUTTON]') || clean.startsWith('[INPUT]') || clean.startsWith('[TOGGLE]');
-    if (!isActionable) return false;
-    const lower = clean.toLowerCase();
+    if (!isActionableElement(el)) return false;
+    const lower = elementLabelLower(el);
+    if (!lower || isNoiseElement(lower, { actionable: true })) return false;
     return keywords.some((k) => lower.includes(k.toLowerCase()));
   });
 }
@@ -78,8 +71,9 @@ export async function clearFlowSession(elderId: string): Promise<void> {
 }
 
 /**
- * Multi-Step Flow Evaluator:
- * Tracks multi-turn tasks across screen navigations and advances steps seamlessly.
+ * Multi-Step Flow Evaluator with Forward Step-Lookahead (Skip-Step Recovery):
+ * Tracks multi-turn tasks across screen navigations and automatically fast-forwards
+ * if the app skipped an intermediate screen (e.g. already logged in or pre-selected tab).
  */
 export async function evaluateMultiStepFlow(
   elderId: string | undefined,
@@ -99,25 +93,24 @@ export async function evaluateMultiStepFlow(
 
   const existingSession = await getFlowSession(elderId);
 
-  // 2. Active Existing Flow Path
+  // 2. Active Existing Flow Path (with Forward Step-Lookahead for skip-step recovery)
   if (existingSession) {
     const flowDef = getPlaybookById(existingSession.flowId);
     if (flowDef) {
-      const currentStepDef = flowDef.steps.find((s) => s.stepNumber === existingSession.currentStep);
-      if (currentStepDef) {
-        const matchIdx = findMatchingElement(uiElements, currentStepDef.expectedKeywords);
+      const candidateSteps = flowDef.steps.filter(
+        (s) => s.stepNumber >= existingSession.currentStep
+      );
+      for (const stepDef of candidateSteps) {
+        const matchIdx = findMatchingElement(uiElements, stepDef.expectedKeywords);
         if (matchIdx !== -1) {
-          // Found matching target for current step
-          const isFinalStep = existingSession.currentStep >= flowDef.steps.length;
+          const isFinalStep = stepDef.stepNumber >= flowDef.steps.length;
 
           if (isFinalStep) {
-            // Flow completed! Clear session
             await clearFlowSession(elderId);
           } else {
-            // Advance to next step for the subsequent screen
             await setFlowSession(elderId, {
               ...existingSession,
-              currentStep: existingSession.currentStep + 1,
+              currentStep: stepDef.stepNumber + 1,
               lastUpdated: Date.now()
             });
           }
@@ -125,11 +118,11 @@ export async function evaluateMultiStepFlow(
           return {
             isFlowActive: true,
             flowId: flowDef.id,
-            currentStep: currentStepDef.stepNumber,
+            currentStep: stepDef.stepNumber,
             totalSteps: flowDef.steps.length,
-            stepLabel: currentStepDef.label,
+            stepLabel: stepDef.label,
             explanation: flowStepInstruction(
-              currentStepDef,
+              stepDef,
               flowDef.steps.length,
               lang
             ),
@@ -147,10 +140,9 @@ export async function evaluateMultiStepFlow(
     if (step1) {
       const matchIdx = findMatchingElement(uiElements, step1.expectedKeywords);
       if (matchIdx !== -1) {
-        // Initialize flow in Redis
         await setFlowSession(elderId, {
           flowId: matchingPlaybook.id,
-          currentStep: 2, // Next expected step
+          currentStep: 2,
           totalSteps: matchingPlaybook.steps.length,
           goal: question,
           lastUpdated: Date.now()

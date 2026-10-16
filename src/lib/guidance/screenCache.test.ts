@@ -88,6 +88,10 @@ describe('the spoken line for a corrected answer', () => {
       correctionExplanation({ elementLabel: '4:[BELOW-FOLD] [BUTTON] PNR Enquiry', lang: 'en' }),
       'Tap "PNR Enquiry" here.',
     );
+    assert.equal(
+      correctionExplanation({ elementLabel: '[3] [BUTTON] Calls', lang: 'en' }),
+      'Tap "Calls" here.',
+    );
   });
 
   test('a long label is trimmed rather than read out in full', () => {

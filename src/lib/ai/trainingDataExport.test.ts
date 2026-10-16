@@ -103,7 +103,7 @@ describe('exported training rows teach the elder\u2019s language', () => {
     assert.deepEqual(summarizeLanguageCoverage(trainable), { hi: 2, en: 1 });
   });
 
-  test('a DPO correction contrasts in the elder\u2019s own language', () => {
+  test('a DPO correction contrasts in the elder\u2019s own language and never duplicates chosen copy', () => {
     const english = buildDpoSample({
       ...base,
       lang: 'en',
@@ -120,6 +120,19 @@ describe('exported training rows teach the elder\u2019s language', () => {
       true,
     );
     assert.equal(english.metadata.guidance_lang, 'en');
+
+    // If a legacy row has explanation === 'Tap here.', rejected copy switches so chosen != rejected text
+    const fallbackEnglish = buildDpoSample({
+      ...base,
+      lang: 'en',
+      explanation: 'Tap here.',
+      targetIndex: 1,
+      rejectedIndex: 0,
+    });
+    assert.notEqual(
+      fallbackEnglish.chosen[0].content.replace(/TARGET:\d+$/, '').trim(),
+      fallbackEnglish.rejected[0].content.replace(/TARGET:\d+$/, '').trim(),
+    );
 
     const hindi = buildDpoSample({
       ...base,

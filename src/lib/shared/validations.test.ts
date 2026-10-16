@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { elderPreferencesSchema, habitRuleSchema, heartbeatSchema } from './validations';
+import {
+  elderPreferencesSchema,
+  habitRuleSchema,
+  heartbeatSchema,
+  reportStuckSchema,
+  syncHabitsSchema,
+} from './validations';
 
 const firstMessage = (result: { success: boolean; error?: { issues: Array<{ message: string }> } }) =>
   result.success ? '' : result.error!.issues[0]?.message;
@@ -84,4 +90,21 @@ test('non-location rules are untouched by the geofence rule', () => {
   assert.equal(parsed.success, true);
   assert.equal(parsed.data!.confidence, 0.5);
   assert.equal(parsed.data!.is_active, true);
+});
+
+test('syncHabitsSchema and reportStuckSchema accept Bearer-authenticated Android companion payloads', () => {
+  const habitParsed = syncHabitsSchema.safeParse({
+    battery_level: 0,
+    habits: [{ type: 'device_preference', payload: { font_scale: 1.3 } }],
+  });
+  assert.equal(habitParsed.success, true);
+  assert.equal(habitParsed.data!.battery_level, 0);
+
+  const stuckParsed = reportStuckSchema.safeParse({
+    screen_name: 'PaymentActivity',
+    app_package: 'com.phonepe.app',
+    duration_ms: 45000,
+    loop_count: 3,
+  });
+  assert.equal(stuckParsed.success, true);
 });

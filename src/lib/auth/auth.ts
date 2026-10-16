@@ -94,6 +94,7 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === 'google') {
         const { email, name, image } = user;
         if (!email) return false;
+        const cleanEmail = email.trim().toLowerCase();
 
         try {
           await query(
@@ -103,17 +104,18 @@ export const authOptions: NextAuthOptions = {
             ON CONFLICT (email) 
             DO UPDATE SET name = EXCLUDED.name, image = EXCLUDED.image, updated_at = CURRENT_TIMESTAMP
             `,
-            [email, name || '', image || '']
+            [cleanEmail, name || '', image || '']
           );
           
           const dbUser = await queryOne<{ id: string; role: string }>(
-            'SELECT id, role FROM users WHERE email = $1',
-            [email]
+            'SELECT id, role FROM users WHERE LOWER(TRIM(email)) = $1',
+            [cleanEmail]
           );
           
           if (dbUser) {
             user.id = dbUser.id;
             user.role = dbUser.role;
+            user.email = cleanEmail;
           }
           return true;
         } catch (error) {

@@ -10,7 +10,8 @@ import { ElderProfile, ApiResponse } from '@/types';
 /**
  * GET /api/elders/:id - three callers on one URL: the caregiver dashboard, the
  * paired companion app (device token), and the pairing handshake that only needs
- * to know the elder exists. Thinner payloads as trust decreases.
+ * to know the elder exists (by Elder UUID or `sg_...` manual pairing token).
+ * Thinner payloads as trust decreases, and `device_token` is never echoed back.
  */
 export async function getElder(
   request: Request,
@@ -33,26 +34,30 @@ export async function getElder(
       return ok({ success: true, data: toApiElder(elder) });
     }
 
-    // Companion app / device token check
+    // Companion app / device token check: a paired device may only inspect its own elder profile
     const auth = await validateDeviceToken(request);
-    if (auth.isAuthenticated) {
+    if (auth.isAuthenticated && auth.elderId) {
       const elder = await queryOne<ElderProfile>(
-        `SELECT * FROM elder_profiles WHERE id = $1 AND is_active = true`,
-        [elderId]
+        `SELECT * FROM elder_profiles
+         WHERE id = $1 AND (id::text = $2 OR device_token = $2) AND is_active = true`,
+        [auth.elderId, elderId]
       );
       if (elder) {
-        return ok({ success: true, data: elder });
+        return ok({ success: true, data: toApiElder(elder) });
       }
     }
 
-    // Public existence check for initial pairing handshake
-    const existingElder = await queryOne<{ id: string; elder_name: string; is_active: boolean }>(
-      `SELECT id, elder_name, is_active FROM elder_profiles WHERE id::text = $1 AND is_active = true`,
+    // Public existence check for initial pairing handshake (accepts Elder UUID or sg_... pairing token)
+    const existingElder = await queryOne<ElderProfile>(
+      `SELECT id, caregiver_id, elder_name, phone_model, os_version, battery_status,
+              emergency_contact, preferred_lang, last_heartbeat, is_active
+       FROM elder_profiles
+       WHERE (id::text = $1 OR device_token = $1) AND is_active = true`,
       [elderId]
     );
 
     if (existingElder) {
-      return ok({ success: true, data: existingElder as any });
+      return ok({ success: true, data: toApiElder(existingElder) });
     }
 
     return fail(404, { success: false, error: 'Elder not found' });

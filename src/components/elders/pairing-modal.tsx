@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
+import { useElderStore } from '@/stores/elder-store';
 import { Copy, Check, Download, Smartphone, RefreshCw, AlertCircle, QrCode } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,6 +18,7 @@ interface PairingModalProps {
 }
 
 export function PairingModal({ elderId, elderName, isPaired = false, isOpen, onClose }: PairingModalProps) {
+  const fetchElders = useElderStore((state) => state.fetchElders);
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [token, setToken] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
@@ -40,6 +42,7 @@ export function PairingModal({ elderId, elderName, isPaired = false, isOpen, onC
 
       const rawToken = data.data.token;
       setToken(rawToken);
+      await fetchElders();
 
       const pairingPayload = JSON.stringify({
         app: 'SaralGati',

@@ -13,6 +13,8 @@ data class SyncHabitPayload(
 /** Body of `/api/v1/agent/sync-habits`: what the phone learned since the last sync. */
 @JsonClass(generateAdapter = true)
 data class SyncHabitsRequest(
+    @Json(name = "device_token") val deviceToken: String? = null,
     @Json(name = "battery_level") val batteryLevel: Int?,
-    val habits: List<SyncHabitPayload>
+    val habits: List<SyncHabitPayload>,
+    val timestamp: String? = null
 )

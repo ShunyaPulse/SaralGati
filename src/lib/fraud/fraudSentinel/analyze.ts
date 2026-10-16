@@ -41,8 +41,44 @@ const MAX_FRAGMENT_CHARS = 4000;
 const MAX_TRIGGERS = 12;
 const MAX_TRIGGER_SNIPPET = 60;
 
-function normalizeText(value: string): string {
-  return value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+/** Zero-width spaces, soft hyphens, and bidirectional formatting controls used to evade regexes. */
+const INVISIBLE_FORMAT_CHARS = /[\u00ad\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/g;
+
+/** Common Cyrillic/Greek lookalike codepoints used in homograph phishing attacks. */
+const HOMOGRAPH_MAP: Record<string, string> = {
+  '\u0430': 'a', // Cyrillic а
+  '\u0435': 'e', // Cyrillic е
+  '\u0456': 'i', // Cyrillic і
+  '\u0458': 'j', // Cyrillic ј
+  '\u043e': 'o', // Cyrillic о
+  '\u0440': 'p', // Cyrillic р
+  '\u0441': 'c', // Cyrillic с
+  '\u0443': 'y', // Cyrillic у
+  '\u0445': 'x', // Cyrillic х
+  '\u0455': 's', // Cyrillic ѕ
+  '\u0432': 'b', // Cyrillic в
+  '\u044c': 'b', // Cyrillic ь
+  '\u0442': 't', // Cyrillic т
+  '\u03b1': 'a', // Greek α
+  '\u03b5': 'e', // Greek ε
+  '\u03bf': 'o', // Greek ο
+  '\u03c1': 'p', // Greek ρ
+  '\u03ba': 'k', // Greek κ
+  '\u03bd': 'v', // Greek ν
+  '\u03c4': 't', // Greek τ
+};
+
+const HOMOGRAPH_CHARS = /[\u0430\u0435\u0456\u0458\u043e\u0440\u0441\u0443\u0445\u0455\u0432\u044c\u0442\u03b1\u03b5\u03bf\u03c1\u03ba\u03bd\u03c4]/g;
+
+export function normalizeText(value: string): string {
+  return value
+    .normalize('NFKC')
+    .replace(INVISIBLE_FORMAT_CHARS, '')
+    .replace(/\u00a0/g, ' ')
+    .toLowerCase()
+    .replace(HOMOGRAPH_CHARS, (ch) => HOMOGRAPH_MAP[ch] ?? ch)
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**

@@ -100,8 +100,14 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     // Reset title if it was loading
                     val titleView = expandedView.findViewWithTag<TextView>("titleView")
                     val curLang = localPrefs.getAppLanguage()
-                    if (titleView?.text == "सोच रहा है..." || titleView?.text == "Thinking...") {
-                        titleView.text = AppStrings.assistantTitle(curLang)
+                    val currentTitle = titleView?.text?.toString()
+                    if (
+                        currentTitle == AppStrings.thinking(curLang) ||
+                        currentTitle == "सोच रहा है..." ||
+                        currentTitle == "सोच रहा हूँ..." ||
+                        currentTitle == "Thinking..."
+                    ) {
+                        titleView?.text = AppStrings.assistantTitle(curLang)
                     }
                 }
             } else if (action == com.saralgati.app.services.accessibility.SaralGatiAccessibilityService.ACTION_SHOW_VISUAL_CUE ||
@@ -341,6 +347,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                     val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
                     val text: String? = matches?.firstOrNull()
                     if (text != null && text.isNotEmpty()) {
+                        val curLang = localPrefs.getAppLanguage()
+                        expandedView.findViewWithTag<TextView>("titleView")?.text = AppStrings.thinking(curLang)
                         val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_AND_ASK").apply {
                             setPackage(packageName)
                             putExtra("question", text)
@@ -778,11 +786,22 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         isRunning = false
         removeCurrentHighlight()
         if (isExpanded) {
-            windowManager.removeView(expandedView)
-        } else {
-            if (this::bubbleView.isInitialized) {
-                windowManager.removeView(bubbleView)
+            try {
+                windowManager.removeView(expandedView)
+            } catch (_: Exception) {
             }
+        } else if (this::bubbleView.isInitialized) {
+            try {
+                windowManager.removeView(bubbleView)
+            } catch (_: Exception) {
+            }
+        }
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+            speechRecognizer = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error destroying SpeechRecognizer: ${e.message}")
         }
         if (this::tts.isInitialized) {
             tts.stop()
@@ -798,7 +817,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         } catch (e: Exception) {
             Log.e(TAG, "Screen state receiver not registered")
         }
-        Log.i(TAG, "Floating Helper Service destroyed")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

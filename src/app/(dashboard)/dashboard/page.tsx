@@ -19,7 +19,7 @@ export default function DashboardPage() {
   useEffect(() => {
     setIsMounted(true);
     fetchElders();
-    fetchAlerts();
+    fetchAlerts({ status: 'all', limit: 50 });
   }, [fetchElders, fetchAlerts]);
 
   if (!isMounted) {
@@ -46,7 +46,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold text-slate-900">
             Welcome back, {session?.user?.name || 'Caregiver'}
           </h1>
-          <p className="text-slate-500 mt-1">Here's what's happening with your loved ones today.</p>
+          <p className="text-slate-500 mt-1">Here&apos;s what&apos;s happening with your loved ones today.</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <Link

@@ -127,6 +127,29 @@ export async function recordFeedback(req: NextRequest): Promise<ServiceResult> {
     // the elder actually tapped instead of caching a contentless "Tap here.".
     const uiElements = parseUiElements(updatedRow.ui_elements);
 
+    // When a rejected interaction carries a valid corrected index, enrich the
+    // persisted explanation with the tapped element's label so SFT and DPO
+    // exports train on specific grounded guidance rather than a generic stub.
+    if (
+      newStatus === 'rejected' &&
+      sanitizedIndex !== null &&
+      sanitizedIndex !== updatedRow.suggested_index
+    ) {
+      const groundedCorrection = correctionExplanation({
+        elementLabel: uiElements[sanitizedIndex],
+        lang,
+      });
+      if (groundedCorrection !== updatedRow.explanation) {
+        updatedRow.explanation = groundedCorrection;
+        await queryOne(
+          `UPDATE model_interactions SET explanation = $1, updated_at = NOW() WHERE id = $2::uuid`,
+          [groundedCorrection, interaction_id]
+        ).catch((err) => {
+          console.error('Failed to persist grounded correction explanation:', err);
+        });
+      }
+    }
+
     const statsKey = `screen_stats:${updatedRow.screen_hash}:${normalizedQuestion}`;
     // Same builder the ask route uses, so a promotion/eviction lands on the key
     // that route actually reads - and on the one for the elder's language.

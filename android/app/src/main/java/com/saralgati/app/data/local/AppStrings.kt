@@ -41,6 +41,18 @@ object AppStrings {
     fun startHelperNow(lang: String): String =
         if (lang == "en") "🚀 Start Helper Now" else "🚀 अभी हेल्पर शुरू करें"
 
+    fun sosBtn(lang: String): String =
+        if (lang == "en") "🚨 Send Emergency SOS Alert" else "🚨 आपातकालीन (SOS) अलर्ट भेजें"
+
+    fun sosSending(lang: String): String =
+        if (lang == "en") "Sending SOS Alert..." else "SOS अलर्ट भेजा जा रहा है..."
+
+    fun sosSentSuccess(lang: String): String =
+        if (lang == "en") "Success: Emergency SOS sent to your caregiver!" else "Success: आपके Caregiver को SOS अलर्ट भेज दिया गया है!"
+
+    fun sosSentError(lang: String): String =
+        if (lang == "en") "Could not send SOS alert. Please check connection." else "SOS अलर्ट नहीं जा सका। कृपया इंटरनेट जांचें।"
+
     fun tabProtection(lang: String): String =
         if (lang == "en") "Protection" else "सुरक्षा"
 
@@ -76,8 +88,8 @@ object AppStrings {
         if (lang == "en") "SaralGati Setup" else "सरलगति सेटअप"
 
     fun setupSubtitle(lang: String): String =
-        if (lang == "en") "Enter the 6-digit code from caregiver dashboard or scan QR code."
-        else "Caregiver डैशबोर्ड से 6 digit कोड डालें या QR स्कैन करें।"
+        if (lang == "en") "Scan the QR code from the caregiver dashboard or enter your Pairing Token."
+        else "Caregiver डैशबोर्ड से QR कोड स्कैन करें या पेयरिंग टोकन डालें।"
 
     fun scanQrBtn(lang: String): String =
         if (lang == "en") "📷 Scan QR Code" else "📷 QR कोड स्कैन करें"
@@ -89,7 +101,7 @@ object AppStrings {
         if (lang == "en") "— OR —" else "— या —"
 
     fun enterCodeLabel(lang: String): String =
-        if (lang == "en") "Pairing Code" else "पेयरिंग कोड"
+        if (lang == "en") "Pairing Token / Elder ID" else "पेयरिंग टोकन / Elder ID"
 
     fun connectBtn(lang: String): String =
         if (lang == "en") "Connect" else "कनेक्ट करें"
@@ -98,7 +110,7 @@ object AppStrings {
         if (lang == "en") "Connecting..." else "कनेक्ट हो रहा है..."
 
     fun enterElderIdPlaceholder(lang: String): String =
-        if (lang == "en") "6-digit code (e.g. 582194)" else "6 digit कोड (जैसे 582194)"
+        if (lang == "en") "Token (e.g. sg_...) or Elder ID" else "टोकन (जैसे sg_...) या Elder ID"
 
     // -------------------------------------------------------------
     // Phone Doctor Screen

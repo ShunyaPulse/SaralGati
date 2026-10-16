@@ -1,24 +1,15 @@
 /**
- * Self-consistency voting - the cheapest well-established accuracy technique
- * that works on small models (Wang et al., 2022, "Self-Consistency Improves
- * Chain-of-Thought Reasoning in Language Models").
+ * Confidence-Weighted Self-Consistency Voting (Wang et al., 2022; Luo et al.,
+ * Weighted Self-Consistency).
  *
- * The idea: one sample from a stochastic decoder is a guess, several samples
- * that *agree* are evidence. Instead of asking the model once and trusting the
- * first thing it says, ask it k times, run every sample through the same
- * semantic validator the route applies, and keep the answer the samples agree
- * on - the answer a plurality of independent draws supports.
+ * One sample from a stochastic decoder is a guess, several samples that *agree*
+ * are evidence. Each sample is run through the semantic validator and confidence
+ * scorer first; target clusters accumulate both vote count (`count`) and
+ * confidence mass (`scoreSum`, discounting self-contradictory sentences).
  *
- * Voting on the validated **target index** rather than on the sentence is what
- * makes this affordable for an elder companion: the sentences differ in wording
- * every time, but "which button" is a discrete decision that samples either
- * agree or disagree about, and it is exactly the decision the spotlight and the
- * follower's finger depend on.
- *
- * Cost is why it is not always on. Sampling k times multiplies model calls, so
- * the callers enable it where the accuracy matters more than the latency: the
- * self-learning flywheel labels screens in batches with nobody waiting on an
- * answer, and better labels are what make the next adapter better.
+ * Plurality vote count wins first, and ties between clusters are broken by
+ * cumulative grounded confidence mass rather than arbitrary draw order when
+ * quality differs.
  */
 
 import { groundAnswer, type GroundedAnswer } from './answerGrounding';
@@ -41,14 +32,16 @@ export interface ConsistencyVote {
   grounded: GroundedAnswer;
 }
 
+interface TargetCluster {
+  count: number;
+  scoreSum: number;
+  firstSampleIndex: number;
+}
+
 /**
- * Majority vote over validated targets. Returns null only when there is nothing
- * to vote on, so a caller that asked for k samples still answers when the model
- * failed k-1 times.
- *
- * Tie-breaking is deliberate: an equal number of samples pointing at different
- * elements is not consensus, so the best-grounded sentence wins - the same rule
- * the dual-engine arbiter uses.
+ * Confidence-weighted majority vote over validated targets. Returns null only
+ * when there is nothing to vote on, so a caller that asked for k samples still
+ * answers when the model failed k-1 times.
  */
 export function voteOnAnswers(params: {
   samples: string[];
@@ -73,20 +66,44 @@ export function voteOnAnswers(params: {
 
   // Only a validated target can be voted on: an answer the validator refused to
   // point anywhere is not a vote for "nowhere".
-  const tally = new Map<number, number>();
+  const clusters = new Map<number, TargetCluster>();
   for (const entry of grounded) {
     if (entry.answer.targetIndex === null) continue;
-    tally.set(entry.answer.targetIndex, (tally.get(entry.answer.targetIndex) ?? 0) + 1);
+    const effectiveWeight = entry.answer.contradictsTarget
+      ? entry.answer.score * 0.5
+      : entry.answer.score;
+    const existing = clusters.get(entry.answer.targetIndex);
+    if (existing) {
+      existing.count += 1;
+      existing.scoreSum += effectiveWeight;
+    } else {
+      clusters.set(entry.answer.targetIndex, {
+        count: 1,
+        scoreSum: effectiveWeight,
+        firstSampleIndex: entry.sampleIndex,
+      });
+    }
   }
 
-  const leading = [...tally.entries()].sort((a, b) => b[1] - a[1])[0];
+  const leading = [...clusters.entries()].sort((a, b) => {
+    if (b[1].count !== a[1].count) return b[1].count - a[1].count;
+    if (b[1].scoreSum !== a[1].scoreSum) return b[1].scoreSum - a[1].scoreSum;
+    return a[1].firstSampleIndex - b[1].firstSampleIndex;
+  })[0];
+
   const candidates = leading
     ? grounded.filter((entry) => entry.answer.targetIndex === leading[0])
     : grounded;
-  // Highest grounded score wins among the samples supporting the majority,
-  // which also covers the no-target case (there, the best sentence wins).
-  const best = candidates.reduce((a, b) => (b.answer.score > a.answer.score ? b : a));
-  const agreeingSamples = leading ? leading[1] : 0;
+
+  // Highest grounded score (preferring non-contradictory answers) wins among the
+  // samples supporting the winning cluster.
+  const best = candidates.reduce((a, b) => {
+    if (a.answer.contradictsTarget !== b.answer.contradictsTarget) {
+      return a.answer.contradictsTarget ? b : a;
+    }
+    return b.answer.score > a.answer.score ? b : a;
+  });
+  const agreeingSamples = leading ? leading[1].count : 0;
 
   return {
     text: best.answer.explanation,

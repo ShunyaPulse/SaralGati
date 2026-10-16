@@ -150,82 +150,110 @@ export async function exportTrainingData(req: NextRequest): Promise<ServiceResul
       // For device-sourced rows without ground-truth labels, the predicted
       // verdict IS the best available label (sentinel was confident enough to
       // flag DANGEROUS/CRITICAL).
-      const fraudSft = fraudRows.map((row) => ({
-        messages: [
-          { role: "system", content: FRAUD_ANALYST_SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: JSON.stringify(
-              {
-                app_package: row.app_package,
-                signals: row.input_signals,
-              },
-              null,
-              0,
-            ),
-          },
-          {
-            role: "assistant",
-            content: JSON.stringify({
-              threat_level: row.expected_level ?? row.predicted_level,
-              threat_category:
-                row.expected_category ?? row.predicted_category ?? "NONE",
-              risk_reasoning: row.risk_reasoning ?? "Yahan dabayein.",
-            }),
-          },
-        ],
-        metadata: {
-          case_id: row.id,
-          screen_hash: row.screen_hash,
-          predicted_level: row.predicted_level,
-          predicted_category: row.predicted_category,
-          expected_level: row.expected_level,
-          is_correct: row.is_correct,
-          source: row.source,
-          type: "fraud_ground_truth",
-          created_at: row.created_at,
-        },
-      }));
+      const fraudSft = fraudRows.map((row) => {
+        const effectiveLevel = row.expected_level ?? row.predicted_level;
+        const effectiveCategory =
+          row.expected_category ?? row.predicted_category ?? "NONE";
+        const defaultReasoning =
+          effectiveLevel === "SAFE"
+            ? "Legitimate screen with no scam or phishing indicators."
+            : `Detected ${effectiveCategory} indicators requiring ${effectiveLevel} protection.`;
+        const sftReasoning =
+          row.is_correct === false
+            ? defaultReasoning
+            : (row.risk_reasoning ?? defaultReasoning);
 
-      const fraudDpo = fraudRows
-        .filter((row) => row.is_correct === false)
-        .map((row) => ({
-          prompt: [
+        return {
+          messages: [
             { role: "system", content: FRAUD_ANALYST_SYSTEM_PROMPT },
             {
               role: "user",
-              content: JSON.stringify({
-                app_package: row.app_package,
-                signals: row.input_signals,
-              }),
+              content: JSON.stringify(
+                {
+                  app_package: row.app_package,
+                  signals: row.input_signals,
+                },
+                null,
+                0,
+              ),
             },
-          ],
-          chosen: [
             {
               role: "assistant",
               content: JSON.stringify({
-                threat_level: row.expected_level,
-                threat_category: row.expected_category ?? "NONE",
-                risk_reasoning: "Yahan dabayein.",
-              }),
-            },
-          ],
-          rejected: [
-            {
-              role: "assistant",
-              content: JSON.stringify({
-                threat_level: row.predicted_level,
-                threat_category: row.predicted_category ?? "NONE",
-                risk_reasoning: row.risk_reasoning ?? "Yahan dabayein.",
+                threat_level: effectiveLevel,
+                threat_category: effectiveCategory,
+                risk_reasoning: sftReasoning,
               }),
             },
           ],
           metadata: {
             case_id: row.id,
-            type: "fraud_sentinel_correction",
+            screen_hash: row.screen_hash,
+            predicted_level: row.predicted_level,
+            predicted_category: row.predicted_category,
+            expected_level: row.expected_level,
+            is_correct: row.is_correct,
+            source: row.source,
+            type: "fraud_ground_truth",
             created_at: row.created_at,
           },
-        }));
+        };
+      });
+
+      const fraudDpo = fraudRows
+        .filter((row) => row.is_correct === false)
+        .map((row) => {
+          const expectedCategory = row.expected_category ?? "NONE";
+          const predictedCategory = row.predicted_category ?? "NONE";
+          const chosenReasoning =
+            row.expected_level === "SAFE"
+              ? "Legitimate screen with no scam or phishing indicators."
+              : `Screen contains ${expectedCategory} scam indicators requiring ${row.expected_level} protection.`;
+          const rejectedReasoning =
+            row.risk_reasoning && row.risk_reasoning !== chosenReasoning
+              ? row.risk_reasoning
+              : row.predicted_level === "SAFE"
+                ? "No fraud indicators matched."
+                : `Flagged as ${row.predicted_level} (${predictedCategory}).`;
+
+          return {
+            prompt: [
+              { role: "system", content: FRAUD_ANALYST_SYSTEM_PROMPT },
+              {
+                role: "user",
+                content: JSON.stringify({
+                  app_package: row.app_package,
+                  signals: row.input_signals,
+                }),
+              },
+            ],
+            chosen: [
+              {
+                role: "assistant",
+                content: JSON.stringify({
+                  threat_level: row.expected_level,
+                  threat_category: expectedCategory,
+                  risk_reasoning: chosenReasoning,
+                }),
+              },
+            ],
+            rejected: [
+              {
+                role: "assistant",
+                content: JSON.stringify({
+                  threat_level: row.predicted_level,
+                  threat_category: predictedCategory,
+                  risk_reasoning: rejectedReasoning,
+                }),
+              },
+            ],
+            metadata: {
+              case_id: row.id,
+              type: "fraud_sentinel_correction",
+              created_at: row.created_at,
+            },
+          };
+        });
 
       if (format === "jsonl") {
         const subMode = (searchParams.get("mode") || "sft").toLowerCase();

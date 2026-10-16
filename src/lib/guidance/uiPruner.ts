@@ -6,30 +6,26 @@
  * 2. Strictly preserve client indices [origIdx] so LLM TARGET references remain 100% accurate.
  * 3. Keep all actionable elements ([BUTTON], [INPUT], [TOGGLE]).
  * 4. Filter out status bar noise (battery %, signal, carrier names), timestamps, and preview message counters.
- * 5. Retain query-relevant keywords and top screen titles.
+ * 5. Retain query-relevant keywords and top screen titles, while deduplicating repeated static [TEXT] lines.
  */
 
 import { elementLabel, elementLabelLower, isActionableElement } from './uiElement';
 
 const LEADING_INDEX_PATTERN = /^(?:\[\d+\]:?|\d+:)\s*/;
 
+/** Pre-compiled combined noise regexes to avoid 6 separate regex evaluations per element. */
+const NOISE_GENERAL_RE =
+  /\b\d+\s*(?:videos?|photos?|messages?|audios?)\b|\b(?:yesterday|am|pm|today|\d{1,2}:\d{2})\b|\b(?:\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b|^(?:am|pm)$/i;
+const NOISE_CALL_PREVIEW_RE =
+  /^[📹🎥📞📱]?\s*(?:video call|audio call|voice call|missed call|incoming call|outgoing call)$|^[📹🎥📞📱]\s*$/iu;
+
 export function stripLeadingElementIndex(text: string): string {
   return text.trim().replace(LEADING_INDEX_PATTERN, '').trim();
 }
 
 export function isNoiseUIElement(text: string): boolean {
-  // The label, not the raw line: an index prefix or a role tag in front of a
-  // timestamp used to stop these patterns from matching at all.
   const clean = elementLabel(text);
-  return (
-    /\b\d+\s*(videos?|photos?|messages?|audios?)\b/i.test(clean) ||
-    /\b(yesterday|am|pm|today|\d{1,2}:\d{2})\b/i.test(clean) ||
-    /\b(\d+%\s*battery|wi-?fi|volte|lte|4g|5g|signal)\b/i.test(clean) ||
-    /^(am|pm)$/i.test(clean) ||
-    // `u` so an emoji prefix is one character and can actually be matched.
-    /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/iu.test(clean) ||
-    /^[📹🎥📞📱]\s*$/iu.test(clean)
-  );
+  return NOISE_GENERAL_RE.test(clean) || NOISE_CALL_PREVIEW_RE.test(clean);
 }
 
 export function pruneUITree(
@@ -49,6 +45,7 @@ export function pruneUITree(
     : [];
 
   const kept: string[] = [];
+  const seenStaticLabels = new Set<string>();
 
   uiElements.forEach((el, idx) => {
     const normalized = stripLeadingElementIndex(el);
@@ -56,17 +53,18 @@ export function pruneUITree(
 
     const isActionable = isActionableElement(normalized);
 
-    const lower = elementLabelLower(normalized);
-
-    // 1. Actionable buttons, inputs, toggles: ALWAYS keep (never prune buttons like OK, Yes, No)
+    // 1. Actionable buttons, inputs, toggles: ALWAYS keep (never prune or deduplicate buttons)
     if (isActionable) {
       kept.push(`[${idx}] ${normalized}`);
       return;
     }
 
-    // 2. Static text filtering. An element the client called tappable is never
-    //    furniture, so a real "Video call" button survives the preview patterns.
-    if (!isActionable && isNoiseUIElement(normalized)) return;
+    // 2. Static text filtering.
+    if (isNoiseUIElement(normalized)) return;
+
+    const lower = elementLabelLower(normalized);
+    // Deduplicate identical static [TEXT] labels so repeated status badges do not bloat LLM tokens
+    if (seenStaticLabels.has(lower)) return;
 
     // Retain if relevant to elder's query
     const matchesKeyword = questionKeywords.some((kw) => lower.includes(kw));
@@ -75,6 +73,7 @@ export function pruneUITree(
     const isTopHeader = idx < 4 && normalized.length < 60;
 
     if (matchesKeyword || isTopHeader) {
+      seenStaticLabels.add(lower);
       kept.push(`[${idx}] ${normalized}`);
     }
   });

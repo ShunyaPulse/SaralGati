@@ -247,6 +247,7 @@ Return a strict JSON array of objects with keys: rule_type (string), rule_payloa
         }
         if (createdForElder > 0) {
           await cacheDelete(`agent-config:${elder_id}`);
+          await cacheDelete(`agent-habits:${elder_id}`);
         }
       }
 

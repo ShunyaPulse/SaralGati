@@ -21,7 +21,6 @@ export async function listHabits(request: Request): Promise<ServiceResult<ApiRes
       return fail(400, { success: false, error: 'elder_id is required' });
     }
 
-    // Verify ownership
     const elder = await queryOne(`SELECT id FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`, [elderId, userId]);
     if (!elder) {
       return fail(404, { success: false, error: 'Not Found or Unauthorized' });
@@ -51,7 +50,6 @@ export async function createHabit(request: Request): Promise<ServiceResult<ApiRe
     const validatedData = habitRuleSchema.parse(body);
     const userId = session.user.id;
 
-    // Verify ownership
     const elder = await queryOne(`SELECT id FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`, [validatedData.elder_id, userId]);
     if (!elder) {
       return fail(404, { success: false, error: 'Not Found or Unauthorized' });
@@ -74,8 +72,9 @@ export async function createHabit(request: Request): Promise<ServiceResult<ApiRe
       throw new Error('Failed to create habit rule');
     }
 
-    // Invalidate config cache for this elder
     await cacheDelete(`agent-config:${validatedData.elder_id}`);
+    await cacheDelete(`agent-habits:${validatedData.elder_id}`);
+    await cacheDelete(`agent-geofences:${validatedData.elder_id}`);
 
     return fail(201, { success: true, data: newHabit });
   } catch (error: any) {
@@ -83,8 +82,6 @@ export async function createHabit(request: Request): Promise<ServiceResult<ApiRe
     if (error.name === 'ZodError') {
       return fail(400, { success: false, error: 'Validation Error', details: error.issues });
     }
-    // Unique index on (elder_id, rule_type, rule_payload) from migrations/007:
-    // the elder already has this habit, so report a conflict instead of a 500.
     if (error.code === '23505') {
       return fail(409, { success: false, error: 'This habit already exists for this elder' });
     }

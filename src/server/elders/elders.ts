@@ -1,7 +1,7 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { getAuthSession } from '@/lib/auth/auth';
 import { query, queryOne } from '@/lib/data/db';
-import { cacheGet, cacheSet, invalidatePattern } from '@/lib/data/redis';
+import { cacheDelete, cacheGet, cacheSet } from '@/lib/data/redis';
 import { elderProfileSchema } from '@/lib/shared/validations';
 import { toApiElder } from '@/lib/shared/utils';
 import { ElderProfile, ApiResponse } from '@/types';
@@ -73,8 +73,8 @@ export async function createElder(request: Request): Promise<ServiceResult<ApiRe
       throw new Error('Failed to create elder profile');
     }
 
-    // Invalidate cache
-    await invalidatePattern(`elders:${userId}*`);
+    // O(1) cache delete instead of full-keyspace SCAN
+    await cacheDelete(`elders:${userId}`);
 
     return fail(201, { success: true, data: toApiElder(newElder) });
   } catch (error: any) {

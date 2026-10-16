@@ -16,19 +16,25 @@
 
 import { isActionableElement, elementLabel } from './uiElement';
 
-const PREVIEW_ONLY_REGEXES = [
+const PREVIEW_ONLY_REGEXES: readonly RegExp[] = [
   // `u` so an emoji prefix is one character and can actually be matched:
   // without it "📹 Missed call" was never recognised as a preview at all.
   /^[📹🎥📞📱]?\s*(video call|audio call|voice call|missed call|incoming call|outgoing call)$/iu,
   /^[📹🎥📞📱]\s*$/iu,
 ];
 
-const NOISE_REGEXES = [
+/** Pre-allocated array for actionable elements (counters, timestamps, status labels). */
+const ACTIONABLE_NOISE_REGEXES: readonly RegExp[] = [
   /\b\d+\s*(videos?|photos?|messages?|audios?|items?)\b/i,
   /\b(yesterday|today|tomorrow)\b/i,
   /\b\d{1,2}:\d{2}\s*(am|pm)?\b/i,
   /\b(am|pm)\b/i,
   /\b(sent|delivered|read|typing\.\.\.|online|last seen)\b/i,
+];
+
+/** Pre-allocated array for static text elements (includes call preview lines). */
+const ALL_NOISE_REGEXES: readonly RegExp[] = [
+  ...ACTIONABLE_NOISE_REGEXES,
   ...PREVIEW_ONLY_REGEXES,
 ];
 
@@ -48,8 +54,6 @@ export function isNoiseElement(
 ): boolean {
   const label = noiseLabel(elementText);
   const actionable = options.actionable ?? isActionableElement(elementText);
-  const applicable = actionable
-    ? NOISE_REGEXES.filter((regex) => !PREVIEW_ONLY_REGEXES.includes(regex))
-    : NOISE_REGEXES;
+  const applicable = actionable ? ACTIONABLE_NOISE_REGEXES : ALL_NOISE_REGEXES;
   return applicable.some((regex) => regex.test(label));
 }

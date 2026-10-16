@@ -10,13 +10,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.os.BatteryManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.saralgati.app.R
-import android.os.BatteryManager
 import com.saralgati.app.data.api.NetworkModule
 import com.saralgati.app.data.local.LocalPrefs
 import kotlinx.coroutines.*
@@ -31,11 +32,21 @@ class TelemetryService : Service() {
     private lateinit var localPrefs: LocalPrefs
     private var isRunning = false
 
+    // Energy-efficient state tracking: avoid redundant network calls when config/habits are unchanged
+    private var lastConfigSyncAt: Long = 0L
+    private var lastHabitSyncAt: Long = 0L
+    private var lastSyncedFontScale: Float? = null
+    private var lastReportedLocation: Location? = null
+
     companion object {
         private const val TAG = "TelemetryService"
         private const val CHANNEL_ID = "saralgati_telemetry_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val HEARTBEAT_INTERVAL_MS = 60000L // 1 minute
+        private const val NORMAL_HEARTBEAT_INTERVAL_MS = 60_000L // 1 minute normal cadence
+        private const val LOW_POWER_STATIONARY_INTERVAL_MS = 120_000L // 2 minutes in Battery Saver + stationary (well inside server 5m online window)
+        private const val CONFIG_SYNC_INTERVAL_MS = 5 * 60_000L // 5 minutes (aligned with server Redis TTL)
+        private const val HABIT_FALLBACK_SYNC_INTERVAL_MS = 30 * 60_000L // 30 minutes if font_scale is unchanged
+        private const val STATIONARY_DISPLACEMENT_METERS = 15f
 
         // A cached fix older than this is not reported at all: aligned with
         // the server's 15-minute staleness window.
@@ -69,32 +80,51 @@ class TelemetryService : Service() {
     private fun startHeartbeatLoop() {
         isRunning = true
         serviceScope.launch {
+            val manufacturer = Build.MANUFACTURER.replaceFirstChar {
+                if (it.isLowerCase()) it.titlecase() else it.toString()
+            }
+            val model = Build.MODEL
+            val phoneModel = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
+            val osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+
             while (isRunning) {
+                var nextDelayMs = NORMAL_HEARTBEAT_INTERVAL_MS
                 try {
                     val elderId = localPrefs.getElderId()
                     if (elderId != null) {
                         val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
                         val batteryPct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                        
-                        val manufacturer = Build.MANUFACTURER.replaceFirstChar { 
-                            if (it.isLowerCase()) it.titlecase() else it.toString() 
+                        val isCharging = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            bm.isCharging
+                        } else {
+                            false
                         }
-                        val model = Build.MODEL
-                        val phoneModel = if (model.startsWith(manufacturer, ignoreCase = true)) model else "$manufacturer $model"
-                        val osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
+                        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+                        val isLowPowerMode = (pm?.isPowerSaveMode == true) || (!isCharging && batteryPct in 0..20)
 
                         val heartbeatBody = mutableMapOf<String, Any>(
                             "battery_level" to batteryPct,
                             "phone_model" to phoneModel,
                             "os_version" to osVersion
                         )
-                        lastKnownFix()?.let { fix ->
-                            heartbeatBody["latitude"] = fix.latitude
-                            heartbeatBody["longitude"] = fix.longitude
-                            if (fix.hasAccuracy()) {
-                                heartbeatBody["location_accuracy_m"] = fix.accuracy.toDouble()
+                        val currentFix = lastKnownFix(preferLowPower = isLowPowerMode)
+                        var isStationary = true
+                        if (currentFix != null) {
+                            heartbeatBody["latitude"] = currentFix.latitude
+                            heartbeatBody["longitude"] = currentFix.longitude
+                            if (currentFix.hasAccuracy()) {
+                                heartbeatBody["location_accuracy_m"] = currentFix.accuracy.toDouble()
                             }
-                            Log.d(TAG, "Reporting location fix age ${(System.currentTimeMillis() - fix.time) / 1000}s")
+                            val prevFix = lastReportedLocation
+                            if (prevFix != null && prevFix.distanceTo(currentFix) > STATIONARY_DISPLACEMENT_METERS) {
+                                isStationary = false
+                            }
+                            lastReportedLocation = currentFix
+                            Log.d(TAG, "Reporting location fix age ${(System.currentTimeMillis() - currentFix.time) / 1000}s")
+                        }
+
+                        if (isLowPowerMode && isStationary) {
+                            nextDelayMs = LOW_POWER_STATIONARY_INTERVAL_MS
                         }
 
                         val response = NetworkModule.eldersApi.updateHeartbeat(elderId, heartbeatBody)
@@ -104,58 +134,69 @@ class TelemetryService : Service() {
                             Log.w(TAG, "Heartbeat failed: ${response.code()}")
                         }
 
-                        // Sync Caregiver Agent Config (preferred_lang, emergency_contact, active habits)
-                        try {
-                            val cfgRes = NetworkModule.agentApi.getConfig()
-                            if (cfgRes.isSuccessful && cfgRes.body()?.success == true) {
-                                val cfg = cfgRes.body()?.data
-                                if (cfg != null) {
-                                    localPrefs.saveEmergencyContact(cfg.emergencyContact)
-                                    if (!localPrefs.hasSelectedLanguage() && !cfg.preferredLang.isNullOrBlank()) {
-                                        val normLang = if (cfg.preferredLang == "en") "en" else "hi"
-                                        localPrefs.setLanguagePrefs(normLang, normLang)
+                        val now = System.currentTimeMillis()
+
+                        // Sync Caregiver Agent Config on startup and every 5 minutes (aligned with server Redis TTL)
+                        if (now - lastConfigSyncAt >= CONFIG_SYNC_INTERVAL_MS) {
+                            try {
+                                val cfgRes = NetworkModule.agentApi.getConfig()
+                                if (cfgRes.isSuccessful && cfgRes.body()?.success == true) {
+                                    lastConfigSyncAt = now
+                                    val cfg = cfgRes.body()?.data
+                                    if (cfg != null) {
+                                        localPrefs.saveEmergencyContact(cfg.emergencyContact)
+                                        if (!localPrefs.hasSelectedLanguage() && !cfg.preferredLang.isNullOrBlank()) {
+                                            val normLang = if (cfg.preferredLang == "en") "en" else "hi"
+                                            localPrefs.setLanguagePrefs(normLang, normLang)
+                                        }
                                     }
                                 }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Agent config sync skipped: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Agent config sync skipped: ${e.message}")
                         }
 
-                        // On-Device Habit Aggregator Sync
-                        try {
-                            val habits = listOf(
-                                com.saralgati.app.data.model.SyncHabitPayload(
-                                    type = "device_preference",
-                                    payload = mapOf("font_scale" to resources.configuration.fontScale)
+                        // Delta-Triggered On-Device Habit Sync: only transmit when font_scale changes or every 30m
+                        val currentFontScale = resources.configuration.fontScale
+                        val fontScaleChanged = lastSyncedFontScale == null || kotlin.math.abs(currentFontScale - (lastSyncedFontScale ?: 0f)) > 0.001f
+                        if (fontScaleChanged || now - lastHabitSyncAt >= HABIT_FALLBACK_SYNC_INTERVAL_MS) {
+                            try {
+                                val habits = listOf(
+                                    com.saralgati.app.data.model.SyncHabitPayload(
+                                        type = "device_preference",
+                                        payload = mapOf("font_scale" to currentFontScale)
+                                    )
                                 )
-                            )
-                            val isoTimestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-                                timeZone = TimeZone.getTimeZone("UTC")
-                            }.format(Date())
-                            val syncRes = NetworkModule.agentApi.syncHabits(
-                                com.saralgati.app.data.model.SyncHabitsRequest(
-                                    deviceToken = localPrefs.getAuthToken(),
-                                    batteryLevel = batteryPct,
-                                    habits = habits,
-                                    timestamp = isoTimestamp
+                                val isoTimestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+                                    timeZone = TimeZone.getTimeZone("UTC")
+                                }.format(Date())
+                                val syncRes = NetworkModule.agentApi.syncHabits(
+                                    com.saralgati.app.data.model.SyncHabitsRequest(
+                                        deviceToken = localPrefs.getAuthToken(),
+                                        batteryLevel = batteryPct,
+                                        habits = habits,
+                                        timestamp = isoTimestamp
+                                    )
                                 )
-                            )
-                            if (syncRes.isSuccessful) {
-                                Log.d(TAG, "Habits synced successfully")
+                                if (syncRes.isSuccessful) {
+                                    lastSyncedFontScale = currentFontScale
+                                    lastHabitSyncAt = now
+                                    Log.d(TAG, "Habits synced (delta-aware)")
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Habit sync error: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Habit sync error: ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Network error during heartbeat: ${e.message}")
                 }
-                delay(HEARTBEAT_INTERVAL_MS)
+                delay(nextDelayMs)
             }
         }
     }
 
-    private fun lastKnownFix(): Location? {
+    private fun lastKnownFix(preferLowPower: Boolean = false): Location? {
         val fineGranted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -171,9 +212,11 @@ class TelemetryService : Service() {
             } else {
                 add("fused")
             }
-            add(LocationManager.GPS_PROVIDER)
-            add(LocationManager.NETWORK_PROVIDER)
             add(LocationManager.PASSIVE_PROVIDER)
+            add(LocationManager.NETWORK_PROVIDER)
+            if (!preferLowPower) {
+                add(LocationManager.GPS_PROVIDER)
+            }
         }
 
         var newest: Location? = null

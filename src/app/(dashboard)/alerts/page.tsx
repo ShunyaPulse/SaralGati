@@ -39,12 +39,24 @@ function AlertsPageContent() {
     const appliedFilters = { ...filters, page, limit };
     fetchAlerts(appliedFilters);
     
-    // Polling every 30 seconds
+    // Energy-efficient polling: only poll while tab is visible, and refresh immediately on tab focus
     const interval = setInterval(() => {
-      fetchAlerts(appliedFilters); 
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        fetchAlerts(appliedFilters);
+      }
     }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchAlerts(appliedFilters);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [filters, page, fetchAlerts, limit]);
 
   const handleFilterChange = (newFilters: any) => {

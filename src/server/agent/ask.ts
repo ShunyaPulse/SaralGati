@@ -345,23 +345,30 @@ export async function askForGuidance(req: NextRequest): Promise<ServiceResult> {
 
       let knownHabitsStr = "";
       if (effectiveElderId) {
+        const habitsCacheKey = `agent-habits:${effectiveElderId}`;
         try {
-          const habits = await query(
-            `SELECT rule_type, rule_payload FROM habit_rules WHERE elder_id = $1 AND confidence >= 0.3 ORDER BY updated_at DESC LIMIT 15`,
-            [effectiveElderId],
-          );
-          if (habits && habits.length > 0) {
-            knownHabitsStr =
-              "\n\nKnown User Habits/Preferences (Use these to resolve ambiguous names, relations, or routines):\n" +
-              habits
-                .map((h: any) => {
-                  const p =
-                    typeof h.rule_payload === "string"
-                      ? h.rule_payload
-                      : JSON.stringify(h.rule_payload);
-                  return `- ${h.rule_type}: ${p}`;
-                })
-                .join("\n");
+          const cachedHabits = await cacheGet<{ block: string }>(habitsCacheKey);
+          if (cachedHabits && typeof cachedHabits.block === "string") {
+            knownHabitsStr = cachedHabits.block;
+          } else {
+            const habits = await query(
+              `SELECT rule_type, rule_payload FROM habit_rules WHERE elder_id = $1 AND is_active = true AND confidence >= 0.3 ORDER BY updated_at DESC LIMIT 15`,
+              [effectiveElderId],
+            );
+            if (habits && habits.length > 0) {
+              knownHabitsStr =
+                "\n\nKnown User Habits/Preferences (Use these to resolve ambiguous names, relations, or routines):\n" +
+                habits
+                  .map((h: any) => {
+                    const p =
+                      typeof h.rule_payload === "string"
+                        ? h.rule_payload
+                        : JSON.stringify(h.rule_payload);
+                    return `- ${h.rule_type}: ${p}`;
+                  })
+                  .join("\n");
+            }
+            await cacheSet(habitsCacheKey, { block: knownHabitsStr }, 300);
           }
         } catch (err) {
           console.error("Error fetching habits:", err);

@@ -8,12 +8,12 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.FrameLayout
@@ -127,11 +127,12 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                // Phone went to sleep: stop any speech immediately and take the
-                // warning card / highlight down so nothing keeps talking.
+                // Phone went to sleep: stop any speech immediately, release microphone
+                // recognizer, and take the warning card / highlight down.
                 Log.i(TAG, "Screen off / phone asleep: stopping speech and collapsing overlay")
                 pendingSpeechText = null
                 if (isTtsReady) tts.stop()
+                releaseSpeechRecognizer()
                 highlightHandler.post { removeCurrentHighlight() }
                 collapseHelper()
             }
@@ -242,24 +243,9 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private fun voiceLocale(): Locale =
         if (localPrefs.getGuidanceLang() == "en") ENGLISH_LOCALE else HINDI_LOCALE
 
-    /**
-     * The voice for one specific sentence, because one TTS engine has to read
-     * text in more than one language:
-     *
-     * 1. Devanagari is always read by the Hindi voice.
-     * 2. The server's guidance (answers and screen explanations) is Hinglish
-     *    written in Latin script by design, so it keeps the Hindi voice too -
-     *    that is how the companion has always sounded, and an Indian-English
-     *    voice reading "Beta ka video call" is exactly the mixed accent to avoid.
-     * 3. Everything else - the app's own copy and the fraud alert, which exist in
-     *    both languages - follows the language the elder chose.
-     */
     private fun voiceLocaleFor(text: String, isGuidance: Boolean): Locale {
-        // Devanagari text is always spoken by the Hindi voice, whatever the preference.
         if (DEVANAGARI.containsMatchIn(text)) return HINDI_LOCALE
-        // Guidance text follows the guidance language preference.
         if (isGuidance) return voiceLocale()
-        // App UI copy follows the app language preference.
         return if (localPrefs.getAppLanguage() == "en") ENGLISH_LOCALE else HINDI_LOCALE
     }
 
@@ -281,7 +267,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private fun speak(text: String, isExplanation: Boolean = false) {
         if (!localPrefs.getBoolean("pref_voice", true)) return
         if (text.isBlank()) return
-        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         if (pm?.isInteractive == false) {
             Log.i(TAG, "Screen is off / phone asleep: suppressing speech")
             if (isTtsReady) tts.stop()
@@ -294,19 +280,12 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             pendingSpeechIsExplanation = isExplanation
             return
         }
-        // Per-utterance voice: the engine's language is set for the sentence
-        // about to be spoken, not once at service start.
         applyVoice(voiceLocaleFor(text, isGuidance = isExplanation))
         val utteranceId = if (isExplanation) "explanation_done" else "standard_msg"
         val result = tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         Log.i(TAG, "TTS speak requested (result=$result): '$text'")
     }
 
-    /**
-     * The elder picked the other language while this service was already up.
-     * Re-voice the engine and re-label the card, so the overlay never keeps
-     * talking in the language it was started with.
-     */
     private fun onLanguageChanged() {
         applyVoice(voiceLocale())
         refreshCardLanguage()
@@ -315,11 +294,22 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     private fun refreshCardLanguage() {
         val lang = localPrefs.getAppLanguage()
         val titleView = expandedView.findViewWithTag<TextView>("titleView")
-        // A live fraud warning keeps its own title; everything else is neutral copy.
         val isWarning = titleView?.text?.startsWith("⚠️") == true
         if (!isWarning) titleView?.text = AppStrings.assistantTitle(lang)
         btnExplainView?.text = explainLabel(lang)
         btnAskView?.text = askLabel(lang)
+    }
+
+    private fun releaseSpeechRecognizer() {
+        try {
+            speechRecognizer?.cancel()
+            speechRecognizer?.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG, "SpeechRecognizer cleanup warning: ${e.message}")
+        } finally {
+            speechRecognizer = null
+            resetBubbleColor(Color.parseColor("#0074c8"))
+        }
     }
 
     private fun startListeningSilent() {
@@ -327,26 +317,25 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             speechRecognizer = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
             speechRecognizer?.setRecognitionListener(object : android.speech.RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) {
-                    // Turn floating bubble red to indicate recording
-                    resetBubbleColor(android.graphics.Color.RED)
+                    resetBubbleColor(Color.RED)
                 }
 
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {
-                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
+                    resetBubbleColor(Color.parseColor("#0074c8"))
                 }
 
                 override fun onError(error: Int) {
-                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
+                    releaseSpeechRecognizer()
                 }
 
                 override fun onResults(results: android.os.Bundle?) {
-                    resetBubbleColor(android.graphics.Color.parseColor("#0074c8"))
                     val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
                     val text: String? = matches?.firstOrNull()
-                    if (text != null && text.isNotEmpty()) {
+                    releaseSpeechRecognizer()
+                    if (!text.isNullOrEmpty()) {
                         val curLang = localPrefs.getAppLanguage()
                         expandedView.findViewWithTag<TextView>("titleView")?.text = AppStrings.thinking(curLang)
                         val extractIntent = Intent("com.saralgati.app.ACTION_EXTRACT_AND_ASK").apply {
@@ -382,22 +371,22 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun resetBubbleColor(color: Int) {
+        if (!this::bubbleView.isInitialized) return
         val vg = bubbleView as? android.view.ViewGroup
         val icon = vg?.getChildAt(0) as? ImageView
-        val bg = icon?.background as? android.graphics.drawable.GradientDrawable
+        val bg = icon?.background as? GradientDrawable
         bg?.setColor(color)
     }
 
     private fun createBubbleView() {
-        // A simple circular button layout programmatically
         val layout = FrameLayout(this)
         val icon = ImageView(this)
-        icon.setImageResource(android.R.drawable.ic_menu_help) // Fallback Android icon
+        icon.setImageResource(android.R.drawable.ic_menu_help)
         icon.setColorFilter(Color.WHITE)
 
         val background = GradientDrawable()
         background.shape = GradientDrawable.OVAL
-        background.setColor(Color.parseColor("#0074c8")) // Primary blue
+        background.setColor(Color.parseColor("#0074c8"))
         icon.background = background
 
         val p = FrameLayout.LayoutParams(140, 140)
@@ -424,7 +413,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         bubbleView = layout
 
         setupDrag(bubbleView, paramsBubble!!) {
-            // On click
             val lang = localPrefs.getAppLanguage()
             val gLang = localPrefs.getGuidanceLang()
             expandHelper(
@@ -451,7 +439,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             elevation = dp(12).toFloat()
         }
 
-        // Header: Title + Sleek Close '✕' Icon
         val headerRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -493,7 +480,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         headerRow.addView(btnCloseIcon)
         rootLayout.addView(headerRow)
 
-        // Body: only filled in for scam warnings, hidden on the normal helper card.
         val bodyText = TextView(this).apply {
             textSize = 15f
             setTextColor(Color.parseColor("#7F1D1D"))
@@ -503,7 +489,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
         rootLayout.addView(bodyText)
 
-        // Action Buttons Row (Side-by-side for ultra-compact vertical footprint)
         val actionsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(
@@ -512,7 +497,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             )
         }
 
-        // Button 1: Explain Screen
         val btnExplain = Button(this).apply {
             text = explainLabel(lang)
             textSize = 12f
@@ -520,7 +504,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             isAllCaps = false
             val bg = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
-                setColor(Color.parseColor("#0284C7")) // Calm Sky Blue
+                setColor(Color.parseColor("#0284C7"))
             }
             background = bg
             layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
@@ -539,7 +523,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         actionsRow.addView(btnExplain)
         btnExplainView = btnExplain
 
-        // Button 2: Ask a Question
         val btnNext = Button(this).apply {
             text = askLabel(lang)
             textSize = 12f
@@ -547,7 +530,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             isAllCaps = false
             val bg = GradientDrawable().apply {
                 cornerRadius = dp(14).toFloat()
-                setColor(Color.parseColor("#16A34A")) // Emerald Green
+                setColor(Color.parseColor("#16A34A"))
             }
             background = bg
             layoutParams = LinearLayout.LayoutParams(0, dp(50), 1f).apply {
@@ -581,7 +564,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = dp(24) // Float 24dp above system navigation bar
+            y = dp(24)
         }
 
         expandedView = rootLayout
@@ -604,13 +587,8 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    /**
-     * Red warning card for a DANGEROUS / CRITICAL fraud verdict: title, the
-     * Hindi alert and the safe advice are all visible (and spoken), because the
-     * elder may have TTS muted.
-     */
     private fun showFraudWarning(title: String, message: String, advice: String) {
-        val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         if (pm?.isInteractive == false) {
             Log.i(TAG, "Phone in sleep / screen off: suppressing fraud warning overlay")
             return
@@ -620,7 +598,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         val bodyText = expandedView.findViewWithTag<TextView>("bodyView")
 
         val newBody = if (advice.isBlank()) message else "$message\n\n$advice"
-        // If this exact warning is already on screen, do not re-announce it.
         val alreadyShowing = isExpanded && bodyText?.text?.toString() == newBody
 
         titleView?.text = "⚠️ $title"
@@ -645,7 +622,6 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
 
     private fun collapseHelper() {
         if (isExpanded) {
-            // Reset the warning styling so the next normal card is not red.
             expandedView.findViewWithTag<TextView>("titleView")?.setTextColor(Color.parseColor("#0F172A"))
             expandedView.findViewWithTag<TextView>("bodyView")?.let {
                 it.text = ""
@@ -720,6 +696,9 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
+            val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val isPowerSave = pm?.isPowerSaveMode == true
+
             val highlightView = View(this).apply {
                 val strokeColor = Color.parseColor("#10B981") // Vibrant Emerald Green
                 val bg = GradientDrawable().apply {
@@ -730,12 +709,17 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
                 }
                 background = bg
 
-                val anim = android.view.animation.AlphaAnimation(0.3f, 1.0f).apply {
-                    duration = 600
-                    repeatMode = android.view.animation.Animation.REVERSE
-                    repeatCount = android.view.animation.Animation.INFINITE
+                // In Battery Saver mode, keep a static high-contrast spotlight (0 GPU/CPU frame redraws).
+                // Otherwise, use a hardware-composited layer so alpha pulsing does not redraw on CPU.
+                if (!isPowerSave) {
+                    setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                    val anim = android.view.animation.AlphaAnimation(0.35f, 1.0f).apply {
+                        duration = 750
+                        repeatMode = android.view.animation.Animation.REVERSE
+                        repeatCount = android.view.animation.Animation.INFINITE
+                    }
+                    startAnimation(anim)
                 }
-                startAnimation(anim)
             }
 
             val params = WindowManager.LayoutParams(
@@ -772,6 +756,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
         removeHighlightRunnable?.let { highlightHandler.removeCallbacks(it) }
         activeHighlightView?.let {
             it.clearAnimation()
+            it.setLayerType(View.LAYER_TYPE_NONE, null)
             try {
                 windowManager.removeView(it)
             } catch (e: Exception) {
@@ -796,13 +781,7 @@ class FloatingHelperService : Service(), TextToSpeech.OnInitListener {
             } catch (_: Exception) {
             }
         }
-        try {
-            speechRecognizer?.cancel()
-            speechRecognizer?.destroy()
-            speechRecognizer = null
-        } catch (e: Exception) {
-            Log.e(TAG, "Error destroying SpeechRecognizer: ${e.message}")
-        }
+        releaseSpeechRecognizer()
         if (this::tts.isInitialized) {
             tts.stop()
             tts.shutdown()

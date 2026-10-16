@@ -64,11 +64,11 @@ const MIN_ADVISOR_CHARS = 12;
 
 /**
  * Scam-shaped surface the rules did not match: a link, an APK, a secret, a
- * panic verb. A clean screen that still carries one of these is exactly the
- * case the rules are known to miss, so it is worth a second opinion.
+ * panic verb. Case-insensitive (`/i`) so `needsSecondOpinion` does not have to
+ * allocate a full lower-cased copy of the screen text.
  */
 const RISK_SURFACE =
-  /https?:\/\/|\.apk\b|\botp\b|\bupi\b|\bpin\b|\bkyc\b|anydesk|teamviewer|quick support|lottery|prize|refund|unlock|suspend|\bblocked\b|\bverify\b|ओटीपी|पिन|केवाईसी|लॉटरी|इनाम|खाता/;
+  /https?:\/\/|\.apk\b|\botp\b|\bupi\b|\bpin\b|\bkyc\b|anydesk|teamviewer|quick support|lottery|prize|refund|unlock|suspend|\bblocked\b|\bverify\b|ओटीपी|पिन|केवाईसी|लॉटरी|इनाम|खाता/i;
 
 const advisorVerdictSchema = z.object({
   threat_level: z.enum(['SAFE', 'SUSPICIOUS', 'DANGEROUS', 'CRITICAL']),
@@ -127,6 +127,10 @@ export function buildFraudAdvisorInput(input: FraudSentinelInput): string {
  * Whether a verdict is uncertain enough to be worth a second opinion. CRITICAL
  * and multi-rule DANGEROUS verdicts are already decisive, and a plain SAFE
  * screen with no scam-shaped surface never pays for a model call.
+ *
+ * Reads the rule count off `verdict.detected_triggers` when available so
+ * `matchFraudRules(input)` does not re-normalize and re-run all 25 regex rules
+ * a second time after `analyzeForFraud(input)`.
  */
 export function needsSecondOpinion(
   verdict: FraudSentinelVerdict,
@@ -135,12 +139,13 @@ export function needsSecondOpinion(
   if (verdict.threat_level === 'CRITICAL') return false;
   if (verdict.threat_level === 'SUSPICIOUS') return true;
   if (verdict.threat_level === 'DANGEROUS') {
-    return matchFraudRules(input).length <= 1;
+    const triggerCount = Array.isArray(verdict.detected_triggers)
+      ? verdict.detected_triggers.length
+      : 0;
+    return triggerCount > 0 ? triggerCount <= 1 : matchFraudRules(input).length <= 1;
   }
   const text = advisorText(input);
-  return (
-    text.length >= MIN_ADVISOR_CHARS && RISK_SURFACE.test(text.toLowerCase())
-  );
+  return text.length >= MIN_ADVISOR_CHARS && RISK_SURFACE.test(text);
 }
 
 /** Model replies are prose-wrapped often enough to be worth a defensive strip. */
@@ -210,8 +215,6 @@ export async function getFraudSecondOpinion(
       console.warn('[Fraud Advisor] Unusable model output ignored.');
       return null;
     }
-    // A raised level with no category has no alert copy to show, so it is not a
-    // usable escalation.
     if (parsed.data.threat_category === 'NONE') return null;
 
     return {

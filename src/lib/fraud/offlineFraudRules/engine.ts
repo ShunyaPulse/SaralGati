@@ -181,10 +181,12 @@ export function matchOfflineFraudRules(
     null;
 
   for (const fragment of fragments) {
+    let strippedFragment: string | undefined;
+
     for (const compiled of COMPILED_RULES) {
       const { rule } = compiled;
       const text = rule.strip_safe_warnings
-        ? stripCourtesyWarnings(fragment)
+        ? (strippedFragment ??= stripCourtesyWarnings(fragment))
         : fragment;
       if (!text) continue;
 

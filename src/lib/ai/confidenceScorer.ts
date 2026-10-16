@@ -1,3 +1,4 @@
+import { canonicalizeToken } from "@/lib/ai/fewShotGrounding/bm25";
 import { ELDER_INTENTS, matchQueryPattern } from "@/lib/guidance/intentDictionary";
 import { isNoiseElement } from "@/lib/guidance/semanticValidator";
 import { hasDevanagari, type GuidanceLang } from "@/lib/guidance/guidanceLanguage";
@@ -201,9 +202,13 @@ export function scoreOutputConfidence(
 
     if (matchingIntents.length > 0) {
       const intentMatches = matchingIntents.some((intent) =>
-        intent.elementKeywords.some((k) =>
-          lowerClean.includes(k.toLowerCase()),
-        ),
+        intent.elementKeywords.some((k) => {
+          const kwLower = k.toLowerCase();
+          return (
+            lowerClean.includes(kwLower) ||
+            lowerClean.includes(canonicalizeToken(kwLower))
+          );
+        }),
       );
 
       if (intentMatches) {
@@ -236,7 +241,10 @@ export function scoreOutputConfidence(
         const qWords = qLower
           .split(/[\s,._\-?!]+/)
           .filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
-        const wordMatch = qWords.some((w) => lowerClean.includes(w));
+        const wordMatch = qWords.some((w) => {
+          const canon = canonicalizeToken(w);
+          return lowerClean.includes(w) || lowerClean.includes(canon);
+        });
         if (wordMatch) {
           score += 15;
           reasons.push("Target matches query specific entity (+15)");

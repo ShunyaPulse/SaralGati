@@ -19,6 +19,14 @@ export { CRISP_FEW_SHOT_EXAMPLES };
 export type { FewShotExample };
 
 /**
+ * Pre-tokenized static corpus documents, computed once at module load so
+ * `bm25()` can reuse its WeakMap inverted index across every request with
+ * zero per-request document tokenization or GC churn.
+ */
+const PRECOMPUTED_CORPUS_DOCUMENTS: string[][] =
+  CRISP_FEW_SHOT_EXAMPLES.map(exampleDocument);
+
+/**
  * Dynamically formats and selects the most relevant few-shot grounding examples.
  * Prioritizes matching appPackage and intent, keeping prompt concise (~250-350 tokens).
  */
@@ -30,9 +38,8 @@ export function formatRelevantFewShots(
 ): string {
   const pkgLower = (appPackage || "").toLowerCase();
 
-  const documents = CRISP_FEW_SHOT_EXAMPLES.map(exampleDocument);
   const query = tokenize(question || "");
-  const scores = bm25(query, documents);
+  const scores = bm25(query, PRECOMPUTED_CORPUS_DOCUMENTS);
 
   const scored = CRISP_FEW_SHOT_EXAMPLES.map((example, index) => {
     const samePackage =

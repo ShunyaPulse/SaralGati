@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { PlusCircle, BellRing } from 'lucide-react';
+import { PlusCircle, BellRing, RefreshCw } from 'lucide-react';
 import { StatsCards } from '@/components/dashboard/stats-cards';
 import { RecentAlerts } from '@/components/dashboard/recent-alerts';
 import { ElderStatusList } from '@/components/dashboard/elder-status-list';
@@ -13,14 +13,38 @@ import { useAlertStore } from '@/stores/alert-store';
 export default function DashboardPage() {
   const { data: session } = useSession();
   const { fetchElders, elders, loading: eldersLoading } = useElderStore();
-  const { fetchAlerts, alerts, loading: alertsLoading } = useAlertStore();
+  const { fetchAlerts, resolveAlert, alerts, loading: alertsLoading } = useAlertStore();
   const [isMounted, setIsMounted] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
+  const refreshDashboard = useCallback(() => {
     fetchElders();
     fetchAlerts({ status: 'all', limit: 50 });
   }, [fetchElders, fetchAlerts]);
+
+  useEffect(() => {
+    setIsMounted(true);
+    refreshDashboard();
+
+    // Energy-efficient polling: skip background network & DB requests when tab is hidden,
+    // and refresh immediately when the caregiver brings the tab back into view.
+    const interval = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        refreshDashboard();
+      }
+    }, 30000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshDashboard();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshDashboard]);
 
   if (!isMounted) {
     return (
@@ -49,6 +73,15 @@ export default function DashboardPage() {
           <p className="text-slate-500 mt-1">Here&apos;s what&apos;s happening with your loved ones today.</p>
         </div>
         <div className="flex items-center gap-3 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={refreshDashboard}
+            aria-label="Refresh dashboard"
+            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className={`h-4 w-4 text-slate-500 ${eldersLoading || alertsLoading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
           <Link
             href="/alerts"
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 rounded-md bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-colors"
@@ -78,7 +111,11 @@ export default function DashboardPage() {
               </Link>
             </div>
             <div className="p-6">
-              <RecentAlerts alerts={alerts.slice(0, 5)} loading={alertsLoading} />
+              <RecentAlerts
+                alerts={alerts.slice(0, 5)}
+                loading={alertsLoading}
+                onResolve={resolveAlert}
+              />
             </div>
           </div>
         </div>

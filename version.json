@@ -1,7 +1,7 @@
 {
-  "version_code": 115,
-  "version_name": "6.0.0",
+  "version_code": 119,
+  "version_name": "6.1.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "SaralGati 6.0.0: (1) Atomic Redis Lua sliding-window rate limiter (eliminating 429 self-extending lockouts) and single-roundtrip atomic SET NX EX alert deduplication; (2) Two-tier Apriori statistical co-occurrence + bracket-balanced LLM hybrid habit miner in mineHabits.ts; (3) Forward step-lookahead (skip-step recovery) and Hinglish phonetic canonicalization in the multi-step playbook FlowEngine; (4) OkHttp production logcat redaction, BuildConfig.DEBUG gating, and bounded connection/read/write timeouts in Android NetworkModule.kt; and (5) Node 22 LTS alignment across Dockerfile and CI."
+  "changelog": "SaralGati 6.1.0 (Zero-Escape Fraud Scan & Threat-Biased Prioritization): Removed premature JNI traversal cutoff from traverseNode so 100% of visible screen nodes are scanned by OfflineFraudSentinel with zero chance of missing scams in long/bloated views, and added Threat-Biased Prioritization (ranking OTP, PIN, UPI, KYC, APK, remote access keywords first) when capping elements for the backend API."
 }

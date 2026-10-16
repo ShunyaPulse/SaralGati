@@ -2,12 +2,26 @@
 import React from 'react';
 import { AssistanceLog } from '@/types';
 import { formatDistanceToNow } from 'date-fns';
-import { ShieldAlert, Info, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { alertDescription, alertTitle, isGeofenceExitAlert } from '@/lib/notify/alerts';
+import { ShieldAlert, Info, AlertTriangle, CheckCircle2, ExternalLink } from 'lucide-react';
+import {
+  alertDescription,
+  alertMapUrl,
+  alertTitle,
+  isFraudInterceptAlert,
+  isGeofenceExitAlert,
+} from '@/lib/notify/alerts';
 import { normalizeSeverity } from '@/lib/shared/utils';
 
-export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loading: boolean }) {
-  if (loading) {
+export function RecentAlerts({
+  alerts,
+  loading,
+  onResolve,
+}: {
+  alerts: AssistanceLog[];
+  loading: boolean;
+  onResolve?: (id: string) => void;
+}) {
+  if (loading && alerts.length === 0) {
     return (
       <div className="space-y-4">
         {[1, 2, 3].map((i) => (
@@ -39,11 +53,13 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
         let Icon = Info;
         let colorClass = 'text-blue-500 bg-blue-50';
         const severity = normalizeSeverity(alert.metadata?.severity);
+        const isFraud = isFraudInterceptAlert(alert);
+        const mapLink = alertMapUrl(alert);
 
         if (alert.resolved) {
           Icon = CheckCircle2;
           colorClass = 'text-emerald-500 bg-emerald-50';
-        } else if (severity === 'high') {
+        } else if (severity === 'high' || isFraud) {
           Icon = ShieldAlert;
           colorClass = 'text-rose-500 bg-rose-50';
         } else if (severity === 'medium') {
@@ -57,11 +73,18 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
               <Icon className="h-4 w-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start">
-                <p className="text-sm font-semibold text-slate-900 truncate">
-                  {alert.elder_name || 'Unknown Elder'}
-                </p>
-                <span className="text-xs text-slate-500 whitespace-nowrap ml-2">
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex flex-wrap items-center gap-2 min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">
+                    {alert.elder_name || 'Unknown Elder'}
+                  </p>
+                  {isFraud && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-rose-100 text-rose-800">
+                      Scam shield
+                    </span>
+                  )}
+                </div>
+                <span className="text-xs text-slate-500 whitespace-nowrap">
                   {formatDistanceToNow(new Date(alert.created_at), { addSuffix: true })}
                 </span>
               </div>
@@ -69,7 +92,7 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
                 {alertTitle(alert)}
               </p>
               {alertDescription(alert) && (
-                <p className="text-xs text-slate-500 mt-1 truncate">
+                <p className="text-xs text-slate-500 mt-1 break-words">
                   {alertDescription(alert)}
                 </p>
               )}
@@ -79,6 +102,29 @@ export function RecentAlerts({ alerts, loading }: { alerts: AssistanceLog[], loa
                 <p className="text-xs text-slate-500 mt-1 truncate">
                   Screen: {alert.screen_name}
                 </p>
+              )}
+              {(mapLink || (!alert.resolved && onResolve)) && (
+                <div className="flex items-center gap-4 mt-2">
+                  {mapLink && (
+                    <a
+                      href={mapLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center text-xs font-medium text-teal-700 hover:text-teal-800 underline"
+                    >
+                      View on map <ExternalLink className="h-3 w-3 ml-1" aria-hidden="true" />
+                    </a>
+                  )}
+                  {!alert.resolved && onResolve && (
+                    <button
+                      type="button"
+                      onClick={() => onResolve(alert.id)}
+                      className="text-xs font-medium text-emerald-700 hover:text-emerald-800 underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0074c8] rounded"
+                    >
+                      Mark resolved
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           </div>

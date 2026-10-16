@@ -1,3 +1,4 @@
+import { canonicalizeToken } from '@/lib/ai/fewShotGrounding/bm25';
 import { ELDER_INTENTS, matchElderIntent, matchQueryPattern } from './intentDictionary';
 import { isNoiseElement } from './noiseElement';
 import { elementLabelLower, isActionableElement } from './uiElement';
@@ -106,9 +107,22 @@ export function validateSemanticTarget(
   );
 
   if (triggeredIntents.length > 0) {
+    // Split targetClean into discrete tokens (raw + phonetically canonicalized)
+    const rawTargetTokens = targetClean.split(/[\s,._\-?!/\\()[\]{}]+/).filter(Boolean);
+    const targetWords = new Set([
+      ...rawTargetTokens,
+      ...rawTargetTokens.map(canonicalizeToken),
+    ]);
+
     // Does the target element match any keyword of the triggered intents?
     const matchesIntentKeywords = triggeredIntents.some((intent) =>
-      intent.elementKeywords.some((keyword) => targetClean.includes(keyword.toLowerCase()))
+      intent.elementKeywords.some((keyword) => {
+        const kwLower = keyword.toLowerCase();
+        return (
+          targetClean.includes(kwLower) ||
+          targetWords.has(canonicalizeToken(kwLower))
+        );
+      })
     );
 
     if (matchesIntentKeywords) {
@@ -120,9 +134,6 @@ export function validateSemanticTarget(
         originalIndex: rawTargetIndex
       };
     }
-
-    // Split targetClean into discrete tokens for exact whole-word matching without RegExp injection
-    const targetWords = new Set(targetClean.split(/[\s,._\-?!/\\()[\]{}]+/).filter(Boolean));
 
     // Check universal action words (e.g. 'Proceed', 'Next', 'Continue')
     const matchesUniversal = UNIVERSAL_ACTION_KEYWORDS.some((k) => 
@@ -138,9 +149,11 @@ export function validateSemanticTarget(
       };
     }
 
-    // Check direct word overlap with question (e.g. contact name or specific topic)
+    // Check direct word overlap with question (including Hinglish phonetic canonicalization)
     const qWords = qLower.split(/[\s,._\-?!]+/).filter((w) => w.length >= 3);
-    const matchesQuestionWord = qWords.some((w) => targetWords.has(w));
+    const matchesQuestionWord = qWords.some(
+      (w) => targetWords.has(w) || targetWords.has(canonicalizeToken(w))
+    );
 
     if (matchesQuestionWord) {
       return {

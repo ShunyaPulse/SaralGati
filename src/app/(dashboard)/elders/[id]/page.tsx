@@ -55,16 +55,34 @@ export default function ElderDetailPage() {
   }, [elderId, fetchAlerts]);
 
   // This page is the caregiver's answer to "where is my parent right now", so the
-  // profile is re-read while it stays open. The heartbeat route drops the server
-  // side elders cache on every check-in, so this poll sees fresh coordinates and a
-  // fresh battery reading instead of the copy fetched on page load.
+  // profile is re-read while it stays open and visible. Pausing while the browser
+  // tab is hidden avoids wasted network and DB queries in background tabs.
   useEffect(() => {
-    const interval = setInterval(() => {
+    const refreshElderView = () => {
       fetchElders();
+      if (elderId) {
+        fetchAlerts({ elder_id: elderId, limit: 10 });
+      }
+    };
+
+    const interval = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        refreshElderView();
+      }
     }, 60_000);
 
-    return () => clearInterval(interval);
-  }, [fetchElders]);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshElderView();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchElders, fetchAlerts, elderId]);
 
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this elder profile? This action cannot be undone.')) {

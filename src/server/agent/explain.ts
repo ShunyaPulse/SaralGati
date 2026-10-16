@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { fail, ok, type ServiceResult } from '@/server/http';
+import crypto from "crypto";
 import { z } from "zod";
 import { generateAIResponse } from "@/lib/ai/aiFallback";
 import { isFlywheelRequest, validateDeviceToken } from "@/lib/auth/agent-auth";
@@ -10,7 +11,8 @@ import {
   analyzeForFraudWithAdvisor,
   INTERACTIVE_ADVISOR_TIMEOUT_MS,
 } from "@/lib/fraud/fraudAdvisor";
-import { getClientIp, rateLimiter } from "@/lib/data/redis";
+import { cacheGet, cacheSet, getClientIp, rateLimiter } from "@/lib/data/redis";
+import { hasDevanagari } from "@/lib/guidance/guidanceLanguage";
 import { isActionableElement, elementLabelLower } from "@/lib/guidance/uiElement";
 import { isNoiseElement } from "@/lib/guidance/noiseElement";
 import { pruneUITree, stripLeadingElementIndex } from "@/lib/guidance/uiPruner";
@@ -45,8 +47,7 @@ export async function explainScreen(req: NextRequest): Promise<ServiceResult> {
       });
     }
 
-    // 2. Rate limit: screen explanations are never cached, so without this a
-    // single paired device could spend the whole AI budget in a minute.
+    // 2. Rate limit per paired device / IP
     const rateLimitId = isFlywheel
       ? "explain:flywheel"
       : `explain:device:${auth.elderId ?? getClientIp(req)}`;
@@ -73,10 +74,7 @@ export async function explainScreen(req: NextRequest): Promise<ServiceResult> {
 
     // === SECURITY GATE: AUTONOMOUS ANTI-FRAUD SENTINEL ===
     // Screen explanations are pushed proactively, so a scam screen must be warned
-    // about here too instead of being politely described to the elder.
-    // The rules decide; the LoRA may only raise the verdict. Explanations are
-    // pushed proactively, so the model gets a short budget instead of holding
-    // the screen up.
+    // about here FIRST before any cache lookup instead of being politely described.
     const fraudVerdict = await analyzeForFraudWithAdvisor(
       { app_package: safeAppPackage, ui_elements: safeUIElements },
       { timeoutMs: INTERACTIVE_ADVISOR_TIMEOUT_MS },
@@ -109,6 +107,52 @@ export async function explainScreen(req: NextRequest): Promise<ServiceResult> {
     // show the advisory (SHOW_WARNING) without losing the screen guidance.
     const safety = fraudVerdict.threat_level === "SAFE" ? null : fraudVerdict;
 
+    // === GREEN AI SCREEN EXPLANATION CACHE (24h TTL for clean screens) ===
+    // Computed after the anti-fraud sentinel so security checks are never skipped,
+    // while repeated "Explain Screen" taps on identical app screens save 100% of
+    // dual-LLM GPU inference energy.
+    const normalizedElements = safeUIElements
+      .map((el: string) =>
+        el
+          .trim()
+          .toLowerCase()
+          .replace(/\b\d{1,2}:\d{2}\s*(am|pm)?\b/gi, "")
+          .replace(/\b\d+%/g, "")
+          .replace(/\\(\d+\s*(unread|new)\\)/gi, "")
+          .trim(),
+      )
+      .join("|");
+    const screenHash = crypto
+      .createHash("sha256")
+      .update(normalizedElements)
+      .digest("hex")
+      .slice(0, 16);
+    const explainCacheKey = `explain_cache:${guidanceLang}:${safeAppPackage}:${screenHash}`;
+
+    if (!safety) {
+      const cachedExplain = await cacheGet<{
+        explanation: string;
+        highlight_index: number | null;
+      }>(explainCacheKey);
+      if (
+        cachedExplain &&
+        typeof cachedExplain.explanation === "string" &&
+        cachedExplain.explanation.length > 0 &&
+        (cachedExplain.highlight_index === null ||
+          typeof cachedExplain.highlight_index === "number")
+      ) {
+        return ok({
+          success: true,
+          data: {
+            explanation: cachedExplain.explanation,
+            highlight_index: cachedExplain.highlight_index,
+            source: "redis_cache",
+            model_used: "explain_screen_cache",
+          },
+        });
+      }
+    }
+
     const { formattedString: formattedElements } = pruneUITree(safeUIElements);
 
     const langInstruction =
@@ -131,9 +175,6 @@ Tell them where they are and what they can do next. Be comforting and respectful
           ? "Explain this screen and tell me what I should do."
           : "Is screen ke baare mein samjhao aur batao mujhe kya karna chahiye.",
       lang: guidanceLang,
-      // The screen travels with the request: without it the two engines were
-      // compared on a score that could not tell a well-grounded sentence from an
-      // invented one, because nothing was available to ground against.
       uiElements: safeUIElements,
     });
 
@@ -157,6 +198,19 @@ Tell them where they are and what they can do next. Be comforting and respectful
           highlightIndex = candidateIdx;
         }
       }
+    }
+
+    const answerMatchesLanguage =
+      guidanceLang !== "en" || !hasDevanagari(cleanExplanation);
+    if (!safety && cleanExplanation.length >= 10 && answerMatchesLanguage) {
+      await cacheSet(
+        explainCacheKey,
+        {
+          explanation: cleanExplanation,
+          highlight_index: highlightIndex,
+        },
+        86400,
+      );
     }
 
     return ok({

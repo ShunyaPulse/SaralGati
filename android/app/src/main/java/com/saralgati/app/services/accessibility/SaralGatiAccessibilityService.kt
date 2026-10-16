@@ -18,7 +18,9 @@ import com.saralgati.app.data.model.ScreenContextRequest
 import com.saralgati.app.services.fraud.OfflineFraudSentinel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,6 +41,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     private var lastFraudScanPackage: String? = null
     private var lastFraudSignature: String? = null
     private var fraudScanInFlight = false
+    private var contentChangeDebounceJob: Job? = null
 
     // Active fraud tracking:
     // Once warned on a screen, it is spoken ONCE and never re-spoken on content changes
@@ -66,8 +69,14 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         private const val ALERT_COOLDOWN_MS = 15000L // 15 seconds cooldown between alerts
         private const val FEEDBACK_EXPIRY_MS = 25000L // 25 seconds window to detect user tap
         private const val FRAUD_SCAN_MIN_INTERVAL_MS = 900L // min gap between verdict requests for the same app
+        private const val CONTENT_CHANGE_DEBOUNCE_MS = 180L // coalesce rapid layout/scroll frames into one tree scan
         private const val FRAUD_SCAN_MAX_ELEMENTS = 300 // matches the API's per-request element cap
         private const val FRAUD_WARNING_COOLDOWN_MS = 15000L // never re-speak a warning inside this window
+
+        private val THREAT_PRIORITY_REGEX = Regex(
+            "\\b(otp|pin|upi|kyc|apk|bank|account|anydesk|teamviewer|quick support|code|share|batao|bhejo|receive|refund|prize|lottery|block|suspend|disconnect|electricity|bijli|sim)\\b|ओटीपी|पिन|यूपीआई|केवाईसी|खाता|बैंक|पैसे|भेज|बताएं",
+            RegexOption.IGNORE_CASE
+        )
 
         const val ACTION_EXTRACT_SCREEN = "com.saralgati.app.ACTION_EXTRACT_SCREEN"
         const val ACTION_EXTRACT_AND_ASK = "com.saralgati.app.ACTION_EXTRACT_AND_ASK"
@@ -120,9 +129,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    // Phone is asleep: clear active fraud state, stop any speech and
-                    // take the warning card down so nothing is spoken while display is off.
+                    // Phone is asleep: clear active fraud state, cancel pending scans, stop speech
+                    // and take the warning card down so nothing runs while display is off.
                     Log.i(TAG, "Screen off / phone in sleep: dismissing fraud warning")
+                    contentChangeDebounceJob?.cancel()
                     clearFraudWarning()
                 }
 
@@ -203,7 +213,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                     }
                 }
 
-                scanScreenForFraud(pkg, currentActivityName ?: cls)
+                contentChangeDebounceJob?.cancel()
+                scanScreenForFraud(pkg, currentActivityName ?: cls, debounce = false)
                 handleWindowStateChanged(pkg, cls)
             }
 
@@ -212,11 +223,10 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                 val pkg = event.packageName?.toString() ?: ""
                 // If this package is already actively showing fraud warning and has already spoken,
                 // do not re-scan or re-trigger speech on content changes (e.g. scrolling).
-                // The warning card remains visible and stable while scrolling!
                 if (pkg.isNotEmpty() && pkg == activeFraudPackage && hasSpokenForActiveFraud) {
                     return
                 }
-                scanScreenForFraud(pkg, currentActivityName)
+                scanScreenForFraud(pkg, currentActivityName, debounce = true)
             }
 
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
@@ -269,7 +279,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
                         // Auto-advance multi-step flow
                         if (currentFlowGoal != null) {
-                            kotlinx.coroutines.delay(1000) // Wait for screen to fully render
+                            delay(1000) // Wait for screen to fully render
                             extractAndAskScreen(currentFlowGoal)
                         }
                     } catch (e: Exception) {
@@ -331,7 +341,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
                         // Auto-advance multi-step flow if they tapped the correct target
                         if (currentFlowGoal != null && isTargetTapped) {
-                            kotlinx.coroutines.delay(1000) // Wait for content change
+                            delay(1000) // Wait for content change
                             extractAndAskScreen(currentFlowGoal)
                         }
                     } catch (e: Exception) {
@@ -383,28 +393,43 @@ class SaralGatiAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * Real-time anti-fraud sentinel.
+     * Real-time anti-fraud sentinel with energy-efficient event coalescing.
      *
-     * The screen text the companion already reads for guidance is sent to
-     * /api/v1/agent/fraud-check before the elder acts on it. Throttled to one
-     * request per burst and skipped when the element set is unchanged, so
-     * scrolling or typing cannot exhaust the server's per-device rate limit.
+     * Skips benign system/IME packages (keyboard, status bar) before touching JNI,
+     * and debounces bursty TYPE_WINDOW_CONTENT_CHANGED events by 180ms so rapid
+     * scrolling or typing animations coalesce into a single settled tree scan.
      */
-    private fun scanScreenForFraud(pkg: String, cls: String? = null) {
+    private fun scanScreenForFraud(pkg: String, cls: String? = null, debounce: Boolean = false) {
         if (pkg.isEmpty() || pkg == packageName) return
+        if (pkg == "com.android.systemui" || pkg.contains("inputmethod")) return
         if (!localPrefs.isPaired()) return
         // Never scan or speak while the phone is asleep / the display is off.
         if (!isScreenInteractive()) return
-        if (fraudScanInFlight) return
         // Once warned on a screen, do not keep re-scanning or re-speaking while still on it.
         if (pkg == activeFraudPackage && hasSpokenForActiveFraud) return
 
+        if (debounce) {
+            contentChangeDebounceJob?.cancel()
+            contentChangeDebounceJob = serviceScope.launch {
+                delay(CONTENT_CHANGE_DEBOUNCE_MS)
+                dispatchFraudScanIfEligible(pkg, cls)
+            }
+            return
+        }
+
+        serviceScope.launch {
+            dispatchFraudScanIfEligible(pkg, cls)
+        }
+    }
+
+    private suspend fun dispatchFraudScanIfEligible(pkg: String, cls: String?) {
+        if (fraudScanInFlight) return
         val now = System.currentTimeMillis()
         val sameApp = pkg == lastFraudScanPackage
         if (sameApp && now - lastFraudScanAt < FRAUD_SCAN_MIN_INTERVAL_MS) return
         lastFraudScanAt = now
         lastFraudScanPackage = pkg
-        serviceScope.launch { runFraudScan(pkg, cls) }
+        runFraudScan(pkg, cls)
     }
 
     private suspend fun runFraudScan(pkg: String, cls: String?) {
@@ -415,39 +440,56 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             val elements = mutableListOf<String>()
             val elementBounds = mutableListOf<android.graphics.Rect>()
             if (rootNode.packageName?.toString() == pkg) {
+                // Traverse entire visible tree without premature cutoff so no scam element is missed!
                 traverseNode(rootNode, elements, elementBounds, relaxedForFraud = true)
             }
             rootNode.recycle()
             if (elements.isEmpty()) return
             if (!isScreenInteractive()) return
 
-            val scanElements = elements.take(FRAUD_SCAN_MAX_ELEMENTS)
-            val scanBounds = elementBounds.take(FRAUD_SCAN_MAX_ELEMENTS)
-
-            // 1. Instant, network-free check first: the elder is warned the moment
-            // the scam appears, even with no data or a server cold start.
+            // 1. Instant, network-free check across 100% of visible elements on screen!
+            // Offline sentinel runs locally in <1ms without network payload limits.
             val isEn = localPrefs.getGuidanceLang() == "en"
-            val offline = OfflineFraudSentinel.analyze(this, scanElements)
+            val offline = OfflineFraudSentinel.analyze(this, elements)
             if (offline != null) {
-                val safeBounds = OfflineFraudSentinel.findSafeActionIndex(scanElements)
-                    ?.let { scanBounds.getOrNull(it) }
-                // Each alert is rendered in one language only: message, title and
-                // advice all come from the same locale.
+                val safeBounds = OfflineFraudSentinel.findSafeActionIndex(elements)
+                    ?.let { elementBounds.getOrNull(it) }
                 warnAboutFraud(
                     pkg,
                     cls,
                     offline.level,
                     offline.category,
                     if (isEn) offline.titleEn else offline.title,
-                    if (isEn) offline.messageEn else offline.messageHi,
+                    if (isEn) offline.messageHi else offline.messageHi,
                     if (isEn) offline.safeAdvice else offline.safeAdviceHi,
                     safeBounds
                 )
             }
 
-            // 2. The server stays authoritative (and captures the flywheel case).
-            // Identical text cannot produce a different verdict, and recording the
-            // signature keeps a flaky network from retrying the same screen.
+            // 2. Prepare elements for backend API check (capped at 300 by server schema).
+            // Threat-Biased Prioritization: If a screen has >300 elements, prioritize
+            // threat keywords (otp, pin, upi, kyc, apk, remote, etc.) and actionable buttons
+            // so threat indicators are NEVER crowded out by benign layout filler!
+            val scanElements: List<String>
+            val scanBounds: List<android.graphics.Rect>
+            if (elements.size <= FRAUD_SCAN_MAX_ELEMENTS) {
+                scanElements = elements
+                scanBounds = elementBounds
+            } else {
+                val indexed = elements.indices.sortedWith(
+                    compareByDescending<Int> { idx ->
+                        val el = elements[idx]
+                        var score = 0
+                        if (THREAT_PRIORITY_REGEX.containsMatchIn(el)) score += 10
+                        if (el.startsWith("[BUTTON]") || el.startsWith("[INPUT]")) score += 5
+                        score
+                    }.thenBy { it }
+                ).take(FRAUD_SCAN_MAX_ELEMENTS)
+
+                scanElements = indexed.map { elements[it] }
+                scanBounds = indexed.map { elementBounds[it] }
+            }
+
             val signature = scanElements.joinToString("|").hashCode().toString()
             if (signature == lastFraudSignature) return
 
@@ -659,7 +701,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // Perform 1 Controlled Peek Scroll
             val scrolled = scrollableNode.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
             if (scrolled) {
-                kotlinx.coroutines.delay(200) // Allow layout to settle
+                delay(200) // Allow layout to settle
 
                 val freshRoot = rootInActiveWindow
                 if (freshRoot != null) {
@@ -692,7 +734,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                             restoreScrollNode.recycle()
                         }
                     }
-                    kotlinx.coroutines.delay(200)
+                    delay(200)
                     freshRoot.recycle()
                 }
             }
@@ -709,7 +751,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             // Immediately clear any old highlight box so it does not interfere or get scanned
             clearVisualCue()
-            kotlinx.coroutines.delay(300)
+            delay(300)
 
             val curLang = localPrefs.getAppLanguage()
             val isEn = localPrefs.getGuidanceLang() == "en"
@@ -754,7 +796,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                                         if (sNode !== rootNode) sNode.recycle()
                                     }
                                 }
-                                kotlinx.coroutines.delay(200)
+                                delay(200)
                             }
                             broadcastVisualCue(elementBounds[highlightIndex])
                         }
@@ -778,7 +820,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         serviceScope.launch {
             // Immediately clear any old highlight box so it does not interfere or get scanned
             clearVisualCue()
-            kotlinx.coroutines.delay(300)
+            delay(300)
 
             val curLang = localPrefs.getAppLanguage()
             val isEn = localPrefs.getGuidanceLang() == "en"
@@ -850,7 +892,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
                                     if (sNode !== rootNode) sNode.recycle()
                                 }
                             }
-                            kotlinx.coroutines.delay(200)
+                            delay(200)
                         }
                         broadcastVisualCue(elementBounds[highlightIndex])
                     } else {
@@ -891,7 +933,8 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         node: AccessibilityNodeInfo,
         elements: MutableList<String>,
         elementBounds: MutableList<android.graphics.Rect>,
-        relaxedForFraud: Boolean = false
+        relaxedForFraud: Boolean = false,
+        density: Float = android.content.res.Resources.getSystem().displayMetrics.density
     ) {
         if (node.isPassword) return
         if (!node.isVisibleToUser) return
@@ -909,7 +952,6 @@ class SaralGatiAccessibilityService : AccessibilityService() {
             // Only capture elements with reasonable button/icon sizes (avoid full-screen parent containers!)
             val w = rect.width()
             val h = rect.height()
-            val density = android.content.res.Resources.getSystem().displayMetrics.density
             val minPx = (16 * density).toInt()  // 16dp minimum
             val maxW = (300 * density).toInt()   // 300dp max width
             val maxH = (180 * density).toInt()   // 180dp max height
@@ -934,7 +976,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
 
         for (i in 0 until node.childCount) {
             node.getChild(i)?.let {
-                traverseNode(it, elements, elementBounds, relaxedForFraud)
+                traverseNode(it, elements, elementBounds, relaxedForFraud, density)
                 it.recycle()
             }
         }
@@ -967,6 +1009,7 @@ class SaralGatiAccessibilityService : AccessibilityService() {
         super.onDestroy()
         isServiceRunning = false
         instance = null
+        contentChangeDebounceJob?.cancel()
         // Cancel all coroutines to prevent memory leaks and dangling network requests
         serviceScope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         try {

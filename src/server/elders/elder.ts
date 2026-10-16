@@ -99,22 +99,15 @@ export async function updateElderPreferences(
       [parsed.data.safe_zone_email_enabled, elderId, userId]
     );
 
-    // A missing row means the elder is not this caregiver's, which is reported as
-    // 404 rather than 500 by the update that matched nothing.
     if (!updatedElder) {
       return fail(404, { success: false, error: 'Not Found or Unauthorized' });
     }
 
-    // The elders list is cached for 5 minutes; without this the caregiver would
-    // flip the switch and see the old value come back on the next page load.
-    await invalidatePattern(`elders:${userId}*`);
+    await cacheDelete(`elders:${userId}`);
 
     return ok({ success: true, data: toApiElder(updatedElder) });
   } catch (error: any) {
     console.error('Error updating elder preferences:', error);
-    // 42703 = undefined_column, i.e. this deployment is running ahead of
-    // migrations/009. Say what is actually wrong instead of handing the caregiver
-    // a generic failure they can do nothing with.
     if (error?.code === '42703') {
       return fail(503, {
         success: false,
@@ -140,7 +133,6 @@ export async function replaceElder(
     const body = await request.json();
     const validatedData = elderProfileSchema.parse(body);
 
-    // Verify ownership
     const existing = await queryOne(`SELECT id FROM elder_profiles WHERE id = $1 AND caregiver_id = $2`, [elderId, userId]);
     if (!existing) {
       return fail(404, { success: false, error: 'Not Found or Unauthorized' });
@@ -166,8 +158,8 @@ export async function replaceElder(
       throw new Error('Update failed');
     }
 
-    // Invalidate caches
-    await invalidatePattern(`elders:${userId}*`);
+    // O(1) cache delete
+    await cacheDelete(`elders:${userId}`);
     await cacheDelete(`agent-config:${elderId}`);
 
     return ok({ success: true, data: toApiElder(updatedElder) });
@@ -192,7 +184,6 @@ export async function deleteElder(
 
     const userId = session.user.id;
 
-    // Verify ownership and delete
     const result = await queryOne(
       `DELETE FROM elder_profiles WHERE id = $1 AND caregiver_id = $2 RETURNING id`,
       [elderId, userId]
@@ -202,10 +193,11 @@ export async function deleteElder(
       return fail(404, { success: false, error: 'Not Found or Unauthorized' });
     }
 
-    // Invalidate caches
-    await invalidatePattern(`elders:${userId}*`);
+    await cacheDelete(`elders:${userId}`);
     await invalidatePattern(`alerts:${userId}*`);
     await cacheDelete(`agent-config:${elderId}`);
+    await cacheDelete(`agent-habits:${elderId}`);
+    await cacheDelete(`agent-geofences:${elderId}`);
 
     return ok({ success: true, data: null });
   } catch (error) {

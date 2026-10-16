@@ -19,8 +19,9 @@ import java.util.Locale
  * spoken the moment the scam appears - and keeps working with the radio off.
  *
  * Includes SOTA Unicode NFKC normalization, zero-width format character
- * stripping, and Cyrillic/Greek homograph defanging so obfuscated SMS/WhatsApp
- * scam messages are caught on-device in sub-millisecond time.
+ * stripping, Cyrillic/Greek homograph defanging, and pre-compiled regex +
+ * per-fragment courtesy-warning memoization for sub-millisecond on-device CPU
+ * and battery efficiency.
  */
 object OfflineFraudSentinel {
 
@@ -72,6 +73,7 @@ object OfflineFraudSentinel {
     )
 
     private val INVISIBLE_FORMAT_CHARS = Regex("[\\u00ad\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u206f\\ufeff]")
+    private val WHITESPACE_REGEX = Regex("\\s+")
 
     private val HOMOGRAPH_MAP = mapOf(
         '\u0430' to 'a',
@@ -155,8 +157,13 @@ object OfflineFraudSentinel {
         var bestPriority = Int.MAX_VALUE
 
         for (fragment in normalize(elements)) {
+            var strippedFragment: String? = null
             for (rule in rules) {
-                val text = if (rule.stripSafeWarnings) stripCourtesyWarnings(fragment) else fragment
+                val text = if (rule.stripSafeWarnings) {
+                    strippedFragment ?: stripCourtesyWarnings(fragment).also { strippedFragment = it }
+                } else {
+                    fragment
+                }
                 if (text.isEmpty()) continue
                 if (!rule.patterns.any { it.containsMatchIn(text) }) continue
                 if (!rule.requires.all { it.containsMatchIn(text) }) continue
@@ -211,7 +218,7 @@ object OfflineFraudSentinel {
                         .replace('\u00a0', ' ')
                         .lowercase(Locale.ROOT),
                 )
-                    .replace(Regex("\\s+"), " ")
+                    .replace(WHITESPACE_REGEX, " ")
                     .trim()
                 if (text.isNotEmpty()) fragments.add(text)
             }
@@ -222,7 +229,7 @@ object OfflineFraudSentinel {
     private fun stripCourtesyWarnings(text: String): String {
         var result = text
         for (pattern in safeWarningStrips) result = result.replace(pattern, " ")
-        return result.replace(Regex("\\s+"), " ").trim()
+        return result.replace(WHITESPACE_REGEX, " ").trim()
     }
 
     private fun JSONArray.toStringList(): List<String> =

@@ -1,3 +1,4 @@
+import { canonicalizeToken } from '@/lib/ai/fewShotGrounding/bm25';
 import type { GuidanceLang } from '@/lib/guidance/guidanceLanguage';
 import { isNoiseElement } from '@/lib/guidance/noiseElement';
 import {
@@ -10,16 +11,33 @@ import { getIntentExplanation } from './explanations';
 import { ELDER_INTENTS } from './intents';
 import type { IntentDefinition } from './types';
 
+function canonicalizePhrase(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[\s,.\-?!]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .map(canonicalizeToken)
+    .join(' ');
+}
+
 /**
  * Matches an elder's question to the best matching interactive element on the screen.
  * Prioritizes actionable elements ([BUTTON], [INPUT], [TOGGLE]) over static [TEXT],
  * and filters media/preview noise (e.g., '3 videos', timestamps).
+ * Also normalizes common Hinglish phonetic variants ("bijlee" -> "bijli", "vedeo" -> "video").
  */
 export function matchQueryPattern(qLower: string, pattern: string): boolean {
   const p = pattern.toLowerCase().trim();
   if (qLower === p) return true;
   const normalizedQ = ' ' + qLower.replace(/[\s,.\-?!]+/g, ' ').trim() + ' ';
-  return normalizedQ.includes(' ' + p + ' ');
+  if (normalizedQ.includes(' ' + p + ' ')) return true;
+
+  // Phonetic Hinglish fallback: "bijlee ka bill" matches "bijli ka bill", "vedeo call" matches "video call"
+  const canonQ = ' ' + canonicalizePhrase(qLower) + ' ';
+  const canonP = ' ' + canonicalizePhrase(p) + ' ';
+  return canonP.trim().length > 0 && canonQ.includes(canonP);
 }
 
 /**
@@ -60,11 +78,12 @@ const WEAK_QUESTION_TOKENS = new Set([
   'please',
 ]);
 
-/** Question words worth matching against an element label. */
+/** Question words worth matching against an element label (raw + canonicalized). */
 function questionTokens(qLower: string): string[] {
-  return qLower
+  const raw = qLower
     .split(/[^a-z0-9\u0900-\u097F]+/)
     .filter((token) => token.length >= 3 && !WEAK_QUESTION_TOKENS.has(token));
+  return [...new Set([...raw, ...raw.map(canonicalizeToken)])];
 }
 
 /**

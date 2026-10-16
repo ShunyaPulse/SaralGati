@@ -1,6 +1,6 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { query, queryOne } from '@/lib/data/db';
-import { invalidatePattern } from '@/lib/data/redis';
+import { cacheDelete, cacheGet, cacheSet, deduplicateAlert, invalidatePattern } from '@/lib/data/redis';
 
 import { validateDeviceToken } from '@/lib/auth/agent-auth';
 import { heartbeatSchema } from '@/lib/shared/validations';
@@ -26,8 +26,17 @@ interface ElderLocationRow {
   last_lng: number | null;
 }
 
-/** Active safe zones for one elder, newest first. Unusable payloads are skipped. */
+/**
+ * Active safe zones for one elder, newest first, cached for 5 minutes in Redis/L1
+ * and invalidated whenever a habit rule or safe zone is created, edited, or deleted.
+ */
 async function loadGeofences(elderId: string): Promise<Geofence[]> {
+  const cacheKey = `agent-geofences:${elderId}`;
+  const cached = await cacheGet<Geofence[]>(cacheKey);
+  if (Array.isArray(cached)) {
+    return cached;
+  }
+
   const rules = await query<{ rule_payload: unknown }>(
     `SELECT rule_payload FROM habit_rules
       WHERE elder_id = $1 AND rule_type = 'location_trigger' AND is_active = true
@@ -36,9 +45,12 @@ async function loadGeofences(elderId: string): Promise<Geofence[]> {
     [elderId]
   );
 
-  return rules
+  const fences = rules
     .map((rule) => parseGeofence(rule.rule_payload))
     .filter((fence): fence is Geofence => fence !== null);
+
+  await cacheSet(cacheKey, fences, 300);
+  return fences;
 }
 
 /**
@@ -125,10 +137,6 @@ async function alertOnGeofenceExit({
     ]
   );
 
-  // The alert row only helps a caregiver who opens the dashboard, so the family
-  // is emailed as well - unless this elder is muted. Best-effort by design: the
-  // alert is already stored, and a mail failure must never fail the heartbeat
-  // that produced it. Muting never suppresses the row above.
   const emailOutcome = await notifySafeZoneExit({
     elderName,
     fence,
@@ -139,10 +147,6 @@ async function alertOnGeofenceExit({
     at: occurredAt,
   });
 
-  // Logged as well as returned to the device: a fence exit is rare and safety
-  // relevant, and "no mail arrived" has to be answerable from the server logs
-  // (muted / failed / no recipient are three different answers) instead of only
-  // from the phone's copy of the response.
   console.log(
     `Safe-zone exit for elder ${elderId} in "${fence.label}": safe-zone email ${emailOutcome}`
   );
@@ -162,17 +166,10 @@ export async function recordHeartbeat(
   try {
     const auth = await validateDeviceToken(request);
 
-    // Only the paired phone may report telemetry for its own elder. This route
-    // used to fall back to "any active elder profile whose UUID is passed in the
-    // URL", so an unauthenticated caller could forge battery and heartbeat
-    // values - and heartbeat is what the caregiver dashboard reads to decide a
-    // phone is online. The pairing window still works without that fallback: the
-    // app sends its elder id as the bearer token until it has a device token.
     if (!auth.isAuthenticated || auth.elderId !== elderId) {
       return fail(401, { success: false, error: 'Unauthorized device' });
     }
 
-    // For the mobile companion app, it sends a JSON body
     const parsedBody = heartbeatSchema.safeParse(
       await request.json().catch(() => ({}))
     );
@@ -192,13 +189,6 @@ export async function recordHeartbeat(
         ? parsedBody.data.location_accuracy_m
         : null;
 
-    // The previous fix is read before the update so a fence crossing can be
-    // detected. RETURNING would only give us the new coordinates.
-    // The email preference is read through `to_jsonb` on purpose: referencing the
-    // column directly would make every check-in fail with a 500 on a deployment
-    // that runs ahead of migrations/009, i.e. silence every elder's telemetry
-    // until someone runs the migration. COALESCE keeps the pre-migration default
-    // ("mail on") explicit rather than relying on a null.
     const previous = await queryOne<ElderLocationRow>(
       `SELECT ep.id, ep.caregiver_id, ep.elder_name, u.email AS caregiver_email,
               COALESCE((to_jsonb(ep) ->> 'safe_zone_email_enabled')::boolean, true) AS email_safe_zone_exits,
@@ -217,9 +207,7 @@ export async function recordHeartbeat(
     const previousPoint = toGeoPoint(previous.last_lat, previous.last_lng);
 
     // 1. Update elder's battery, phone model, OS version, online status and the
-    //    last known location. `location_updated_at` only moves when a fix really
-    //    arrived, so the dashboard can tell "online but location unknown" apart
-    //    from "position is 4 hours old".
+    //    last known location.
     await queryOne(
       `UPDATE elder_profiles
        SET battery_status = COALESCE($1, battery_status),
@@ -234,34 +222,34 @@ export async function recordHeartbeat(
       [batteryLevel, phoneModel, osVersion, point?.latitude ?? null, point?.longitude ?? null, accuracy, elderId]
     );
 
-    // 2. If battery is critically low (< 15%), we can log a battery_low alert (optional silent alert)
+    // 2. If battery is critically low (< 15%), deduplicate via atomic Redis NX lock (2h)
+    //    before touching PostgreSQL assistance_logs.
     let batteryAlertCreated = false;
     if (batteryLevel !== null && batteryLevel < 15) {
-      // Check if we recently alerted for this to avoid spamming
-      const recentAlert = await queryOne(
-        `SELECT id FROM assistance_logs 
-         WHERE elder_id = $1 AND event_type = 'battery_low' 
-         AND created_at > NOW() - INTERVAL '2 hours'`,
-        [elderId]
-      );
-
-      if (!recentAlert) {
-        await queryOne(
-          `INSERT INTO assistance_logs (
-            elder_id, event_type, screen_name, app_package, duration_ms, metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6)`,
-          [elderId, 'battery_low', 'System', 'android', 0, JSON.stringify({ battery: batteryLevel, severity: 'medium' })]
+      const isDuplicate = await deduplicateAlert(elderId, 'battery_low', 7200);
+      if (!isDuplicate) {
+        const recentAlert = await queryOne(
+          `SELECT id FROM assistance_logs 
+           WHERE elder_id = $1 AND event_type = 'battery_low' 
+           AND created_at > NOW() - INTERVAL '2 hours'`,
+          [elderId]
         );
-        batteryAlertCreated = true;
+
+        if (!recentAlert) {
+          await queryOne(
+            `INSERT INTO assistance_logs (
+              elder_id, event_type, screen_name, app_package, duration_ms, metadata
+            ) VALUES ($1, $2, $3, $4, $5, $6)`,
+            [elderId, 'battery_low', 'System', 'android', 0, JSON.stringify({ battery: batteryLevel, severity: 'medium' })]
+          );
+          batteryAlertCreated = true;
+        }
       }
     }
 
     // 3. Safe zones: alert the caregiver when the elder crosses an active fence.
     let breach: FenceExitResult | null = null;
     if (point) {
-      // Fences are judged against the accuracy the phone reported for this fix: a
-      // 200 m fix must travel further than the radius before a family is woken up,
-      // otherwise indoor GPS noise alone would raise a "left home" alert.
       const accuracyMarginM = fenceAccuracyMarginM(accuracy);
       const fences = await loadGeofences(elderId);
       for (const fence of fences) {
@@ -279,8 +267,8 @@ export async function recordHeartbeat(
       }
     }
 
-    // 4. Invalidate Redis cache so caregiver dashboard shows "Online" and new alerts immediately
-    await invalidatePattern(`elders:${previous.caregiver_id}*`);
+    // 4. Direct O(1) DEL of `elders:${caregiver_id}` instead of full-keyspace Redis SCAN!
+    await cacheDelete(`elders:${previous.caregiver_id}`);
     if (breach || batteryAlertCreated) {
       await invalidatePattern(`alerts:${previous.caregiver_id}*`);
     }
@@ -290,9 +278,6 @@ export async function recordHeartbeat(
       timestamp: new Date().toISOString(),
       location_tracked: point !== null,
       safe_zone_exit: breach?.fence.label ?? null,
-      // Reported separately: a muted elder and a misconfigured mail server look
-      // identical from the dashboard, and "no mail arrived" needs to be
-      // diagnosable from the device's own logs.
       safe_zone_exit_emailed: breach?.emailAttempted ?? false,
       safe_zone_exit_email_delivered: breach?.emailDelivered ?? false,
     });

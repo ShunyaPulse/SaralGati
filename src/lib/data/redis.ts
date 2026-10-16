@@ -16,6 +16,63 @@ redis.on('error', (err) => {
 });
 
 /**
+ * Bounded L1 In-Memory Hot Cache in front of Redis (L2).
+ * Absorbs high-frequency read-mostly lookups (device auth sessions, screen/explain
+ * caches, elder habits/config/geofences) in <0.005ms with zero TCP/TLS overhead,
+ * while immediately evicting on `cacheDelete` and `invalidatePattern`.
+ */
+const L1_CACHE_MAX_ENTRIES = 1000;
+const L1_DEFAULT_TTL_MS = 30_000; // 30s local coherence window
+const L1_ELIGIBLE_PREFIXES = [
+  'device_session:',
+  'screen_cache:',
+  'explain_cache:',
+  'agent-config:',
+  'agent-habits:',
+  'agent-geofences:',
+  'app_latest_version_meta',
+];
+
+interface L1Entry {
+  serialized: string;
+  expiresAt: number;
+}
+
+const l1Cache = new Map<string, L1Entry>();
+
+function isL1Eligible(key: string): boolean {
+  return L1_ELIGIBLE_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
+
+function l1Get<T>(key: string): T | null {
+  const entry = l1Cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    l1Cache.delete(key);
+    return null;
+  }
+  try {
+    return JSON.parse(entry.serialized) as T;
+  } catch {
+    l1Cache.delete(key);
+    return null;
+  }
+}
+
+function l1Set(key: string, serialized: string, ttlSeconds?: number): void {
+  if (!isL1Eligible(key)) return;
+  if (l1Cache.size >= L1_CACHE_MAX_ENTRIES) {
+    const oldestKey = l1Cache.keys().next().value;
+    if (oldestKey !== undefined) l1Cache.delete(oldestKey);
+  }
+  const maxLocalMs = ttlSeconds ? Math.min(L1_DEFAULT_TTL_MS, ttlSeconds * 1000) : L1_DEFAULT_TTL_MS;
+  l1Cache.set(key, {
+    serialized,
+    expiresAt: Date.now() + maxLocalMs,
+  });
+}
+
+/**
  * Atomic sliding-window rate limiter Lua script:
  * 1. Evicts expired timestamps outside the current window.
  * 2. Counts active timestamps in the window.
@@ -41,9 +98,15 @@ return {1, limit - (current + 1)}
 `;
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
+  if (isL1Eligible(key)) {
+    const hit = l1Get<T>(key);
+    if (hit !== null) return hit;
+  }
   try {
     const data = await redis.get(key);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    l1Set(key, data);
+    return JSON.parse(data) as T;
   } catch (error) {
     console.error('Redis cacheGet Error:', error);
     return null;
@@ -53,6 +116,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet(key: string, value: unknown, ttlSeconds?: number): Promise<void> {
   try {
     const serialized = JSON.stringify(value);
+    l1Set(key, serialized, ttlSeconds);
     if (ttlSeconds) {
       await redis.setex(key, ttlSeconds, serialized);
     } else {
@@ -64,6 +128,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds?: number)
 }
 
 export async function cacheDelete(key: string): Promise<void> {
+  l1Cache.delete(key);
   try {
     await redis.del(key);
   } catch (error) {
@@ -72,6 +137,12 @@ export async function cacheDelete(key: string): Promise<void> {
 }
 
 export async function invalidatePattern(pattern: string): Promise<void> {
+  const prefix = pattern.endsWith('*') ? pattern.slice(0, -1) : pattern;
+  for (const key of l1Cache.keys()) {
+    if (key.startsWith(prefix)) {
+      l1Cache.delete(key);
+    }
+  }
   try {
     let cursor = '0';
     do {

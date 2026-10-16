@@ -42,9 +42,6 @@ export async function updateHabit(
     const body = await request.json();
     const validatedData = updateHabitSchema.parse(body);
 
-    // A safe zone edited through this route must satisfy the same rule that
-    // POST /api/habits enforces, otherwise the heartbeat route would quietly
-    // ignore a fence the caregiver believes is protecting the elder.
     if (existing.rule_type === 'location_trigger' && validatedData.rule_payload) {
       if (!parseGeofence(validatedData.rule_payload)) {
         return fail(400, {
@@ -74,8 +71,9 @@ export async function updateHabit(
       throw new Error('Update failed');
     }
 
-    // Companion app reads the active rule set from this cache key.
     await cacheDelete(`agent-config:${existing.elder_id}`);
+    await cacheDelete(`agent-habits:${existing.elder_id}`);
+    await cacheDelete(`agent-geofences:${existing.elder_id}`);
 
     return ok({ success: true, data: updatedHabit });
   } catch (error: any) {
@@ -83,8 +81,6 @@ export async function updateHabit(
     if (error.name === 'ZodError') {
       return fail(400, { success: false, error: 'Validation Error', details: error.issues });
     }
-    // Editing a payload onto a habit the elder already has hits the unique index
-    // from migrations/007; that is a conflict, not a server error.
     if (error.code === '23505') {
       return fail(409, { success: false, error: 'Another habit rule with this type and payload already exists' });
     }
@@ -115,6 +111,8 @@ export async function deleteHabit(ruleId: string): Promise<ServiceResult<ApiResp
     }
 
     await cacheDelete(`agent-config:${existing.elder_id}`);
+    await cacheDelete(`agent-habits:${existing.elder_id}`);
+    await cacheDelete(`agent-geofences:${existing.elder_id}`);
 
     return ok({ success: true, data: null });
   } catch (error) {

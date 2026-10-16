@@ -12,6 +12,10 @@ import { type FewShotExample } from './examples';
  * 3. **Character Trigram (3-gram) Subword Jaccard Fallback** so typo-heavy elder
  *    queries (e.g. "electrcity", "whatsap", "bhajn") still retrieve the matching
  *    app/intent example in microseconds with zero external embedding latency.
+ * 4. **Green AI Pre-Indexed Corpus & Trigram Memoization**: caches inverted term
+ *    frequencies, document frequencies, and character 3-gram sets per corpus
+ *    reference (`WeakMap`) so per-request retrieval performs zero redundant
+ *    document tokenization or trigram set allocations.
  */
 
 /** Standard BM25+ constants: k1 saturates term frequency, b normalises length, delta lower-bounds TF. */
@@ -120,13 +124,24 @@ export function tokenize(text: string): string[] {
     .map(canonicalizeToken);
 }
 
+/** Bounded memoization cache for character 3-gram sets to avoid repeated allocations. */
+const TRIGRAM_CACHE = new Map<string, Set<string>>();
+const MAX_TRIGRAM_CACHE_SIZE = 2048;
+
 /** Character 3-grams of a token for typo-resilient subword matching. */
 function charTrigrams(token: string): Set<string> {
+  const cached = TRIGRAM_CACHE.get(token);
+  if (cached) return cached;
+
   const padded = `^${token}$`;
   const grams = new Set<string>();
   for (let i = 0; i <= padded.length - 3; i += 1) {
     grams.add(padded.slice(i, i + 3));
   }
+  if (TRIGRAM_CACHE.size >= MAX_TRIGRAM_CACHE_SIZE) {
+    TRIGRAM_CACHE.clear();
+  }
+  TRIGRAM_CACHE.set(token, grams);
   return grams;
 }
 
@@ -148,10 +163,19 @@ export function exampleDocument(example: FewShotExample): string[] {
   );
 }
 
-/**
- * Hybrid BM25+ score with character-trigram subword fallback against a small corpus.
- */
-export function bm25(query: string[], documents: string[][]): number[] {
+interface CorpusIndex {
+  total: number;
+  averageLength: number;
+  documentFrequencies: Map<string, number>;
+  termFrequencies: Map<string, number>[];
+}
+
+const CORPUS_INDEX_CACHE = new WeakMap<string[][], CorpusIndex>();
+
+function getOrBuildCorpusIndex(documents: string[][]): CorpusIndex {
+  const cached = CORPUS_INDEX_CACHE.get(documents);
+  if (cached) return cached;
+
   const total = documents.length;
   const documentFrequencies = new Map<string, number>();
   const termFrequencies = documents.map((document) => {
@@ -167,6 +191,23 @@ export function bm25(query: string[], documents: string[][]): number[] {
   const averageLength =
     documents.reduce((sum, document) => sum + document.length, 0) /
     Math.max(1, total);
+
+  const built: CorpusIndex = {
+    total,
+    averageLength,
+    documentFrequencies,
+    termFrequencies,
+  };
+  CORPUS_INDEX_CACHE.set(documents, built);
+  return built;
+}
+
+/**
+ * Hybrid BM25+ score with character-trigram subword fallback against a small corpus.
+ */
+export function bm25(query: string[], documents: string[][]): number[] {
+  const { total, averageLength, documentFrequencies, termFrequencies } =
+    getOrBuildCorpusIndex(documents);
 
   const uniqueQueryTerms = [...new Set(query)];
   const queryTrigrams = new Map<string, Set<string>>();

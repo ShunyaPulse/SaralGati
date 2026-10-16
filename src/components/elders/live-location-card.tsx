@@ -47,20 +47,31 @@ export function LiveLocationCard({ elder }: { elder: ElderProfile }) {
   const point = toGeoPoint(elder.last_lat, elder.last_lng);
   const isLive = isLocationFresh(elder.location_updated_at);
 
-  const locationRules = rules.filter((rule) => rule.rule_type === 'location_trigger');
+  const locationRules = rules.filter(
+    (rule) => rule.elder_id === elder.id && rule.rule_type === 'location_trigger'
+  );
   const fenceRule = locationRules.find((rule) => rule.is_active) ?? locationRules[0];
   const fenceRuleId = fenceRule?.id ?? null;
   const fence = fenceRule ? parseGeofence(fenceRule.rule_payload) : null;
 
   // Prefill the editor with the fence the elder is already protected by, so
-  // "change the radius" does not mean retyping the coordinates.
+  // "change the radius" does not mean retyping the coordinates. Reset when
+  // switching to an elder with no configured fence so stale coordinates never bleed across profiles.
   useEffect(() => {
-    if (!fenceRuleId || !fence) return;
+    setFormError(null);
+    setNotice(null);
+    if (!fenceRuleId || !fence) {
+      setLabel('Safe zone');
+      setRadius(String(DEFAULT_GEOFENCE_RADIUS_M));
+      setLatitude('');
+      setLongitude('');
+      return;
+    }
     setLabel(fence.label);
     setRadius(String(fence.radius_m));
     setLatitude(String(fence.latitude));
     setLongitude(String(fence.longitude));
-  }, [fenceRuleId, fence?.label, fence?.radius_m, fence?.latitude, fence?.longitude]);
+  }, [elder.id, fenceRuleId, fence?.label, fence?.radius_m, fence?.latitude, fence?.longitude]);
 
   const useCurrentPosition = () => {
     if (!point) return;

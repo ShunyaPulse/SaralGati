@@ -136,8 +136,7 @@ interface RuleMatch {
   elementIndex: number | null;
 }
 
-function matchesRule(fragment: SentinelFragment, rule: FraudRule): string | null {
-  const text = rule.ignoreSafeWarnings ? stripSafeWarnings(fragment.text) : fragment.text;
+function matchesRuleWithText(text: string, rule: FraudRule): string | null {
   if (!text) return null;
 
   if (rule.requires && !rule.requires.every((pattern) => pattern.test(text))) {
@@ -165,16 +164,22 @@ function matchFragments(fragments: SentinelFragment[]): RuleMatch[] {
   const matches = new Map<string, RuleMatch>();
 
   for (const fragment of fragments) {
-    const urgent = URGENCY.test(fragment.text);
+    const rawText = fragment.text;
+    const urgent = URGENCY.test(rawText);
+    const hasSafeWarning = SAFE_WARNING.test(rawText);
+    let strippedText: string | undefined;
 
     for (const rule of RULES) {
-      const snippet = matchesRule(fragment, rule);
-      if (!snippet) continue;
-
       // Severity 1-2 rules include "never share this OTP" reminders, so an
-      // explicit warning inside the same fragment clears them. Share / receive
-      // *requests* are never cleared by that phrase - a scam often fakes it.
-      if (rule.severity <= 2 && SAFE_WARNING.test(fragment.text)) continue;
+      // explicit warning inside the same fragment clears them before running
+      // pattern regexes. Share / receive *requests* are never cleared by that phrase.
+      if (rule.severity <= 2 && hasSafeWarning) continue;
+
+      const textToMatch = rule.ignoreSafeWarnings
+        ? (strippedText ??= stripSafeWarnings(rawText))
+        : rawText;
+      const snippet = matchesRuleWithText(textToMatch, rule);
+      if (!snippet) continue;
 
       let severity: number = rule.severity;
       if (urgent && severity >= 2) severity += 1;

@@ -11,10 +11,6 @@ import android.view.accessibility.AccessibilityNodeInfo
  * string - which is why they can live outside [SaralGatiAccessibilityService]
  * and be read without a service instance. The service keeps the part that
  * genuinely needs its state: walking the window and deciding what to spotlight.
- *
- * Moved verbatim out of SaralGatiAccessibilityService.kt; only the visibility
- * changed (private member -> internal top-level function in the same package),
- * so no call site had to change.
  */
 
 /**
@@ -52,6 +48,14 @@ internal fun resolveHumanReadableLabel(node: AccessibilityNodeInfo): String? {
     val rawText = node.text?.toString()?.trim()
     val rawDesc = node.contentDescription?.toString()?.trim()
     val rawViewId = node.viewIdResourceName?.lowercase() ?: ""
+
+    // Energy-efficient early exit: empty layout containers (FrameLayout/LinearLayout/View)
+    // have no text, contentDescription, or viewId. Returning immediately saves ~65
+    // substring searches and string allocations per empty container node!
+    if (rawText.isNullOrEmpty() && rawDesc.isNullOrEmpty() && rawViewId.isEmpty()) {
+        return null
+    }
+
     val viewId = rawViewId.substringAfterLast(":id/").substringAfterLast("/")
 
     // Filter out single character font-icon glyphs (like '0' or obscure icon codes)
@@ -65,7 +69,11 @@ internal fun resolveHumanReadableLabel(node: AccessibilityNodeInfo): String? {
     val desc =
         if (rawDesc != null && rawDesc.length == 1 && ((rawDesc == "0" && isImageLike) || !rawDesc[0].isLetterOrDigit())) null else rawDesc
 
-    val combined = "$desc $text $viewId $rawViewId".lowercase()
+    if (text.isNullOrEmpty() && desc.isNullOrEmpty() && viewId.isEmpty()) {
+        return null
+    }
+
+    val combined = "${desc ?: ""} ${text ?: ""} $viewId $rawViewId".lowercase()
 
     // 1. CAMERA & PHOTOGRAPHY ICONS
     if (combined.contains("shutter") || combined.contains("capture") || combined.contains("take photo") ||

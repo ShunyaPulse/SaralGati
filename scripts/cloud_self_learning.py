@@ -447,6 +447,457 @@ Respond ONLY with valid JSON array containing this exact structure (no markdown 
     return []
 
 
+# ---------------------------------------------------------------------------
+# Shared helper: validate & normalise raw screen list from any provider
+# ---------------------------------------------------------------------------
+
+def _validate_and_normalize_screens(parsed_data, lang):
+    """Validate and normalise a list of raw screen dicts from any AI provider.
+
+    Strips redundant index prefixes from element labels (e.g. "[0] [BUTTON] …"
+    → "[BUTTON] …"), coerces types, and drops malformed entries.  Returns a
+    clean list ready for the flywheel evaluation loop.
+    """
+    if not isinstance(parsed_data, list) or len(parsed_data) == 0:
+        return []
+    screens = []
+    for s in parsed_data:
+        if not isinstance(s, dict):
+            continue
+        pkg = str(s.get("app_package", "")).strip()
+        elements = s.get("elements", [])
+        scenarios = s.get("scenarios", [])
+        if not pkg or not isinstance(elements, list) or not isinstance(scenarios, list):
+            continue
+        clean_elements = [
+            re.sub(r"^(?:\[\d+\]:?|\d+:)\s*", "", str(el)).strip()
+            for el in elements
+        ]
+        clean_scenarios = []
+        for sc in scenarios:
+            if not isinstance(sc, dict):
+                continue
+            try:
+                expected = int(sc.get("expected", -1))
+            except (TypeError, ValueError):
+                continue
+            clean_scenarios.append({
+                "query": str(sc.get("query", "")).strip(),
+                "expected": expected,
+                "intent": str(sc.get("intent", "general")).strip(),
+                "guidance_lang": lang,
+            })
+        if clean_elements and clean_scenarios:
+            screens.append({
+                "app_package": pkg,
+                "elements": clean_elements,
+                "guidance_lang": lang,
+                "scenarios": clean_scenarios,
+            })
+    return screens
+
+
+# ---------------------------------------------------------------------------
+# Groq LPU provider – OpenAI-compatible REST, JSON object mode
+# ---------------------------------------------------------------------------
+
+#  Rotating cursor for Groq keys (independent of the Gemini cursor)
+_GROQ_KEY_CURSOR = 0
+
+
+def generate_screens_via_groq(groq_keys_pool, count=5, focus=None, guidance_lang=None):
+    """Generate synthetic screens using Groq LPU inference.
+
+    Uses OpenAI-compatible /v1/chat/completions with response_format json_object.
+    Model chain (quality first, fast fallback):
+      groq/qwen-qwen3-32b  →  moonshotai/kimi-k2-instruct  →  groq/llama-3.3-70b-versatile
+
+    Returns a normalised screen list identical in shape to the Gemini path, or
+    an empty list on total failure (caller falls back to Gemini).
+    """
+    import random
+    import datetime
+    import uuid
+
+    if not groq_keys_pool:
+        print("⚠️ [Groq] No Groq API keys available, skipping.")
+        return []
+
+    # Reuse the same axis data as Gemini (imported from module-level constants)
+    elder_personas = [
+        "Retired PSU / Govt employee (age 72) managing pension passbook and CGHS medical claims",
+        "Rural elder managing PM-Kisan DBT subsidy and PDS ration card",
+        "Grandmother doing WhatsApp video calls and forwarding festival greetings",
+        "Elderly patient ordering medicines and booking auto for clinic visits",
+        "Active grandfather paying electricity/water bills and FASTag recharge",
+    ]
+    intent_states = [
+        "Routine habituated task: familiar weekly action with confidence",
+        "Confused / Lost: accidentally navigated to an unfamiliar tab",
+        "Frustrated / Stuck: struggling to find the action button",
+        "Time-critical urgency: needs to connect with family immediately",
+        "Exploratory curiosity: wants to check balance without making a mistake",
+    ]
+    app_domains = [
+        ("com.whatsapp", "WhatsApp (active family chat, media viewer, or call log)"),
+        ("com.google.android.dialer", "Phone Dialer (keypad dial, recent call, or contacts)"),
+        ("com.phonepe.app", "PhonePe / UPI (bill pay, recharge, or transaction history)"),
+        ("com.google.android.youtube", "YouTube (bhajan search results or video player)"),
+        ("cris.org.in.prs.ima", "IRCTC Rail Connect (train search or PNR status)"),
+        ("com.sbi.lotusintouch", "SBI YONO (account balance or fund transfer)"),
+        ("com.aranoah.healthkart.plus", "Tata 1mg (medicine cart or order status)"),
+        ("com.google.android.apps.maps", "Google Maps (directions to hospital or temple)"),
+        ("com.grofers.customerapp", "Blinkit (daily essentials checkout)"),
+        ("com.digilocker.android", "DigiLocker (digital Aadhaar or vaccination certificate)"),
+    ]
+    speech_styles_by_lang = {
+        "hi": [
+            "Natural Conversational Hinglish ('Beti ko video call kaise lagayein')",
+            "Pure Devanagari Hindi ('पेंशन का पैसा आया या नहीं')",
+            "Colloquial elder phrasing ('Doctor sahab ko phone milana hai')",
+            "Keyword-action mix ('Train ticket PNR check')",
+        ],
+        "en": [
+            "Natural conversational English ('How do I video call my daughter?')",
+            "Simple elder English with Indian app words ('Check my PNR status')",
+            "Direct keyword-first English ('video call', 'pay bill')",
+            "Anxious English ('It is not working, what should I press?')",
+        ],
+    }
+
+    lang = guidance_lang if guidance_lang in ("hi", "en") else "hi"
+    lang_label = "Hindi/Hinglish" if lang == "hi" else "English"
+    persona = random.choice(elder_personas)
+    intent = random.choice(intent_states)
+    speech = random.choice(speech_styles_by_lang[lang])
+    entropy_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
+
+    weak_apps = (focus or {}).get("weak_apps", [])
+    priority_apps = [a for a in app_domains if a[0] in weak_apps]
+    other_apps = [a for a in app_domains if a[0] not in weak_apps]
+    random.shuffle(other_apps)
+    chosen_apps = (priority_apps + other_apps)[:min(count, len(app_domains))]
+
+    focus_block = ""
+    weak_queries = (focus or {}).get("weak_queries", [])
+    if priority_apps or weak_queries:
+        focus_block = "\n=== FAILURE-DRIVEN PRIORITY ===\n"
+        if priority_apps:
+            focus_block += f"- Apps SaralGati recently got WRONG (prioritise these): {[a[0] for a in priority_apps]}\n"
+        if weak_queries:
+            focus_block += f"- Queries answered incorrectly before: {weak_queries[:3]}\n"
+        focus_block += "- At least half of screens MUST use the priority apps above.\n"
+
+    prompt = f"""You are an advanced synthetic UI generator for SaralGati, an AI companion for Indian elders.
+Generate exactly {len(chosen_apps)} realistic Android app screens based on:
+
+=== CONFIGURATION ===
+1. Elder Persona: {persona}
+2. Cognitive Intent: {intent}
+3. Speech Style: {speech}
+4. Response Language: {lang_label} — every "query" MUST be in this language.
+5. Entropy Seed: {entropy_seed}
+{focus_block}
+Target Apps: {json.dumps([app[1] for app in chosen_apps])}
+
+=== SCREEN SPECIFICATIONS ===
+For each screen provide:
+1. "app_package": exact Android package name (e.g. '{chosen_apps[0][0]}')
+2. "elements": list of 8–14 elements with accessibility role prefix:
+   [BUTTON] for clickable buttons/icons, [INPUT] for text inputs,
+   [TOGGLE] for checkboxes/switches, [TEXT] for static text
+   Format: "[index] [ROLE] Label" (e.g. "[0] [BUTTON] Video Call")
+   RULE: timestamps, subtitle counts, static headings must NEVER be the target.
+3. "scenarios": 2–3 elder queries matching the Speech Style and Language.
+4. Each scenario: "query" (string), "expected" (integer index of target element), "intent" (string).
+
+Return ONLY a valid JSON array, no markdown fences, no extra text:
+[
+  {{
+    "app_package": "string",
+    "elements": ["string"],
+    "scenarios": [
+      {{"query": "string", "expected": 0, "intent": "string"}}
+    ]
+  }}
+]"""
+
+    GROQ_MODELS = [
+        "qwen/qwen3-32b",           # Best quality, 32B reasoning
+        "moonshotai/kimi-k2-instruct",  # Fast tool-calling fallback
+        "llama-3.3-70b-versatile",  # Last resort reliable fallback
+    ]
+
+    global _GROQ_KEY_CURSOR
+
+    for model_name in GROQ_MODELS:
+        start_idx = _GROQ_KEY_CURSOR
+        all_rate_limited = True
+
+        for attempt in range(len(groq_keys_pool)):
+            key_idx = (start_idx + attempt) % len(groq_keys_pool)
+            api_key = groq_keys_pool[key_idx].strip()
+            if not api_key:
+                continue
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            }
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.85,
+                "max_tokens": 4096,
+            }
+            try:
+                res = requests.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=30,
+                )
+                if res.status_code in (500, 502, 503, 504):
+                    print(f"  ⚡ [Groq] {model_name} high demand ({res.status_code}), trying next model...")
+                    all_rate_limited = False
+                    break
+                if res.status_code == 429:
+                    _GROQ_KEY_CURSOR = (key_idx + 1) % len(groq_keys_pool)
+                    print(f"  ⏭ [Groq] Key [{key_idx+1}/{len(groq_keys_pool)}] rate-limited on {model_name}, trying next key...")
+                    continue
+                res.raise_for_status()
+                raw_text = res.json()["choices"][0]["message"]["content"].strip()
+                # Groq json_object mode may still wrap the array in an object
+                # under a key like "screens" — unwrap if needed.
+                parsed = json.loads(raw_text)
+                if isinstance(parsed, dict):
+                    # Try common wrapper keys
+                    for key in ("screens", "data", "result", "items"):
+                        if isinstance(parsed.get(key), list):
+                            parsed = parsed[key]
+                            break
+                    else:
+                        # No known wrapper — try values() if exactly one list value
+                        vals = [v for v in parsed.values() if isinstance(v, list)]
+                        parsed = vals[0] if len(vals) == 1 else []
+                screens = _validate_and_normalize_screens(parsed, lang)
+                if screens:
+                    _GROQ_KEY_CURSOR = (key_idx + 1) % len(groq_keys_pool)
+                    print(f"✨ [Groq] Synthesized {len(screens)} screens ({lang}) via {model_name} [key {key_idx+1}/{len(groq_keys_pool)}]")
+                    return screens
+                all_rate_limited = False
+            except Exception as e:
+                all_rate_limited = False
+                print(f"  ⚠️ [Groq] Key [{key_idx+1}] / {model_name}: {e}. Trying next key...")
+                continue
+
+        if all_rate_limited:
+            print(f"  ❌ [Groq] All keys exhausted on {model_name}. Trying next model...")
+
+    print("⚠️ [Groq] All models and keys exhausted.")
+    return []
+
+
+# ---------------------------------------------------------------------------
+# OpenRouter Free provider – OpenAI-compatible REST, JSON mode
+# ---------------------------------------------------------------------------
+
+#  Rotating cursor for OpenRouter keys (independent of Gemini / Groq cursors)
+_OPENROUTER_KEY_CURSOR = 0
+
+
+def generate_screens_via_openrouter(openrouter_keys_pool, count=5, focus=None, guidance_lang=None):
+    """Generate synthetic screens using OpenRouter free model pool.
+
+    Model chain (free tier, best quality first):
+      meta-llama/llama-3.3-70b-instruct:free
+      → nvidia/llama-3.1-nemotron-70b-instruct:free
+      → google/gemma-3-27b-it:free
+
+    Returns a normalised screen list or [] on total failure.
+    """
+    import random
+    import datetime
+    import uuid
+
+    if not openrouter_keys_pool:
+        print("⚠️ [OpenRouter] No OpenRouter API keys available, skipping.")
+        return []
+
+    # Reuse condensed axis definitions (same as Groq)
+    elder_personas = [
+        "Retired PSU / Govt employee (age 72) managing pension and CGHS claims",
+        "Rural elder managing PM-Kisan DBT and PDS ration card",
+        "Grandmother doing WhatsApp video calls and festival greetings",
+        "Elderly patient ordering medicines and booking auto for clinic visits",
+        "Active grandfather paying electricity/water bills and FASTag recharge",
+    ]
+    intent_states = [
+        "Routine habituated task with confidence",
+        "Confused / Lost: accidentally on unfamiliar tab",
+        "Frustrated / Stuck: can't find the action button",
+        "Time-critical urgency: must connect with family now",
+        "Exploratory curiosity: checking balance carefully",
+    ]
+    app_domains = [
+        ("com.whatsapp", "WhatsApp (family chat, media, or call log)"),
+        ("com.google.android.dialer", "Phone Dialer (dial, recent calls, or contacts)"),
+        ("com.phonepe.app", "PhonePe / UPI (bill pay, recharge, or history)"),
+        ("com.google.android.youtube", "YouTube (bhajan search or video player)"),
+        ("cris.org.in.prs.ima", "IRCTC Rail Connect (train search or PNR status)"),
+        ("com.sbi.lotusintouch", "SBI YONO (balance or fund transfer)"),
+        ("com.aranoah.healthkart.plus", "Tata 1mg (medicine cart or order status)"),
+        ("com.google.android.apps.maps", "Google Maps (directions to hospital or temple)"),
+        ("com.grofers.customerapp", "Blinkit (daily essentials checkout)"),
+        ("com.digilocker.android", "DigiLocker (Aadhaar or vaccination certificate)"),
+    ]
+    speech_styles_by_lang = {
+        "hi": [
+            "Natural Hinglish ('Beti ko video call kaise lagayein')",
+            "Devanagari Hindi ('पेंशन का पैसा आया या नहीं')",
+            "Colloquial elder phrasing ('Doctor sahab ko phone milana hai')",
+            "Keyword mix ('Train ticket PNR check')",
+        ],
+        "en": [
+            "Conversational English ('How do I video call my daughter?')",
+            "Simple elder English ('Check my PNR status')",
+            "Direct keywords ('video call', 'pay bill')",
+            "Anxious English ('It is not working, what should I press?')",
+        ],
+    }
+
+    lang = guidance_lang if guidance_lang in ("hi", "en") else "hi"
+    lang_label = "Hindi/Hinglish" if lang == "hi" else "English"
+    persona = random.choice(elder_personas)
+    intent = random.choice(intent_states)
+    speech = random.choice(speech_styles_by_lang[lang])
+    entropy_seed = f"{datetime.datetime.utcnow().strftime('%Y%m%d-%H%M')}-{uuid.uuid4().hex[:6]}"
+
+    weak_apps = (focus or {}).get("weak_apps", [])
+    priority_apps = [a for a in app_domains if a[0] in weak_apps]
+    other_apps = [a for a in app_domains if a[0] not in weak_apps]
+    random.shuffle(other_apps)
+    chosen_apps = (priority_apps + other_apps)[:min(count, len(app_domains))]
+
+    focus_block = ""
+    weak_queries = (focus or {}).get("weak_queries", [])
+    if priority_apps or weak_queries:
+        focus_block = "\n=== FAILURE-DRIVEN PRIORITY ===\n"
+        if priority_apps:
+            focus_block += f"- Apps SaralGati recently got WRONG: {[a[0] for a in priority_apps]}\n"
+        if weak_queries:
+            focus_block += f"- Previously wrong queries: {weak_queries[:3]}\n"
+        focus_block += "- At least half of screens MUST use the priority apps.\n"
+
+    prompt = f"""You are an advanced synthetic UI generator for SaralGati, an AI companion for Indian elders.
+Generate exactly {len(chosen_apps)} realistic Android app screens based on:
+
+=== CONFIGURATION ===
+1. Elder Persona: {persona}
+2. Cognitive Intent: {intent}
+3. Speech Style: {speech}
+4. Response Language: {lang_label} — every "query" MUST be in this language.
+5. Entropy Seed: {entropy_seed}
+{focus_block}
+Target Apps: {json.dumps([app[1] for app in chosen_apps])}
+
+=== SCREEN SPECIFICATIONS ===
+For each screen:
+1. "app_package": exact Android package (e.g. '{chosen_apps[0][0]}')
+2. "elements": 8–14 items with role prefix:
+   [BUTTON] clickable, [INPUT] text box, [TOGGLE] switch, [TEXT] static label
+   Format: "[index] [ROLE] Label" (e.g. "[0] [BUTTON] Video Call")
+   RULE: timestamps/subtitle counts/static headings NEVER as target.
+3. "scenarios": 2–3 elder queries in {lang_label}.
+4. Each: "query" (string), "expected" (integer index), "intent" (string).
+
+Return ONLY a valid JSON array, no markdown fences:
+[
+  {{
+    "app_package": "string",
+    "elements": ["string"],
+    "scenarios": [
+      {{"query": "string", "expected": 0, "intent": "string"}}
+    ]
+  }}
+]"""
+
+    OPENROUTER_MODELS = [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "nvidia/llama-3.1-nemotron-70b-instruct:free",
+        "google/gemma-3-27b-it:free",
+    ]
+
+    global _OPENROUTER_KEY_CURSOR
+
+    for model_name in OPENROUTER_MODELS:
+        start_idx = _OPENROUTER_KEY_CURSOR
+        all_rate_limited = True
+
+        for attempt in range(len(openrouter_keys_pool)):
+            key_idx = (start_idx + attempt) % len(openrouter_keys_pool)
+            api_key = openrouter_keys_pool[key_idx].strip()
+            if not api_key:
+                continue
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+                "HTTP-Referer": "https://saralgati-685823552970.asia-south1.run.app",
+                "X-Title": "SaralGati",
+            }
+            payload = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.85,
+                "max_tokens": 4096,
+            }
+            try:
+                res = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    json=payload,
+                    headers=headers,
+                    timeout=35,
+                )
+                if res.status_code in (500, 502, 503, 504):
+                    print(f"  ⚡ [OpenRouter] {model_name} unavailable ({res.status_code}), trying next model...")
+                    all_rate_limited = False
+                    break
+                if res.status_code == 429:
+                    _OPENROUTER_KEY_CURSOR = (key_idx + 1) % len(openrouter_keys_pool)
+                    print(f"  ⏭ [OpenRouter] Key [{key_idx+1}/{len(openrouter_keys_pool)}] rate-limited on {model_name}...")
+                    continue
+                res.raise_for_status()
+                raw_text = res.json()["choices"][0]["message"]["content"].strip()
+                parsed = json.loads(raw_text)
+                if isinstance(parsed, dict):
+                    for key in ("screens", "data", "result", "items"):
+                        if isinstance(parsed.get(key), list):
+                            parsed = parsed[key]
+                            break
+                    else:
+                        vals = [v for v in parsed.values() if isinstance(v, list)]
+                        parsed = vals[0] if len(vals) == 1 else []
+                screens = _validate_and_normalize_screens(parsed, lang)
+                if screens:
+                    _OPENROUTER_KEY_CURSOR = (key_idx + 1) % len(openrouter_keys_pool)
+                    print(f"✨ [OpenRouter] Synthesized {len(screens)} screens ({lang}) via {model_name} [key {key_idx+1}/{len(openrouter_keys_pool)}]")
+                    return screens
+                all_rate_limited = False
+            except Exception as e:
+                all_rate_limited = False
+                print(f"  ⚠️ [OpenRouter] Key [{key_idx+1}] / {model_name}: {e}. Trying next key...")
+                continue
+
+        if all_rate_limited:
+            print(f"  ❌ [OpenRouter] All keys exhausted on {model_name}. Trying next model...")
+
+    print("⚠️ [OpenRouter] All models and keys exhausted.")
+    return []
+
+
 def generate_fraud_scam_screens_via_gemini(gemini_keys_pool, count=6, blacklisted_models=None, focus=None):
     """Ask Gemini for synthetic scam / benign screens with a ground-truth label.
 
@@ -680,15 +1131,20 @@ Respond ONLY with valid JSON array (no markdown fences, no extra text):
     return []
 
 
-def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max_cases=None):
+def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, groq_keys_pool=None, openrouter_keys_pool=None, max_cases=None):
     num_keys = len(gemini_keys_pool) if gemini_keys_pool else 0
+    num_groq_keys = len(groq_keys_pool) if groq_keys_pool else 0
+    num_or_keys = len(openrouter_keys_pool) if openrouter_keys_pool else 0
     print("=" * 75)
     print(" ☁️  SARALGATI 100% CLOUD-BASED AUTONOMOUS SELF-LEARNING PIPELINE")
     print("=" * 75)
-    print(f" Target API Server : {api_url}")
-    print(f" Gemini Key Pool   : {num_keys} keys loaded | Model-first exhaustive rotation")
-    print(f" Model Priority    : 3.8-flash > 3.7 > 3.6 > 3.5 > 3-flash-preview > 3.5-lite > 3.1-lite")
-    print(f" Device Dependency : NONE (Runs completely in the cloud)")
+    print(f" Target API Server  : {api_url}")
+    print(f" Gemini Key Pool    : {num_keys} keys | Model-first exhaustive rotation")
+    print(f" Groq LPU Pool      : {num_groq_keys} keys | qwen3-32b > kimi-k2 > llama-3.3-70b")
+    print(f" OpenRouter Pool    : {num_or_keys} keys | llama-3.3-70b:free > nemotron-70b:free > gemma-3-27b:free")
+    print(f" Batch Routing      : 1=Gemini(hi)  2=Groq(en)  3=Gemini(hi)  4=OpenRouter(hi)")
+    print(f" Fraud Generation   : Gemini only (enum-validated responseSchema)")
+    print(f" Device Dependency  : NONE (Runs completely in the cloud)")
     print("=" * 75 + "\n")
 
     # No placeholder fallback: the server rejects unknown secrets, so running with
@@ -764,14 +1220,59 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
         for batch_num, plan in enumerate(batch_plan, start=1):
             batch_lang = plan["lang"]
             batch_count = plan["count"]
-            print(f"[Generator] Requesting batch {batch_num}/{num_batches} ({batch_lang.upper()}, {batch_count} screens) of dynamic app screens...")
-            dynamic_screens = generate_infinite_screens_via_gemini(
-                gemini_keys_pool,
-                count=batch_count,
-                blacklisted_models=blacklisted_models,
-                focus=focus,
-                guidance_lang=batch_lang
-            )
+
+            # Multi-provider batch routing — reduce Gemini load by ~50%:
+            #   Batch 1 (hi)  → Gemini          (primary, highest quality)
+            #   Batch 2 (en)  → Groq LPU        (fast, English-heavy batch)
+            #   Batch 3 (hi)  → Gemini          (primary, Hinglish batch)
+            #   Batch 4 (hi)  → OpenRouter free  (supplemental, free tier)
+            # Fallback: if the assigned provider returns nothing, fall back to Gemini.
+            if batch_num == 2 and groq_keys_pool:
+                provider_label = "Groq LPU"
+                print(f"[Generator] Batch {batch_num}/{num_batches} ({batch_lang.upper()}, {batch_count} screens) → {provider_label}")
+                dynamic_screens = generate_screens_via_groq(
+                    groq_keys_pool,
+                    count=batch_count,
+                    focus=focus,
+                    guidance_lang=batch_lang,
+                )
+                if not dynamic_screens:
+                    print(f"[Generator] Groq returned nothing for batch {batch_num}; falling back to Gemini...")
+                    dynamic_screens = generate_infinite_screens_via_gemini(
+                        gemini_keys_pool,
+                        count=batch_count,
+                        blacklisted_models=blacklisted_models,
+                        focus=focus,
+                        guidance_lang=batch_lang,
+                    )
+            elif batch_num == 4 and openrouter_keys_pool:
+                provider_label = "OpenRouter Free"
+                print(f"[Generator] Batch {batch_num}/{num_batches} ({batch_lang.upper()}, {batch_count} screens) → {provider_label}")
+                dynamic_screens = generate_screens_via_openrouter(
+                    openrouter_keys_pool,
+                    count=batch_count,
+                    focus=focus,
+                    guidance_lang=batch_lang,
+                )
+                if not dynamic_screens:
+                    print(f"[Generator] OpenRouter returned nothing for batch {batch_num}; falling back to Gemini...")
+                    dynamic_screens = generate_infinite_screens_via_gemini(
+                        gemini_keys_pool,
+                        count=batch_count,
+                        blacklisted_models=blacklisted_models,
+                        focus=focus,
+                        guidance_lang=batch_lang,
+                    )
+            else:
+                print(f"[Generator] Batch {batch_num}/{num_batches} ({batch_lang.upper()}, {batch_count} screens) → Gemini")
+                dynamic_screens = generate_infinite_screens_via_gemini(
+                    gemini_keys_pool,
+                    count=batch_count,
+                    blacklisted_models=blacklisted_models,
+                    focus=focus,
+                    guidance_lang=batch_lang,
+                )
+
             if dynamic_screens:
                 active_screens.extend(dynamic_screens)
             if batch_num < num_batches:
@@ -786,7 +1287,7 @@ def run_cloud_self_learning(api_url, auth_token=None, gemini_keys_pool=None, max
                 print(f"[Generator] Final retry yielded {len(retry_screens)} additional screens.")
 
     if not active_screens:
-        print("⚠️ No active screens generated from Gemini API. Exiting self-learning cycle.")
+        print("⚠️ No active screens generated. Exiting self-learning cycle.")
         return stats
 
     count = 0
@@ -1034,15 +1535,39 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None, help="Max scenarios to run")
     args = parser.parse_args()
 
-    # Build keys pool: --gemini-keys arg > GEMINI_API_KEYS env > GEMINI_KEYS env > GEMINI_API_KEY env (single key fallback)
-    raw_keys_str = args.gemini_keys or os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
-    keys_pool = [k.strip() for k in raw_keys_str.split(",") if k.strip()]
+    # --- Gemini key pool ---
+    # Priority: --gemini-keys arg > GEMINI_API_KEYS env > GEMINI_KEYS env > GEMINI_API_KEY env (single key fallback)
+    raw_gemini = args.gemini_keys or os.environ.get("GEMINI_API_KEYS", "") or os.environ.get("GEMINI_KEYS", "") or os.environ.get("GEMINI_API_KEY", "")
+    keys_pool = [k.strip() for k in raw_gemini.split(",") if k.strip()]
     if keys_pool:
         import random
-        # Start at a randomized offset on batch launch so repeated runs don't hit key 0 exclusively
+        # Start at a randomized offset so repeated runs don't always hit key 0 first
         offset = random.randint(0, len(keys_pool) - 1)
         keys_pool = keys_pool[offset:] + keys_pool[:offset]
     print(f"[Keys] Loaded {len(keys_pool)} Gemini API key(s) for model-first rotation.")
 
-    run_cloud_self_learning(api_url=args.url, auth_token=args.token, gemini_keys_pool=keys_pool, max_cases=args.limit)
+    # --- Groq key pool ---
+    raw_groq = os.environ.get("GROQ_API_KEYS", "") or os.environ.get("GROQ_API_KEY", "")
+    groq_pool = [k.strip() for k in raw_groq.split(",") if k.strip()]
+    if groq_pool:
+        print(f"[Keys] Loaded {len(groq_pool)} Groq API key(s) for Groq LPU batch.")
+    else:
+        print("[Keys] No GROQ_API_KEYS found — Groq batch will fall back to Gemini.")
+
+    # --- OpenRouter key pool ---
+    raw_or = os.environ.get("OPENROUTER_API_KEYS", "") or os.environ.get("OPENROUTER_API_KEY", "")
+    or_pool = [k.strip() for k in raw_or.split(",") if k.strip()]
+    if or_pool:
+        print(f"[Keys] Loaded {len(or_pool)} OpenRouter API key(s) for free-tier batch.")
+    else:
+        print("[Keys] No OPENROUTER_API_KEYS found — OpenRouter batch will fall back to Gemini.")
+
+    run_cloud_self_learning(
+        api_url=args.url,
+        auth_token=args.token,
+        gemini_keys_pool=keys_pool,
+        groq_keys_pool=groq_pool,
+        openrouter_keys_pool=or_pool,
+        max_cases=args.limit,
+    )
 

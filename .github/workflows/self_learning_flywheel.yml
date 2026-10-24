@@ -36,6 +36,12 @@ jobs:
           API_SECRET: ${{ secrets.API_SECRET }}
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
           GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          # Groq LPU keys — used for batch 2 (English) to offload Gemini quota.
+          # Add comma-separated keys to GitHub Secret: GROQ_API_KEYS
+          GROQ_API_KEYS: ${{ secrets.GROQ_API_KEYS }}
+          # OpenRouter Free keys — used for batch 4 (Hindi supplement).
+          # Add comma-separated keys to GitHub Secret: OPENROUTER_API_KEYS
+          OPENROUTER_API_KEYS: ${{ secrets.OPENROUTER_API_KEYS }}
           # Optional operator lever: pin every synthetic batch to one guidance
           # language ('hi' or 'en') to top up that half of the training pool.
           # Unset, the generator picks per batch from recent failures.

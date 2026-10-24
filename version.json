@@ -1,7 +1,7 @@
 {
-  "version_code": 120,
-  "version_name": "6.1.1",
+  "version_code": 121,
+  "version_name": "6.2.0",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix CodeQL warning (alert 144): resolve duplicate backslash in regex character class in scripts/cloud_self_learning.py."
+  "changelog": "Add Groq LPU and OpenRouter Free as multi-provider flywheel screen generators. Batch 2 (English) now uses Groq (qwen3-32b > kimi-k2 > llama-3.3-70b), batch 4 (Hindi supplement) uses OpenRouter free pool (llama-3.3-70b:free > nemotron-70b:free > gemma-3-27b:free). Both fall back to Gemini automatically. Reduces Gemini key pool load by ~50%. Fraud generation remains Gemini-only."
 }

@@ -1,7 +1,7 @@
 {
-  "version_code": 122,
-  "version_name": "6.2.1",
+  "version_code": 123,
+  "version_name": "6.2.2",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle LoRA training dependency thrashing in ensure_unsloth(). Use non-destructive --no-deps installation for Unsloth and auxiliary packages to preserve Kaggle pre-installed PyTorch, Triton, and xformers, preventing pip package uninstalls and mismatch errors."
+  "changelog": "Fix DPOConfig deprecated parameters in scripts/train_unsloth_lora.py (replace warmup_ratio with warmup_steps, remove ignored max_prompt_length). Update in-Kaggle Cloudflare credential message to clarify CI sweeper flow."
 }

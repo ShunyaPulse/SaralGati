@@ -371,6 +371,14 @@ def ensure_unsloth():
             sys.executable, "-m", "pip", "install", "unsloth"
         ])
 
+    # 3. Verify torch and xformers compatibility
+    try:
+        import torch
+        import xformers
+        print(f"[Install] Verified environment: PyTorch {torch.__version__} with xformers {xformers.__version__}")
+    except Exception as e:
+        print(f"[Install] Notice during torch/xformers verification: {e}")
+
 
 def auto_tune_hyperparameters(dataset_file, tokenizer):
     """Dynamically compute training hyperparameters from the live dataset."""
@@ -523,7 +531,7 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
         dpo_args = DPOConfig(
             per_device_train_batch_size=2,
             gradient_accumulation_steps=4,
-            warmup_ratio=0.1,
+            warmup_steps=10,
             num_train_epochs=1,
             learning_rate=5e-6,
             lr_scheduler_type="cosine",
@@ -534,7 +542,6 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
             output_dir="dpo_checkpoints",
             beta=0.1,
             max_length=max_seq_length,
-            max_prompt_length=512,
             seed=3407,
             save_strategy="no",
             report_to="none",
@@ -744,8 +751,8 @@ def deploy_to_cloudflare(output_dir):
     print("\n[Deploy] Step 3: Deploying new LoRA adapter to Cloudflare Workers AI...")
     global CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
     if not CLOUDFLARE_ACCOUNT_ID or not CLOUDFLARE_API_TOKEN:
-        print("[Deploy] Warning: CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN not found in environment.")
-        print(f"[Deploy] Adapter is saved locally in: {output_dir}")
+        print("[Deploy] Info: Cloudflare credentials not set in Kaggle environment.")
+        print(f"[Deploy] Adapter is saved locally in: {output_dir} (CI Sweeper will download and deploy to Cloudflare).")
         return None
 
     config_file = os.path.join(output_dir, "adapter_config.json")

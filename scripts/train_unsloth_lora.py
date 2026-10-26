@@ -351,23 +351,24 @@ def ensure_unsloth():
         pass
 
     print("[Install] Installing Unsloth and compatible dependencies for Kaggle GPU environment...")
+    # 1. Update auxiliary libraries without touching pre-installed PyTorch, Triton, or CUDA runtime
     try:
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "-U", "xformers",
-            "--index-url", "https://download.pytorch.org/whl/cu121", "--quiet"
+            sys.executable, "-m", "pip", "install", "--no-deps",
+            "bitsandbytes", "accelerate", "transformers", "trl", "peft"
         ])
     except Exception as e:
-        print(f"[Install] Notice: pre-installing xformers cu121 wheel skipped ({e}); proceeding...")
+        print(f"[Install] Notice: auxiliary libraries install skipped ({e}); proceeding...")
 
+    # 2. Install unsloth & unsloth_zoo without clobbering native PyTorch or xformers
     try:
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
-            "unsloth[kaggle-new] @ git+https://github.com/unslothai/unsloth.git"
+            sys.executable, "-m", "pip", "install", "--no-deps", "unsloth", "unsloth_zoo"
         ])
     except Exception as e:
-        print(f"[Install] Notice: git install failed ({e}); falling back to PyPI release...")
+        print(f"[Install] Notice: --no-deps unsloth install failed ({e}); falling back to standard...")
         subprocess.check_call([
-            sys.executable, "-m", "pip", "install", "unsloth", "unsloth_zoo"
+            sys.executable, "-m", "pip", "install", "unsloth"
         ])
 
 

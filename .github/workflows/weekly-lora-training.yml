@@ -1,9 +1,9 @@
-name: Bi-Weekly Autonomous LoRA Training
+name: Weekly Autonomous LoRA Training
 
 on:
   schedule:
-    # Run every Wednesday & Sunday at 03:00 AM IST (21:30 UTC Tuesday & Saturday)
-    - cron: "30 21 * * 2,6"
+    # Run every Wednesday at 03:00 AM IST (21:30 UTC Tuesday)
+    - cron: "30 21 * * 2"
   workflow_dispatch:
     inputs:
       force_train:
@@ -49,7 +49,7 @@ jobs:
           FORCE="$INPUT_FORCE_TRAIN"
           if [ "$COUNT" -ge 50 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
-            echo "✅ Threshold met ($COUNT samples). Ready for bi-weekly SFT + DPO training."
+            echo "✅ Threshold met ($COUNT samples). Ready for weekly SFT + DPO training."
           else
             echo "should_train=false" >> $GITHUB_OUTPUT
             echo "ℹ️ Less than 50 verified samples ($COUNT). Skipping to save GPU quota."

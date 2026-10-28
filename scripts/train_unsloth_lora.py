@@ -397,7 +397,7 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     from datasets import load_dataset
 
     PER_DEVICE_BATCH = 4
-    TARGET_GRAD_STEPS = 450        # Sweet spot for LoRA convergence (~2 hours on T4)
+    TARGET_GRAD_STEPS = 500        # Sweet spot for LoRA convergence (~2 hours on T4)
     MIN_SEQ_LEN = 256
     MAX_SEQ_LEN = 768              # T4 VRAM ceiling for 4-bit Llama-3.1-8B
     ROUND_TO = 64
@@ -429,7 +429,7 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
             "learning_rate": 2e-4,
             "gradient_accumulation_steps": 4,
             "per_device_train_batch_size": PER_DEVICE_BATCH,
-            "total_train_steps": 450,
+            "total_train_steps": 500,
         }
 
     token_lengths.sort()
@@ -551,7 +551,7 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
         # Scale effective batch size with pair count so 100% of preference pairs
         # train in ~200-250 steps without dropping data or wasting GPU hours.
         total_dpo_pairs = len(dpo_dataset)
-        TARGET_DPO_STEPS = 225
+        TARGET_DPO_STEPS = 250
         PER_DEVICE_DPO_BATCH = 2  # chosen + rejected doubles memory footprint
 
         ideal_eff_dpo_batch = max(PER_DEVICE_DPO_BATCH, total_dpo_pairs // TARGET_DPO_STEPS)

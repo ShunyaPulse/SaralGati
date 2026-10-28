@@ -3,5 +3,5 @@
   "version_name": "6.2.5",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Implement dynamic batch scaling and auto-tuned gradient accumulation for SFT (~450 steps) and DPO (~225 steps). Retain 100% of DPO preference pairs with zero samples dropped."
+  "changelog": "Implement dynamic batch scaling and auto-tuned gradient accumulation for SFT (500 steps) and DPO (~250 steps). Retain 100% of DPO preference pairs with zero samples dropped."
 }

@@ -1,7 +1,7 @@
 {
-  "version_code": 124,
-  "version_name": "6.2.3",
+  "version_code": 125,
+  "version_name": "6.2.4",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Update autonomous LoRA training cadence from bi-weekly to weekly. Remove Sunday training and sweeping cron triggers, retaining Wednesday 03:00 AM IST runs."
+  "changelog": "Optimize LoRA training performance: fix max_seq_length AutoTune overwrite bug, cap SFT at 500 steps, add stratified high-margin DPO sampling with 250 max_steps, add Stage 1 SFT checkpoint persistence guard, and add non-destructive xformers install check."
 }

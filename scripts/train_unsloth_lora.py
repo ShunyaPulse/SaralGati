@@ -371,7 +371,19 @@ def ensure_unsloth():
             sys.executable, "-m", "pip", "install", "unsloth"
         ])
 
-    # 3. Verify torch and xformers compatibility
+    # 3. Check and install matching xformers if missing (non-destructive)
+    try:
+        import xformers
+    except ImportError:
+        print("[Install] xformers not found. Attempting non-destructive install...")
+        try:
+            subprocess.check_call([
+                sys.executable, "-m", "pip", "install", "--no-deps", "xformers"
+            ])
+        except Exception as e:
+            print(f"[Install] Notice: xformers install skipped ({e}); proceeding with PyTorch attention...")
+
+    # 4. Verify torch and xformers compatibility
     try:
         import torch
         import xformers
@@ -470,6 +482,71 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     }
 
 
+def stratified_high_margin_dpo_sample(dpo_dataset, target_size=2000, seed=3407):
+    """Select high-margin contrastive pairs stratified across domains and languages.
+    
+    Extracts target contrast (e.g. correct target vs wrong target) and domain strata,
+    prioritizes clear corrective margins, and balances across apps/languages.
+    """
+    import re
+    from collections import defaultdict
+    import random
+
+    if len(dpo_dataset) <= target_size:
+        print(f"[DPO] Dataset size ({len(dpo_dataset)}) <= target_size ({target_size}); using full dataset.")
+        return dpo_dataset
+
+    strata = defaultdict(list)
+    for idx in range(len(dpo_dataset)):
+        ex = dpo_dataset[idx]
+        prompt_str = ex["prompt"].lower()
+        chosen_str = ex["chosen"]
+        rejected_str = ex["rejected"]
+
+        # Stratum identification: detect app package or functional domain
+        domain = "general"
+        for candidate in ("whatsapp", "youtube", "phone", "dialer", "paisa", "pay", "swiggy", "zomato", "uber", "settings", "fraud", "scam"):
+            if candidate in prompt_str:
+                domain = candidate
+                break
+
+        # Compute margin score (contrast strength between chosen and rejected)
+        m_c = re.search(r'target:(\d+|none)', chosen_str, re.IGNORECASE)
+        m_r = re.search(r'target:(\d+|none)', rejected_str, re.IGNORECASE)
+        t_chosen = m_c.group(1).lower() if m_c else ""
+        t_rejected = m_r.group(1).lower() if m_r else ""
+
+        margin_score = 1.0
+        if t_chosen and t_rejected and t_chosen != t_rejected:
+            # Different target elements -> primary high-margin corrective signal
+            margin_score = 3.0
+            if t_chosen.isdigit() and t_rejected.isdigit():
+                margin_score += min(2.0, abs(int(t_chosen) - int(t_rejected)) * 0.2)
+        elif "fraud" in domain or "scam" in domain:
+            margin_score = 2.5
+        elif len(chosen_str) != len(rejected_str):
+            margin_score = 1.5
+
+        strata[domain].append((margin_score, idx))
+
+    selected_indices = []
+    total_available = len(dpo_dataset)
+    rng = random.Random(seed)
+
+    for domain, items in strata.items():
+        items.sort(key=lambda x: x[0], reverse=True)
+        quota = max(10, int(round((len(items) / total_available) * target_size)))
+        chosen_items = items[:quota]
+        selected_indices.extend([item_idx for _, item_idx in chosen_items])
+
+    rng.shuffle(selected_indices)
+    selected_indices = selected_indices[:target_size]
+
+    print(f"[DPO] Stratified high-margin sampling: selected {len(selected_indices)} "
+          f"high-margin pairs from {total_available} across {len(strata)} domain strata.")
+    return dpo_dataset.select(selected_indices)
+
+
 def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
     """Stage 2 SOTA Preference Alignment via Direct Preference Optimization (DPO).
 
@@ -527,12 +604,14 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
             print(f"[DPO] Only {len(dpo_dataset)} DPO samples within max_seq_length={max_seq_length}; skipping Stage 2.")
             return
 
-        print(f"\n[DPO] Stage 2: Starting Direct Preference Optimization on {len(dpo_dataset)} contrastive pairs...")
+        dpo_dataset = stratified_high_margin_dpo_sample(dpo_dataset, target_size=2000, seed=3407)
+
+        print(f"\n[DPO] Stage 2: Starting Direct Preference Optimization on {len(dpo_dataset)} contrastive pairs (max_steps=250)...")
         dpo_args = DPOConfig(
             per_device_train_batch_size=2,
             gradient_accumulation_steps=4,
             warmup_steps=10,
-            num_train_epochs=1,
+            max_steps=250,
             learning_rate=5e-6,
             lr_scheduler_type="cosine",
             optim="adamw_8bit",
@@ -605,7 +684,7 @@ def train_lora(dataset_file, dpo_file=None):
     tokenizer = get_chat_template(tokenizer, chat_template="llama-3.1")
 
     hp = auto_tune_hyperparameters(dataset_file, tokenizer)
-    max_seq_length = MODEL_SEQ_CEILING
+    max_seq_length = hp.get("max_seq_length", MODEL_SEQ_CEILING)
 
     def formatting_prompts_func(examples):
         convos = examples["messages"]
@@ -637,18 +716,17 @@ def train_lora(dataset_file, dpo_file=None):
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    print(f"[Train] Stage 1 SFT (Cosine LR + Paged AdamW 8-bit + NEFTune alpha=5): "
-          f"{hp['num_train_epochs']} epochs, lr={hp['learning_rate']}, seq={max_seq_length}, "
-          f"batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
-    eff_batch = hp["per_device_train_batch_size"] * hp["gradient_accumulation_steps"]
-    total_train_steps = max(1, int((total_samples / eff_batch) * hp["num_train_epochs"]))
-    warmup_steps = max(5, int(total_train_steps * 0.05))
+    sft_max_steps = 500
+    warmup_steps = max(5, int(sft_max_steps * 0.05))
+
+    print(f"[Train] Stage 1 SFT (Cosine LR + Paged AdamW 8-bit + NEFTune alpha=5, max_steps={sft_max_steps}): "
+          f"lr={hp['learning_rate']}, seq={max_seq_length}, batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
 
     args_dict = dict(
         per_device_train_batch_size=hp["per_device_train_batch_size"],
         gradient_accumulation_steps=hp["gradient_accumulation_steps"],
         warmup_steps=warmup_steps,
-        num_train_epochs=hp["num_train_epochs"],
+        max_steps=sft_max_steps,
         learning_rate=hp["learning_rate"],
         lr_scheduler_type="cosine",
         optim="adamw_8bit",
@@ -707,6 +785,19 @@ def train_lora(dataset_file, dpo_file=None):
     
     print("[Eval] Stage 1 SFT validation passed.")
 
+    # Checkpoint Guard: Save verified Stage 1 SFT weights immediately before DPO
+    print(f"[Save] Checkpoint Guard: Saving verified Stage 1 SFT adapter weights to {output_dir}...")
+    model.save_pretrained(output_dir)
+    tokenizer.save_pretrained(output_dir)
+    config_path = os.path.join(output_dir, "adapter_config.json")
+    with open(config_path, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    cfg["base_model_name_or_path"] = "meta-llama/Llama-3.1-8B-Instruct"
+    cfg["model_type"] = "llama"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    print("[Save] Stage 1 SFT checkpoint safely persisted.")
+
     # Stage 2: Optional DPO Preference Alignment on contrastive corrections
     if dpo_file:
         run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length)
@@ -716,7 +807,6 @@ def train_lora(dataset_file, dpo_file=None):
     tokenizer.save_pretrained(output_dir)
 
     # Patch adapter_config.json strictly for Cloudflare Workers AI compatibility
-    config_path = os.path.join(output_dir, "adapter_config.json")
     with open(config_path, "r", encoding="utf-8") as f:
         cfg = json.load(f)
     cfg["base_model_name_or_path"] = "meta-llama/Llama-3.1-8B-Instruct"

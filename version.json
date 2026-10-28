@@ -1,7 +1,7 @@
 {
-  "version_code": 125,
-  "version_name": "6.2.4",
+  "version_code": 126,
+  "version_name": "6.2.5",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Optimize LoRA training performance: fix max_seq_length AutoTune overwrite bug, cap SFT at 500 steps, add stratified high-margin DPO sampling with 250 max_steps, add Stage 1 SFT checkpoint persistence guard, and add non-destructive xformers install check."
+  "changelog": "Implement dynamic batch scaling and auto-tuned gradient accumulation for SFT (~450 steps) and DPO (~225 steps). Retain 100% of DPO preference pairs with zero samples dropped."
 }

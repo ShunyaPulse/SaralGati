@@ -397,8 +397,7 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     from datasets import load_dataset
 
     PER_DEVICE_BATCH = 4
-    TARGET_EFFECTIVE_BATCH = 16
-    TARGET_GRAD_STEPS = 450        # Sweet spot for LoRA convergence
+    TARGET_GRAD_STEPS = 450        # Sweet spot for LoRA convergence (~2 hours on T4)
     MIN_SEQ_LEN = 256
     MAX_SEQ_LEN = 768              # T4 VRAM ceiling for 4-bit Llama-3.1-8B
     ROUND_TO = 64
@@ -428,8 +427,9 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
             "max_seq_length": MAX_SEQ_LEN,
             "num_train_epochs": 1,
             "learning_rate": 2e-4,
-            "gradient_accumulation_steps": TARGET_EFFECTIVE_BATCH // PER_DEVICE_BATCH,
+            "gradient_accumulation_steps": 4,
             "per_device_train_batch_size": PER_DEVICE_BATCH,
+            "total_train_steps": 450,
         }
 
     token_lengths.sort()
@@ -441,16 +441,19 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     seq_len = math.ceil(p99 / ROUND_TO) * ROUND_TO
     seq_len = max(MIN_SEQ_LEN, min(seq_len, MAX_SEQ_LEN))
 
-    grad_accum = max(1, TARGET_EFFECTIVE_BATCH // PER_DEVICE_BATCH)
-
+    # Dynamic Batch Scaling for SFT:
+    # Scales batch size proportionally with dataset size so 100% of samples are
+    # trained within ~400-500 gradient steps without dropping data or wasting GPU hours.
+    ideal_eff_batch = max(PER_DEVICE_BATCH, total_samples // TARGET_GRAD_STEPS)
+    grad_accum = max(2, min(16, round(ideal_eff_batch / PER_DEVICE_BATCH)))
     effective_batch = PER_DEVICE_BATCH * grad_accum
-    steps_per_epoch = math.ceil(total_samples / effective_batch)
-    if steps_per_epoch > 0:
-        raw_epochs = TARGET_GRAD_STEPS / steps_per_epoch
-    else:
-        raw_epochs = 1
 
-    num_epochs = max(1, min(4, round(raw_epochs)))
+    steps_per_epoch = math.ceil(total_samples / effective_batch)
+    if steps_per_epoch >= 350:
+        num_epochs = 1
+    else:
+        num_epochs = max(1, min(4, round(TARGET_GRAD_STEPS / steps_per_epoch)))
+
     if total_samples < 20:
         num_epochs = 1
 
@@ -468,7 +471,7 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
     total_steps = steps_per_epoch * num_epochs
     print(f"[AutoTune] Token profile: p50={p50}, p99={p99}, max={max_tok}")
     print(f"[AutoTune] → max_seq_length   = {seq_len}  (P99={p99} → rounded to {ROUND_TO})")
-    print(f"[AutoTune] → num_train_epochs  = {num_epochs}  (target ~{TARGET_GRAD_STEPS} steps, actual ~{total_steps})")
+    print(f"[AutoTune] → num_train_epochs  = {num_epochs}  (target ~{TARGET_GRAD_STEPS} steps, actual {total_steps})")
     print(f"[AutoTune] → learning_rate     = {lr}  (n={total_samples})")
     print(f"[AutoTune] → grad_accum_steps  = {grad_accum}  (eff_batch={effective_batch})")
     print(f"[AutoTune] → per_device_batch  = {PER_DEVICE_BATCH}")
@@ -479,72 +482,8 @@ def auto_tune_hyperparameters(dataset_file, tokenizer):
         "learning_rate": lr,
         "gradient_accumulation_steps": grad_accum,
         "per_device_train_batch_size": PER_DEVICE_BATCH,
+        "total_train_steps": total_steps,
     }
-
-
-def stratified_high_margin_dpo_sample(dpo_dataset, target_size=2000, seed=3407):
-    """Select high-margin contrastive pairs stratified across domains and languages.
-    
-    Extracts target contrast (e.g. correct target vs wrong target) and domain strata,
-    prioritizes clear corrective margins, and balances across apps/languages.
-    """
-    import re
-    from collections import defaultdict
-    import random
-
-    if len(dpo_dataset) <= target_size:
-        print(f"[DPO] Dataset size ({len(dpo_dataset)}) <= target_size ({target_size}); using full dataset.")
-        return dpo_dataset
-
-    strata = defaultdict(list)
-    for idx in range(len(dpo_dataset)):
-        ex = dpo_dataset[idx]
-        prompt_str = ex["prompt"].lower()
-        chosen_str = ex["chosen"]
-        rejected_str = ex["rejected"]
-
-        # Stratum identification: detect app package or functional domain
-        domain = "general"
-        for candidate in ("whatsapp", "youtube", "phone", "dialer", "paisa", "pay", "swiggy", "zomato", "uber", "settings", "fraud", "scam"):
-            if candidate in prompt_str:
-                domain = candidate
-                break
-
-        # Compute margin score (contrast strength between chosen and rejected)
-        m_c = re.search(r'target:(\d+|none)', chosen_str, re.IGNORECASE)
-        m_r = re.search(r'target:(\d+|none)', rejected_str, re.IGNORECASE)
-        t_chosen = m_c.group(1).lower() if m_c else ""
-        t_rejected = m_r.group(1).lower() if m_r else ""
-
-        margin_score = 1.0
-        if t_chosen and t_rejected and t_chosen != t_rejected:
-            # Different target elements -> primary high-margin corrective signal
-            margin_score = 3.0
-            if t_chosen.isdigit() and t_rejected.isdigit():
-                margin_score += min(2.0, abs(int(t_chosen) - int(t_rejected)) * 0.2)
-        elif "fraud" in domain or "scam" in domain:
-            margin_score = 2.5
-        elif len(chosen_str) != len(rejected_str):
-            margin_score = 1.5
-
-        strata[domain].append((margin_score, idx))
-
-    selected_indices = []
-    total_available = len(dpo_dataset)
-    rng = random.Random(seed)
-
-    for domain, items in strata.items():
-        items.sort(key=lambda x: x[0], reverse=True)
-        quota = max(10, int(round((len(items) / total_available) * target_size)))
-        chosen_items = items[:quota]
-        selected_indices.extend([item_idx for _, item_idx in chosen_items])
-
-    rng.shuffle(selected_indices)
-    selected_indices = selected_indices[:target_size]
-
-    print(f"[DPO] Stratified high-margin sampling: selected {len(selected_indices)} "
-          f"high-margin pairs from {total_available} across {len(strata)} domain strata.")
-    return dpo_dataset.select(selected_indices)
 
 
 def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
@@ -553,6 +492,7 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
     Uses contrastive (prompt, chosen, rejected) pairs from elder tap corrections
     and fraud sentinel misses so the adapter explicitly suppresses wrong element
     targets and false-negative/false-positive scam classifications.
+    All pairs are retained; effective batch size scales dynamically with sample count.
     """
     if not dpo_file or not os.path.exists(dpo_file):
         return
@@ -604,14 +544,30 @@ def run_dpo_alignment(model, tokenizer, dpo_file, max_seq_length):
             print(f"[DPO] Only {len(dpo_dataset)} DPO samples within max_seq_length={max_seq_length}; skipping Stage 2.")
             return
 
-        dpo_dataset = stratified_high_margin_dpo_sample(dpo_dataset, target_size=2000, seed=3407)
+        # Uniformly shuffle 100% of pairs so batches have mixed domains and languages
+        dpo_dataset = dpo_dataset.shuffle(seed=3407)
 
-        print(f"\n[DPO] Stage 2: Starting Direct Preference Optimization on {len(dpo_dataset)} contrastive pairs (max_steps=250)...")
+        # Dynamic DPO Batch Scaling:
+        # Scale effective batch size with pair count so 100% of preference pairs
+        # train in ~200-250 steps without dropping data or wasting GPU hours.
+        total_dpo_pairs = len(dpo_dataset)
+        TARGET_DPO_STEPS = 225
+        PER_DEVICE_DPO_BATCH = 2  # chosen + rejected doubles memory footprint
+
+        ideal_eff_dpo_batch = max(PER_DEVICE_DPO_BATCH, total_dpo_pairs // TARGET_DPO_STEPS)
+        ideal_dpo_grad_accum = max(2, min(16, round(ideal_eff_dpo_batch / PER_DEVICE_DPO_BATCH)))
+        effective_dpo_batch = PER_DEVICE_DPO_BATCH * ideal_dpo_grad_accum
+        dpo_steps = math.ceil(total_dpo_pairs / effective_dpo_batch)
+        dpo_warmup_steps = max(5, int(dpo_steps * 0.05))
+
+        print(f"\n[DPO] Stage 2: Starting Direct Preference Optimization on ALL {total_dpo_pairs} contrastive pairs "
+              f"({dpo_steps} steps, batch={PER_DEVICE_DPO_BATCH}×{ideal_dpo_grad_accum}, eff={effective_dpo_batch})...")
+
         dpo_args = DPOConfig(
-            per_device_train_batch_size=2,
-            gradient_accumulation_steps=4,
-            warmup_steps=10,
-            max_steps=250,
+            per_device_train_batch_size=PER_DEVICE_DPO_BATCH,
+            gradient_accumulation_steps=ideal_dpo_grad_accum,
+            warmup_steps=dpo_warmup_steps,
+            num_train_epochs=1,
             learning_rate=5e-6,
             lr_scheduler_type="cosine",
             optim="adamw_8bit",
@@ -716,17 +672,19 @@ def train_lora(dataset_file, dpo_file=None):
     output_dir = "saralgati_lora_output"
     os.makedirs(output_dir, exist_ok=True)
 
-    sft_max_steps = 500
-    warmup_steps = max(5, int(sft_max_steps * 0.05))
+    eff_batch = hp["per_device_train_batch_size"] * hp["gradient_accumulation_steps"]
+    total_train_steps = max(1, int(math.ceil(total_samples / eff_batch) * hp["num_train_epochs"]))
+    warmup_steps = max(5, int(total_train_steps * 0.05))
 
-    print(f"[Train] Stage 1 SFT (Cosine LR + Paged AdamW 8-bit + NEFTune alpha=5, max_steps={sft_max_steps}): "
-          f"lr={hp['learning_rate']}, seq={max_seq_length}, batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']}...")
+    print(f"[Train] Stage 1 SFT (Cosine LR + Paged AdamW 8-bit + NEFTune alpha=5): "
+          f"{hp['num_train_epochs']} epoch(s) ({total_train_steps} steps), lr={hp['learning_rate']}, "
+          f"seq={max_seq_length}, batch={hp['per_device_train_batch_size']}×{hp['gradient_accumulation_steps']} (eff={eff_batch})...")
 
     args_dict = dict(
         per_device_train_batch_size=hp["per_device_train_batch_size"],
         gradient_accumulation_steps=hp["gradient_accumulation_steps"],
         warmup_steps=warmup_steps,
-        max_steps=sft_max_steps,
+        num_train_epochs=hp["num_train_epochs"],
         learning_rate=hp["learning_rate"],
         lr_scheduler_type="cosine",
         optim="adamw_8bit",

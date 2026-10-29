@@ -17,10 +17,10 @@
 > | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 > | 👵 **Live Floating Companion ("Saral Mitra")** | 1-Tap patient Hindi/Hinglish TTS voice guidance over any app + Proactive Rage-Tap & Hesitation detection                                                   |
 > | 🎯 **Visual Focus Spotlight & Scroll Engine**  | Glowing emerald target ring + Below-the-fold auto-peeking & smooth scrolling                                                                               |
-> | 🛡️ **Autonomous Anti-Fraud Sentinel**          | Real-time scam shield (OTP theft, UPI PIN collect traps, AnyDesk remote-access, malicious APKs) + Red Warning Alert, Trap Evasion Spotlight & Offline on-device ruleset |
+> | 🛡️ **Autonomous Anti-Fraud Sentinel**          | Zero-Escape JNI scam scan (100% node traversal) + Threat-biased OTP/UPI/APK prioritization + Real-time Hindi/English warning alerts & trap evasion spotlight + Offline on-device ruleset |
 > | 🩺 **Phone Doctor ("Sab Theek Karo")**         | 1-Tap instant fix for elder phone misconfigurations (Unmutes ringer, 85% Media volume, 85% Brightness, 5-min timeout, DND disable)                         |
-> | 👨‍👩‍👧 **Caregiver Remote Command Dashboard**      | Zero-friction QR pairing + Live battery telemetry + Safe-Zone Geofencing with 1-tap Google Maps exit email alerts                                          |
-> | 🧠 **Self-Learning Flywheel & LoRA Pipeline**  | 4-Axis Combinatorial Matrix + Evol-Instruct + bilingual (Hindi + English) self-play + Kaggle T4 Unsloth fine-tuning auto-deployed to Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`) |
+> | 👨‍👩‍👧 **Caregiver Remote Command Dashboard**      | Zero-friction QR pairing + Live battery & companion telemetry + Safe-Zone Geofencing with 1-tap Google Maps exit email alerts                               |
+> | 🧠 **Self-Learning Flywheel & LoRA Pipeline**  | Multi-provider synthetic screens (Groq LPUs + OpenRouter Free + Gemini) + Unsloth dynamic batch scaling + High-margin DPO (250 steps) & SFT (500 steps) on Kaggle Dual-T4 auto-deployed to Cloudflare Workers AI |
 > | 🔒 **Privacy-First & Zero-Trust Architecture** | Zero hardcoded secrets + No screenshots taken + No personal chats read + Pure Accessibility UI role tree parsing                                           |
 
 > **"Technology should adapt to our parents, not the other way around."**  
@@ -85,6 +85,7 @@ Elders frequently mess up phone settings by accident. Rather than navigating dee
 
 ### 6. Autonomous Anti-Fraud Sentinel
 
+- **Zero-Escape JNI Scan & Threat-Biased Prioritization (v6.1.0)**: Traverses 100% of the Android accessibility node hierarchy through native JNI boundaries without premature cutoffs, ensuring deeply nested WebViews, disguised system overlays, and malicious dialog fragments are never missed. Scores and prioritizes high-threat keywords (OTP, UPI PIN, APK sideloads, AnyDesk/TeamViewer remote-access coercion) before evaluating low-risk navigation controls.
 - **Real-Time Scam Shield**: Every question and screen the companion sends is screened _before_ any guidance is produced, so a scam screen never receives a placement hint. The taxonomy covers OTP theft, UPI-PIN / collect-request / deceptive-QR payment traps, remote-access coercion (AnyDesk, TeamViewer, RustDesk, QuickSupport, accessibility unlock), fake electricity / SIM / KYC / challan notices, fake virus & spin-wheel banners, sideloaded APKs, and unneeded contacts / SMS / camera permissions.
 - **Hindi + English Alerts**: DANGEROUS and CRITICAL screens are intercepted and answered with a warning in both languages, and the companion speaks the one the elder chose. The spotlight is redirected to the visible way out (Cancel / Decline). Weaker signals still travel with the normal answer as a soft warning, so a legitimate payment screen stays usable. A warning belongs to the screen it was raised for: it is never stacked over SaralGati's own screens (our own UI is never screened, so the card is taken down the moment the elder enters it) and a verdict that arrives after they have left the trap is dropped instead of hovering over whatever they opened next.
 - **Deterministic & Auditable**: `src/lib/fraud/fraudSentinel/` is a pure rule ensemble with unit tests for every category. It keeps protecting the elder when Workers AI or Gemini are unreachable, and every verdict carries `risk_reasoning` for logs. Also exposed as `POST /api/v1/agent/fraud-check` (HMAC + device token, like the rest of the agent API) for the companion to poll on screen changes.
@@ -184,6 +185,15 @@ flowchart TD
 
 - **Primary LLM**: Llama 3.1 8B Instruct deployed on Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fast`).
 - **Custom LoRA Adapter**: Fine-tuned on Hinglish **and** English elder queries and Android UI graphs (`saralgati-elder-llama31-8b`).
+- **Multi-Provider Synthetic Screen Flywheel (v6.2.0)**:
+  - Generates realistic elder interaction scenarios across multi-provider LLM pools with independent round-robin key cursors:
+    - **Groq LPUs**: Ultra-fast inference on `qwen/qwen3-32b`, `moonshotai/kimi-k2-instruct`, and `meta-llama/llama-3.3-70b-versatile`.
+    - **OpenRouter Free Tier**: High-capacity fallback across `meta-llama/llama-3.3-70b-instruct:free`, `nvidia/nemotron-70b-instruct:free`, and `google/gemma-3-27b-it:free`.
+    - **Gemini Flash Key Pool**: 34-key anti-contention pool for complex UI hierarchy decomposition.
+- **Unsloth Fine-Tuning with Dynamic Batch Scaling (v6.2.1–v6.2.5)**:
+  - **Dynamic Batch Scaling**: Dynamically adjusts gradient accumulation and batch sizing based on dataset volume to retain 100% of mined interactions without truncating training datasets.
+  - **Stratified High-Margin DPO & SFT**: Calibrated to 500 SFT max steps and 250 DPO steps with high-margin pair stratification, eliminating over-fitting and maintaining sharp conversational cadence.
+  - **SFT Checkpoint Guard**: Guarantees SFT LoRA adapters pass verification before initiating DPO training, eliminating GPU thrashing on Kaggle Dual-T4.
 - **Autonomous Feedback Flywheel**:
   - Tracks implicit user actions (`tapped_suggested` vs `tapped_other`).
   - **Bilingual by construction**: every captured interaction stores the language it was answered in (`model_interactions.guidance_lang`), the synthetic self-play generator writes both Hindi and English queries (per batch, biased toward the language whose answers were recently rejected, and pinnable with the `FLYWHEEL_GUIDANCE_LANG` repo variable), the training-data export rebuilds each sample under the *same* prompt the app really sends, in the sample's own language, and the Kaggle run oversamples the minority language so the adapter cannot drift back to one language. An interaction whose answer contradicts its own recorded language - an English request answered in Devanagari - is counted and dropped instead of taught. Without this a "fine-tuned on Hinglish" adapter quietly pushed back against the elder's own language choice, so English mode fell back to the general model.
@@ -248,11 +258,11 @@ npm run dev
 
 | Layer              | Technologies                                                                       |
 | :----------------- | :--------------------------------------------------------------------------------- |
-| **Android App**    | Kotlin, Jetpack Compose, Material 3, AccessibilityService, WorkManager, Coroutines |
-| **Web & API**      | Next.js 16, React, TypeScript, Tailwind CSS, NextAuth.js                           |
+| **Android App**    | Kotlin, Jetpack Compose, Material 3, AccessibilityService JNI, WorkManager, Coroutines |
+| **Web & API**      | Next.js 16.4, React 19, TypeScript, Tailwind CSS, NextAuth.js                     |
 | **Cloud & DevOps** | Google Cloud Run, Docker, GitHub Actions, Cloudflare Workers AI                    |
 | **Data & Cache**   | Neon Serverless PostgreSQL, Oracle Cloud Redis                                     |
-| **AI / ML**        | Llama 3.1 8B Instruct, Unsloth, Kaggle Dual-T4, PEFT LoRA                          |
+| **AI / ML**        | Llama 3.1 8B, Unsloth DPO/SFT, Groq LPUs, OpenRouter, Kaggle Dual-T4, PEFT LoRA    |
 | **Security**       | HMAC-SHA256, Cloudflare Turnstile, R8/ProGuard, CodeQL, Gitleaks                   |
 
 ---

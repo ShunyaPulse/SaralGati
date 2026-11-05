@@ -1,7 +1,7 @@
 {
-  "version_code": 126,
-  "version_name": "6.2.5",
+  "version_code": 127,
+  "version_name": "6.2.6",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Implement dynamic batch scaling and auto-tuned gradient accumulation for SFT (500 steps) and DPO (~250 steps). Retain 100% of DPO preference pairs with zero samples dropped."
+  "changelog": "Fix Kaggle CLI ModuleNotFoundError: 'six' in weekly-lora-training and deploy-lora-adapter GitHub Actions workflows by explicitly installing six alongside kaggle."
 }

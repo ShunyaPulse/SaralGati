@@ -113,7 +113,7 @@ jobs:
             echo "⚠️ KAGGLE_API_TOKEN or KAGGLE_USERNAME is empty. Skipping Kaggle run."
             exit 0
           fi
-          pip install kaggle
+          pip install six kaggle
 
           USERNAME_LOWER=$(echo "$KAGGLE_USERNAME" | tr '[:upper:]' '[:lower:]' | xargs)
           DATASET_ID="$USERNAME_LOWER/saralgati-verified-training-set"
@@ -165,7 +165,7 @@ jobs:
             echo "::error::No dataset was published. Refusing to launch a run that would train on seed data."
             exit 1
           fi
-          pip install kaggle
+          pip install six kaggle
 
           echo "📦 Isolating Kaggle files..."
           mkdir -p kaggle_push

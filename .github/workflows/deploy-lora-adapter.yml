@@ -38,5 +38,5 @@ jobs:
             echo "::error::CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN are not configured."
             exit 1
           fi
-          pip install kaggle requests --quiet
+          pip install six kaggle requests --quiet
           python scripts/sweep_deploy_adapter.py

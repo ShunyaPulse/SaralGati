@@ -5,6 +5,7 @@ import { cookies } from 'next/headers';
 import { createMailer } from '@/lib/notify/mailer';
 import { queryOne } from '@/lib/data/db';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
+import { isScannerOrTestProbe, verifyDomainHasDeliverableMx } from '@/lib/auth/emailShield';
 import crypto from 'crypto';
 
 const sendOtpSchema = z.object({
@@ -48,14 +49,38 @@ export async function sendOtp(req: Request): Promise<ServiceResult> {
 
     const { email, type, turnstileToken, website } = result.data;
 
-    // Honeypot trap: if hidden field is filled, reject (bot detected)
+    // Honeypot trap: silent tarpit without alerting the bot
     if (website) {
-      return fail(400, { error: 'Invalid submission' });
+      await new Promise((r) => setTimeout(r, 400));
+      return ok({ success: true, message: 'If an account exists with this email, a verification code has been sent.' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // 1. Enforce Turnstile verification at OTP request level FIRST
+    // 1A. Silent Tarpit for RFC Test & Scanner Domains (probe.*, example.com, etc.)
+    if (isScannerOrTestProbe(cleanEmail)) {
+      await new Promise((r) => setTimeout(r, 300));
+      return ok({ success: true, message: 'If an account exists with this email, a verification code has been sent.' });
+    }
+
+    // 1B. Pre-Flight DNS MX Verification (Reject unroutable domains before touching SMTP)
+    const atIdx = cleanEmail.lastIndexOf('@');
+    if (atIdx === -1) {
+      return fail(400, { error: 'Invalid email address.' });
+    }
+    const domain = cleanEmail.slice(atIdx + 1);
+    const hasDeliverableMx = await verifyDomainHasDeliverableMx(domain);
+    if (!hasDeliverableMx) {
+      return fail(400, { error: 'The specified email domain cannot receive incoming messages.' });
+    }
+
+    // 1C. Per-Email 24-Hour Budget: Max 5 OTP sends per 24 hours
+    const emailDailyLimit = await rateLimiter(`send-otp_email_daily:${cleanEmail}`, 5, 86400);
+    if (!emailDailyLimit.allowed) {
+      return fail(429, { error: 'Daily verification limit reached for this email. Please try again tomorrow.' });
+    }
+
+    // 1D. Enforce Turnstile verification at OTP request level FIRST
     const isTurnstileValid = await verifyTurnstile(turnstileToken, ip);
     if (!isTurnstileValid) {
       return fail(400, { error: 'Security verification failed. Please try again.' });

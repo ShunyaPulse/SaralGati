@@ -1,6 +1,7 @@
 import { fail, ok, type ServiceResult } from '@/server/http';
 import { queryOne } from '@/lib/data/db';
 import { rateLimiter, getSubnet, getClientIp } from '@/lib/data/redis';
+import { isScannerOrTestProbe, verifyDomainHasDeliverableMx } from '@/lib/auth/emailShield';
 import { cookies } from 'next/headers';
 
 /** GET /api/auth/check-email - sign-up availability probe, rate limited three ways. */
@@ -19,6 +20,19 @@ export async function checkEmail(req: Request): Promise<ServiceResult> {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return fail(400, { error: 'Invalid email format' });
+    }
+
+    // Silent tarpit for RFC test and scanner probe addresses
+    if (isScannerOrTestProbe(email)) {
+      return ok({ exists: false });
+    }
+
+    // Pre-flight DNS MX verification
+    const atIdx = email.lastIndexOf('@');
+    const domain = email.slice(atIdx + 1);
+    const hasMx = await verifyDomainHasDeliverableMx(domain);
+    if (!hasMx) {
+      return fail(400, { error: 'Invalid email domain' });
     }
 
     // Rate limit check requests per IP: 60 checks per minute

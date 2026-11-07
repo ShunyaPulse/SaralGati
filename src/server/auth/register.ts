@@ -5,6 +5,7 @@ import { queryOne } from '@/lib/data/db';
 import { rateLimiter, cacheGet, cacheDelete, cacheSet, getSubnet, getClientIp } from '@/lib/data/redis';
 import { cookies } from 'next/headers';
 import { verifyTurnstile } from '@/lib/auth/turnstile';
+import { isScannerOrTestProbe, verifyDomainHasDeliverableMx } from '@/lib/auth/emailShield';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -63,6 +64,23 @@ export async function registerCaregiver(req: Request): Promise<ServiceResult> {
     }
 
     const cleanEmail = email.trim().toLowerCase();
+
+    // Silent tarpit for RFC test and scanner probe addresses
+    if (isScannerOrTestProbe(cleanEmail)) {
+      await new Promise((r) => setTimeout(r, 300));
+      return fail(201, { success: true, user: { id: 'ok' } });
+    }
+
+    // Pre-flight DNS MX verification
+    const atIdx = cleanEmail.lastIndexOf('@');
+    if (atIdx === -1) {
+      return fail(400, { error: 'Invalid email address' });
+    }
+    const domain = cleanEmail.slice(atIdx + 1);
+    const hasMx = await verifyDomainHasDeliverableMx(domain);
+    if (!hasMx) {
+      return fail(400, { error: 'The specified email domain cannot receive incoming messages.' });
+    }
 
     // Enforce Turnstile verification at Sign Up level
     if (turnstileToken) {

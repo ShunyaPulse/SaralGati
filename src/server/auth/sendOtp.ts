@@ -28,9 +28,21 @@ export async function sendOtp(req: Request): Promise<ServiceResult> {
       return fail(429, { error: 'Too many requests. Please try again later.' });
     }
 
+    // Short-term burst protection: Max 2 OTP sends per 10 minutes per IP
+    const burstIpLimit = await rateLimiter(`send-otp_burst_ip:${ip}`, 2, 600);
+    if (!burstIpLimit.allowed) {
+      return fail(429, { error: 'Too many verification attempts from this IP address. Please wait a few minutes.' });
+    }
+
     const subnetLimit = await rateLimiter(`send-otp_subnet:${subnet}`, 20, 3600);
     if (!subnetLimit.allowed) {
       return fail(429, { error: 'Too many requests from this network. Please try again later.' });
+    }
+
+    // Short-term burst protection: Max 4 OTP sends per 10 minutes per subnet
+    const burstSubnetLimit = await rateLimiter(`send-otp_burst_subnet:${subnet}`, 4, 600);
+    if (!burstSubnetLimit.allowed) {
+      return fail(429, { error: 'Too many verification requests from this network. Please wait a few minutes.' });
     }
 
     if (devId) {
@@ -86,11 +98,11 @@ export async function sendOtp(req: Request): Promise<ServiceResult> {
       return fail(400, { error: 'Security verification failed. Please try again.' });
     }
 
-    // 2. 60-second resend cooldown per email
+    // 2. 30-second resend cooldown per email
     const cooldownKey = `otp_cooldown:${type}:${cleanEmail}`;
     const isOnCooldown = await cacheGet<string>(cooldownKey);
     if (isOnCooldown) {
-      return fail(429, { error: 'Please wait 60 seconds before requesting a new OTP.' });
+      return fail(429, { error: 'Please wait 30 seconds before requesting a new OTP.' });
     }
 
     // Store successful Turnstile verification in Redis (expires in 10 minutes)
@@ -152,7 +164,7 @@ export async function sendOtp(req: Request): Promise<ServiceResult> {
     }
 
     // Only start the resend cooldown once delivery actually succeeded.
-    await cacheSet(cooldownKey, 'true', 60);
+    await cacheSet(cooldownKey, 'true', 30);
 
     return ok({ success: true, message: 'OTP sent successfully' });
   } catch (error) {

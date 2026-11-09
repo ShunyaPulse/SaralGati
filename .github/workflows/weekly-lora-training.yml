@@ -1,13 +1,13 @@
-name: Weekly Autonomous LoRA Training
+name: Fortnightly Autonomous LoRA Training
 
 on:
   schedule:
-    # Run every Wednesday at 03:00 AM IST (21:30 UTC Tuesday)
+    # Run every alternate Wednesday at 03:00 AM IST (21:30 UTC Tuesday)
     - cron: "30 21 * * 2"
   workflow_dispatch:
     inputs:
       force_train:
-        description: "Force training even with low sample count"
+        description: "Force training even with low sample count or off-schedule"
         required: false
         default: false
         type: boolean
@@ -30,10 +30,22 @@ jobs:
       - name: Check Training Data Availability
         id: check_data
         env:
+          EVENT_NAME: ${{ github.event_name }}
           INPUT_FORCE_TRAIN: ${{ inputs.force_train || 'false' }}
           FLYWHEEL_SECRET: ${{ secrets.FLYWHEEL_SECRET }}
           API_URL: "https://saralgati-685823552970.asia-south1.run.app/api/v1/agent/training-data?status=flywheel&limit=10000"
         run: |
+          FORCE="$INPUT_FORCE_TRAIN"
+          # Check fortnightly schedule: alternate Wednesdays (runs on parity 1, skips on parity 0)
+          if [ "$EVENT_NAME" = "schedule" ] && [ "$FORCE" != "true" ]; then
+            PARITY=$(( ($(date +%s) / 604800) % 2 ))
+            if [ "$PARITY" -ne 1 ]; then
+              echo "ℹ️ Off-week for fortnightly schedule (alternate Wednesday). Skipping run to conserve GPU quota."
+              echo "should_train=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+          fi
+
           if [ -z "$FLYWHEEL_SECRET" ]; then
             echo "::error::FLYWHEEL_SECRET is not configured; the training-data export requires it."
             exit 1
@@ -46,10 +58,9 @@ jobs:
           printf '%s' "$BODY" | python -c "import json,sys; pool=json.load(sys.stdin); c=pool.get('counts') or {}; print(f\"Language split: hi={c.get('hi',0)} en={c.get('en',0)} | dropped (wrong script): {pool.get('skipped_wrong_script',0)}\")" 2>/dev/null || true
           echo "sample_count=$COUNT" >> $GITHUB_OUTPUT
 
-          FORCE="$INPUT_FORCE_TRAIN"
           if [ "$COUNT" -ge 50 ] 2>/dev/null || [ "$FORCE" = "true" ]; then
             echo "should_train=true" >> $GITHUB_OUTPUT
-            echo "✅ Threshold met ($COUNT samples). Ready for weekly SFT + DPO training."
+            echo "✅ Threshold met ($COUNT samples). Ready for fortnightly SFT + DPO training."
           else
             echo "should_train=false" >> $GITHUB_OUTPUT
             echo "ℹ️ Less than 50 verified samples ($COUNT). Skipping to save GPU quota."

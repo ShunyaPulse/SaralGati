@@ -24,12 +24,20 @@ jobs:
 
       - name: Check kernel status and deploy if finished
         env:
+          EVENT_NAME: ${{ github.event_name }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            PARITY=$(( ($(date +%s) / 604800) % 2 ))
+            if [ "$PARITY" -ne 1 ]; then
+              echo "ℹ️ Off-week for fortnightly schedule (alternate Wednesday). Skipping sweeper."
+              exit 0
+            fi
+          fi
           if [ -z "$KAGGLE_API_TOKEN" ] || [ -z "$KAGGLE_USERNAME" ]; then
             echo "::error::KAGGLE_USERNAME / KAGGLE_API_TOKEN are not configured."
             exit 1

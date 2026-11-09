@@ -1,7 +1,7 @@
 {
-  "version_code": 127,
-  "version_name": "6.2.6",
+  "version_code": 128,
+  "version_name": "6.2.7",
   "download_url": "https://saralgati-685823552970.asia-south1.run.app/api/download",
   "force_update": false,
-  "changelog": "Fix Kaggle CLI ModuleNotFoundError: 'six' in weekly-lora-training and deploy-lora-adapter GitHub Actions workflows by explicitly installing six alongside kaggle."
+  "changelog": "Update LoRA autonomous training cadence from weekly to fortnightly (alternate Wednesdays). Added mathematical parity gate to schedule runs in weekly-lora-training and deploy-lora-adapter workflows."
 }

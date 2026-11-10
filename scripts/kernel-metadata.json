@@ -1,5 +1,5 @@
 {
-  "id": "techanicspro/saralgati-lora-training",
+  "id": "romomaxer/saralgati-lora-training",
   "title": "SaralGati LoRA Training",
   "code_file": "train_unsloth_lora.py",
   "language": "python",
